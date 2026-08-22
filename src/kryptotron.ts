@@ -8,6 +8,7 @@ export type KryptotronSnapshot = {
   nextCheckAt: string | null;
   lastError: string | null;
   updatedAt: string | null;
+  balance: { amount: number | null; asset: string };
   positions: Array<{ symbol: string; inPosition: boolean; entryPrice: number; quantity: number; highestPrice: number; protectionActive: boolean; protectionPrice: number }>;
   limits: { dailyLoss: number; weeklyLoss: number; tradesToday: number; tradesWeek: number };
   lastTrade: { symbol: string; entryPrice: number; exitPrice: number; quantity: number; pnl: number; result: string; reason: string | null; enteredAt: string | null; exitedAt: string } | null;
@@ -48,6 +49,10 @@ export async function loadKryptotronSnapshot(url: string, key: string): Promise<
     nextCheckAt: stringOrNull(data.next_check_at),
     lastError: stringOrNull(data.last_error),
     updatedAt: typeof state?.updated_at === "string" ? state.updated_at : null,
+    balance: {
+      amount: finiteNumberOrNull(data.account_balance),
+      asset: typeof data.quote_asset === "string" ? data.quote_asset : "USDC",
+    },
     positions,
     limits: {
       dailyLoss: Number(data.daily_loss ?? 0),
@@ -71,6 +76,11 @@ export async function loadKryptotronSnapshot(url: string, key: string): Promise<
 
 function stringOrNull(value: unknown) {
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function finiteNumberOrNull(value: unknown) {
+  const number = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
+  return Number.isFinite(number) ? number : null;
 }
 
 function runtimeStatus(value: unknown, heartbeat: unknown): KryptotronSnapshot["status"] {

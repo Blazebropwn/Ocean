@@ -40,6 +40,9 @@ async function loadKryptotron() {
     const statuses = { running: "Kontroluje trh", waiting: "Aktivní", degraded: "Má problém", offline: "Nedostupný", unknown: "Propojeno" };
     $("#kryptotron-status").lastChild.textContent = ` ${statuses[kryptotron.status] || "Propojeno"}`;
     $("#kryptotron-status").classList.toggle("warning", kryptotron.status === "degraded" || kryptotron.status === "offline");
+    $("#bot-balance").textContent = kryptotron.balance.amount === null
+      ? "—"
+      : `${new Intl.NumberFormat("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(kryptotron.balance.amount)} ${kryptotron.balance.asset}`;
     const open = kryptotron.positions.find((position) => position.inPosition);
     $("#bot-position").textContent = open ? `${open.symbol} · v pozici` : "Bez otevřené pozice";
     $("#bot-result").textContent = kryptotron.lastTrade ? `${kryptotron.lastTrade.pnl >= 0 ? "+" : ""}${kryptotron.lastTrade.pnl.toFixed(2)} USDC` : "—";

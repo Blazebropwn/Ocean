@@ -77,6 +77,8 @@ DEFAULT_STATE = {
     "next_check_at":        None,
     "last_error":           None,
     "pending_order":        None,
+    "account_balance":      None,
+    "quote_asset":          QUOTE_ASSET,
 }
 
 DIVIDER = "─" * 22
@@ -304,7 +306,9 @@ def run():
     state = reconcile_pending_order(client, state)
     save_state(state)
 
-    balance = get_balance(client, QUOTE_ASSET)
+    balance = get_balance(client, QUOTE_ASSET, raise_on_error=True)
+    state.update(account_balance=balance, quote_asset=QUOTE_ASSET)
+    save_state(state)
     tg(
         f"🚀 <b>Bot spuštěn</b>\n"
         f"{DIVIDER}\n"
@@ -469,6 +473,7 @@ def run():
 
             # ── BALANCE LOG ──────────────────────────────────────────────────
             balance   = get_balance(client, QUOTE_ASSET, raise_on_error=True)
+            state.update(account_balance=balance, quote_asset=QUOTE_ASSET)
             log.info(
                 f"Balance: {balance:.2f} {QUOTE_ASSET} | "
                 f"Ztráty: den={state['daily_loss']:.2f} týden={state['weekly_loss']:.2f}"
