@@ -32,6 +32,15 @@ from config.settings import (
 from strategy import get_cross_data
 from utils import get_balance, get_symbol_filters, round_step, round_price, notify
 from order_safety import apply_filled_buy, classify_order, new_buy_intent
+from protection import (
+    build_protection_oco,
+    cancel_protection,
+    clear_protection,
+    protection_outcome,
+    query_protection,
+    store_protection,
+    trailing_delta_filter,
+)
 
 Path("logs").mkdir(exist_ok=True)
 
@@ -56,6 +65,12 @@ DEFAULT_PAIR_STATE = {
     "trail_active":       False,
     "trail_sl":           0.0,
     "pre_cross_alerted":  "",  # datum posledního pre-cross alertu (YYYY-MM-DD)
+    "protection_order_list_id": None,
+    "protection_client_id": None,
+    "protection_status": None,
+    "protection_stop_price": None,
+    "protection_activation_price": None,
+    "protection_trailing_bips": None,
 }
 
 DEFAULT_STATE = {
@@ -77,6 +92,7 @@ DEFAULT_STATE = {
     "next_check_at":        None,
     "last_error":           None,
     "pending_order":        None,
+    "pending_protection":   None,
     "account_balance":      None,
     "quote_asset":          QUOTE_ASSET,
 }
@@ -154,6 +170,99 @@ def reconcile_pending_order(client, state):
     return state
 
 
+def protection_request(symbol, ps, available_quantity, step_size, tick_size, trailing_bounds):
+    return build_protection_oco(
+        symbol=symbol,
+        quantity=round_step(min(ps["position_qty"], available_quantity), step_size),
+        entry_price=ps["entry_price"],
+        tick_size=tick_size,
+        max_loss_pct=MAX_SL_PCT,
+        trail_activate_pct=TRAIL_ACTIVATE_PCT,
+        trail_distance_pct=TRAIL_DISTANCE_PCT,
+        min_trailing_bips=trailing_bounds[0],
+        max_trailing_bips=trailing_bounds[1],
+    )
+
+
+def place_protection(client, state, symbol, request):
+    ps = get_pair_state(state, symbol)
+    state["pending_protection"] = request
+    if not save_state(state):
+        state["pending_protection"] = None
+        save_state(state)
+        raise RuntimeError("Bezpečný zápis ochrany selhal — OCO nebyla odeslána")
+
+    response = client.create_oco_order(**request)
+    store_protection(ps, response, request)
+    state["pending_protection"] = None
+    if not save_state(state):
+        state["pending_protection"] = request
+        save_state(state)
+        raise RuntimeError("OCO vznikla, ale její stav se nepodařilo potvrdit")
+    return response
+
+
+def reconcile_pending_protection(client, state):
+    request = state.get("pending_protection")
+    if not request:
+        return state
+    symbol = request["symbol"]
+    ps = get_pair_state(state, symbol)
+    try:
+        response = query_protection(client, symbol, request["listClientOrderId"])
+    except BinanceAPIException as exc:
+        if exc.code != -2013:
+            raise
+        response = client.create_oco_order(**request)
+    store_protection(ps, response, request)
+    state["pending_protection"] = None
+    if not save_state(state):
+        state["pending_protection"] = request
+        raise RuntimeError("Obnovenou OCO ochranu se nepodařilo bezpečně uložit")
+    log.warning(f"[{symbol}] Obnovena OCO ochrana po restartu")
+    return state
+
+
+def sync_protection(client, state, symbol):
+    ps = get_pair_state(state, symbol)
+    client_id = ps.get("protection_client_id")
+    if not client_id:
+        return {"status": "missing"}
+    response = query_protection(client, symbol, client_id)
+    outcome = protection_outcome(client, symbol, response)
+    ps["protection_status"] = outcome["status"].upper()
+    return outcome
+
+
+def close_from_protection(state, symbol, outcome):
+    state = record_close(state, symbol, outcome["exit_price"], outcome["reason"])
+    if not save_state(state):
+        raise RuntimeError("Vyplněnou ochranu se nepodařilo bezpečně uložit")
+    return state
+
+
+def cancel_protection_for_market_exit(client, state, symbol):
+    ps = get_pair_state(state, symbol)
+    outcome = sync_protection(client, state, symbol)
+    if outcome["status"] == "filled":
+        close_from_protection(state, symbol, outcome)
+        return False
+    if outcome["status"] != "active":
+        raise RuntimeError("Ochrana není aktivní; market prodej byl zablokován")
+
+    cancel_protection(client, symbol, ps["protection_client_id"])
+    outcome = sync_protection(client, state, symbol)
+    if outcome["status"] == "filled":
+        close_from_protection(state, symbol, outcome)
+        return False
+    if outcome["status"] != "cancelled":
+        raise RuntimeError("Zrušení ochrany nebylo potvrzeno; market prodej byl zablokován")
+    clear_protection(ps)
+    if not save_state(state):
+        raise RuntimeError("Zrušení ochrany se nepodařilo bezpečně uložit")
+    return True
+
+
 def reset_periods(state):
     today = now_utc().strftime("%Y-%m-%d")
     if state["daily_loss_date"] != today:
@@ -165,7 +274,7 @@ def reset_periods(state):
 
 
 def can_trade(state):
-    if state.get("pending_order"):
+    if state.get("pending_order") or state.get("pending_protection"):
         return False, "Předchozí objednávka čeká na bezpečné ověření"
     if state["daily_loss"] >= MAX_DAILY_LOSS_USDT:
         return False, f"Denní ztráta: -{state['daily_loss']:.2f} {QUOTE_ASSET}"
@@ -244,6 +353,7 @@ def record_close(state, symbol, exit_price, reason):
         in_position=False, position_qty=0.0, entry_price=0.0, entry_time=None,
         highest_price=0.0, trail_active=False, trail_sl=0.0, pre_cross_alerted="",
     )
+    clear_protection(ps)
     state["last_trade_time"] = now_utc().isoformat()
     return state
 
@@ -292,10 +402,12 @@ def run():
 
     try:
         pair_filters = {}
+        protection_filters = {}
         for pair in PAIRS:
             sym = pair["symbol"]
             step_size, tick_size, min_notional = get_symbol_filters(client, sym)
             pair_filters[sym] = (step_size, tick_size, min_notional)
+            protection_filters[sym] = trailing_delta_filter(client.get_symbol_info(sym))
             log.info(f"[{sym}] step={step_size} | tick={tick_size} | minNotional={min_notional}")
     except Exception as e:
         log.error(f"Chyba při inicializaci párů: {e}")
@@ -304,6 +416,7 @@ def run():
 
     state = load_state()
     state = reconcile_pending_order(client, state)
+    state = reconcile_pending_protection(client, state)
     save_state(state)
 
     balance = get_balance(client, QUOTE_ASSET, raise_on_error=True)
@@ -354,6 +467,31 @@ def run():
 
                     # ── V POZICI ─────────────────────────────────────────────
                     if ps["in_position"]:
+                        if not ps.get("protection_client_id"):
+                            request = protection_request(
+                                symbol, ps, get_balance(client, base, raise_on_error=True),
+                                step_size, tick_size, protection_filters[symbol]
+                            )
+                            place_protection(client, state, symbol, request)
+                            log.info(f"[{symbol}] Burzovní OCO ochrana aktivována")
+
+                        protection = sync_protection(client, state, symbol)
+                        if protection["status"] == "filled":
+                            state = close_from_protection(state, symbol, protection)
+                            continue
+                        if protection["status"] in ("cancelled", "failed"):
+                            clear_protection(ps)
+                            if not save_state(state):
+                                raise RuntimeError("Zrušenou ochranu se nepodařilo bezpečně uložit")
+                            request = protection_request(
+                                symbol, ps, get_balance(client, base, raise_on_error=True),
+                                step_size, tick_size, protection_filters[symbol]
+                            )
+                            place_protection(client, state, symbol, request)
+                            protection = sync_protection(client, state, symbol)
+                        if protection["status"] != "active":
+                            raise RuntimeError("Pozice nemá aktivní burzovní ochranu")
+
                         # Aktualizuj nejvyšší cenu (použij 4h high)
                         if data["high"] > ps.get("highest_price", ps["entry_price"]):
                             ps["highest_price"] = data["high"]
@@ -389,16 +527,10 @@ def run():
 
                         if data["death_cross"]:
                             log.info(f"[{symbol}] Death Cross — prodávám")
-                            ep    = sell_market(client, ps, symbol, step_size)
-                            state = record_close(state, symbol, ep, "DEATH_CROSS")
-                            save_state(state)
-
-                        elif data["low"] <= active_sl or data["close"] <= active_sl:
-                            reason = "TRAIL_SL" if ps.get("trail_active") else "STOP_LOSS"
-                            log.warning(f"[{symbol}] {reason} ({pnl_pct:.2f}%) — prodávám")
-                            ep    = sell_market(client, ps, symbol, step_size)
-                            state = record_close(state, symbol, ep, reason)
-                            save_state(state)
+                            if cancel_protection_for_market_exit(client, state, symbol):
+                                ep    = sell_market(client, ps, symbol, step_size)
+                                state = record_close(state, symbol, ep, "DEATH_CROSS")
+                                save_state(state)
 
                     # ── BEZ POZICE ────────────────────────────────────────────
                     else:
@@ -432,7 +564,18 @@ def run():
                                     qty_filled = ps["position_qty"]
                                     entry_price = ps["entry_price"]
 
-                                    log.info(f"[{symbol}] Nakoupeno: {qty_filled} {base} @ {entry_price:.2f}")
+                                    if not save_state(state):
+                                        state["pending_order"] = intent
+                                        save_state(state)
+                                        raise RuntimeError("Nákup proběhl, ale stav se nepodařilo potvrdit")
+
+                                    request = protection_request(
+                                        symbol, ps, get_balance(client, base, raise_on_error=True),
+                                        step_size, tick_size, protection_filters[symbol]
+                                    )
+                                    place_protection(client, state, symbol, request)
+
+                                    log.info(f"[{symbol}] Nakoupeno a chráněno: {qty_filled} {base} @ {entry_price:.2f}")
                                     tg(
                                         f"⚡ <b>GOLDEN CROSS — {symbol}</b>\n"
                                         f"{DIVIDER}\n"
@@ -442,11 +585,6 @@ def run():
                                         f"🛡️ Nouzový SL: {entry_price * (1 - MAX_SL_PCT / 100):.2f} | "
                                         f"Trail aktivace: +{TRAIL_ACTIVATE_PCT}%"
                                     )
-
-                                    if not save_state(state):
-                                        state["pending_order"] = intent
-                                        save_state(state)
-                                        raise RuntimeError("Nákup proběhl, ale stav se nepodařilo potvrdit")
                         else:
                             gap_pct   = (data["ema_slow"] - data["ema_fast"]) / data["ema_slow"] * 100
                             today_str = now_utc().strftime("%Y-%m-%d")

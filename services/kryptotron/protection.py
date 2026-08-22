@@ -76,6 +76,7 @@ def store_protection(position, response, request):
     if order_list_id is None:
         raise ValueError("Binance nevrátila ID ochranné OCO objednávky")
     position.update(
+        position_qty=float(request["quantity"]),
         protection_order_list_id=order_list_id,
         protection_client_id=request["listClientOrderId"],
         protection_status="ACTIVE",
@@ -84,3 +85,57 @@ def store_protection(position, response, request):
         protection_trailing_bips=int(request["aboveTrailingDelta"]),
     )
     return position
+
+
+def clear_protection(position):
+    position.update(
+        protection_order_list_id=None,
+        protection_client_id=None,
+        protection_status=None,
+        protection_stop_price=None,
+        protection_activation_price=None,
+        protection_trailing_bips=None,
+    )
+    return position
+
+
+def protection_outcome(client, symbol, order_list):
+    filled = []
+    for item in order_list.get("orders", []):
+        order = client.get_order(symbol=symbol, orderId=item["orderId"])
+        if order.get("status") == "FILLED":
+            filled.append(order)
+
+    if len(filled) > 1:
+        raise RuntimeError("Binance hlásí více vyplněných větví jedné OCO ochrany")
+    if filled:
+        order = filled[0]
+        quantity = Decimal(str(order.get("executedQty", "0")))
+        quote = Decimal(str(order.get("cummulativeQuoteQty", "0")))
+        if quantity <= 0:
+            raise RuntimeError("Vyplněná ochranná objednávka nemá platné množství")
+        client_id = order.get("clientOrderId", "")
+        reason = "TRAILING_STOP" if client_id.startswith("ocean-trail-") else "EMERGENCY_STOP"
+        return {
+            "status": "filled",
+            "exit_price": float(quote / quantity),
+            "reason": reason,
+            "order": order,
+        }
+
+    list_status = order_list.get("listOrderStatus")
+    if list_status == "EXECUTING":
+        return {"status": "active"}
+    if list_status == "ALL_DONE":
+        return {"status": "cancelled"}
+    if list_status == "REJECT":
+        return {"status": "failed"}
+    raise RuntimeError(f"Neznámý stav Binance OCO: {list_status}")
+
+
+def query_protection(client, symbol, client_id):
+    return client.v3_get_order_list(origClientOrderId=client_id)
+
+
+def cancel_protection(client, symbol, client_id):
+    return client.v3_delete_order_list(symbol=symbol, listClientOrderId=client_id)
