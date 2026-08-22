@@ -1,5 +1,6 @@
 const $ = (selector) => document.querySelector(selector);
 const message = $("#message");
+let kryptotronRefresh;
 
 function setLoading(form, loading) {
   const button = form.querySelector("button[type=submit]");
@@ -32,6 +33,8 @@ function showUser(user) {
   $("#email-status").className = user.emailVerified ? "hidden verified" : "hidden pending";
   $("#verify-banner").classList.toggle("hidden", user.emailVerified);
   loadKryptotron();
+  clearInterval(kryptotronRefresh);
+  kryptotronRefresh = setInterval(loadKryptotron, 60_000);
 }
 
 async function loadKryptotron() {
@@ -45,11 +48,20 @@ async function loadKryptotron() {
       : `${new Intl.NumberFormat("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(kryptotron.balance.amount)} ${kryptotron.balance.asset}`;
     const open = kryptotron.positions.find((position) => position.inPosition);
     $("#bot-position").textContent = open ? `${open.symbol} · v pozici` : "Bez otevřené pozice";
-    $("#bot-result").textContent = kryptotron.lastTrade ? `${kryptotron.lastTrade.pnl >= 0 ? "+" : ""}${kryptotron.lastTrade.pnl.toFixed(2)} USDC` : "—";
+    $("#bot-protection").textContent = open
+      ? (open.protectionActive ? "OCO aktivní" : "Vyžaduje kontrolu")
+      : "Čeká na pozici";
+    $("#bot-protection").classList.toggle("protected", Boolean(open?.protectionActive));
+    $("#bot-entry-price").textContent = open ? formatPrice(open.entryPrice, kryptotron.balance.asset) : "—";
+    $("#bot-quantity").textContent = open ? `${formatQuantity(open.quantity)} ${open.symbol.replace(kryptotron.balance.asset, "")}` : "—";
+    $("#bot-stop-price").textContent = open?.protectionPrice ? formatPrice(open.protectionPrice, kryptotron.balance.asset) : "—";
+    $("#bot-trail-activation").textContent = open?.protectionActivationPrice
+      ? `${formatPrice(open.protectionActivationPrice, kryptotron.balance.asset)} · ${formatBips(open.protectionTrailingBips)}`
+      : "—";
+    $("#bot-result").textContent = kryptotron.lastTrade ? `${kryptotron.lastTrade.pnl >= 0 ? "+" : ""}${kryptotron.lastTrade.pnl.toFixed(2)} ${kryptotron.balance.asset}` : "—";
     $("#bot-result").classList.toggle("positive", Boolean(kryptotron.lastTrade && kryptotron.lastTrade.pnl >= 0));
     $("#bot-result").classList.toggle("negative", Boolean(kryptotron.lastTrade && kryptotron.lastTrade.pnl < 0));
     $("#bot-last-trade").textContent = kryptotron.lastTrade ? `${kryptotron.lastTrade.symbol} · ${kryptotron.lastTrade.result === "WIN" ? "zisk" : "ztráta"}` : "Zatím žádný";
-    $("#bot-trades-week").textContent = String(kryptotron.limits.tradesWeek);
     $("#bot-updated").textContent = formatDate(kryptotron.lastMarketCheckAt || kryptotron.updatedAt);
     $("#bot-next-check").textContent = formatDate(kryptotron.nextCheckAt);
     $("#bot-error-wrap").classList.toggle("hidden", !kryptotron.lastError);
@@ -62,6 +74,18 @@ async function loadKryptotron() {
 
 function formatDate(value) {
   return value ? new Intl.DateTimeFormat("cs-CZ", { dateStyle: "short", timeStyle: "short" }).format(new Date(value)) : "—";
+}
+
+function formatPrice(value, asset) {
+  return `${new Intl.NumberFormat("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)} ${asset}`;
+}
+
+function formatQuantity(value) {
+  return new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 8 }).format(value);
+}
+
+function formatBips(value) {
+  return value ? `trail ${(value / 100).toLocaleString("cs-CZ", { maximumFractionDigits: 2 })} %` : "trail";
 }
 
 $("#profile-button").addEventListener("click", () => $("#profile-menu").classList.toggle("hidden"));

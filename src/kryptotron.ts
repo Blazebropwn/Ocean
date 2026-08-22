@@ -9,7 +9,18 @@ export type KryptotronSnapshot = {
   lastError: string | null;
   updatedAt: string | null;
   balance: { amount: number | null; asset: string };
-  positions: Array<{ symbol: string; inPosition: boolean; entryPrice: number; quantity: number; highestPrice: number; protectionActive: boolean; protectionPrice: number }>;
+  positions: Array<{
+    symbol: string;
+    inPosition: boolean;
+    entryPrice: number;
+    quantity: number;
+    highestPrice: number;
+    protectionActive: boolean;
+    protectionStatus: string | null;
+    protectionPrice: number;
+    protectionActivationPrice: number;
+    protectionTrailingBips: number;
+  }>;
   limits: { dailyLoss: number; weeklyLoss: number; tradesToday: number; tradesWeek: number };
   lastTrade: { symbol: string; entryPrice: number; exitPrice: number; quantity: number; pnl: number; result: string; reason: string | null; enteredAt: string | null; exitedAt: string } | null;
 };
@@ -37,8 +48,11 @@ export async function loadKryptotronSnapshot(url: string, key: string): Promise<
     entryPrice: Number(position.entry_price ?? 0),
     quantity: Number(position.position_qty ?? 0),
     highestPrice: Number(position.highest_price ?? position.highest_since_entry ?? 0),
-    protectionActive: position.trail_active === true,
-    protectionPrice: Number(position.trail_sl ?? position.trail_sl_price ?? 0),
+    protectionActive: position.protection_status === "ACTIVE" || position.trail_active === true,
+    protectionStatus: stringOrNull(position.protection_status),
+    protectionPrice: Number(position.protection_stop_price ?? position.trail_sl ?? position.trail_sl_price ?? 0),
+    protectionActivationPrice: Number(position.protection_activation_price ?? 0),
+    protectionTrailingBips: Number(position.protection_trailing_bips ?? 0),
   }));
   const trade = trades[0];
   return {
