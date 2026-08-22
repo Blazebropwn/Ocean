@@ -1,0 +1,11 @@
+logs/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+state.json
+poznamky.md
+.railway/
+.pytest_cache/
+.coverage

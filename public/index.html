@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="OCEAN — vaše bezpečné digitální prostředí.">
+  <title>OCEAN</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="ocean-home">
+  <header class="nav">
+    <a class="brand" href="/" aria-label="Ocean">OCEAN<span>●</span></a>
+    <div class="nav-account hidden" id="nav-account">
+      <button class="profile-button" id="profile-button" type="button"><span id="nav-avatar">O</span><b id="nav-username">Účet</b><i>⌄</i></button>
+      <div class="profile-menu hidden" id="profile-menu">
+        <strong id="menu-username"></strong><small id="email"></small><small class="internal-id" id="display-id"></small>
+        <a href="/change-password.html">Nastavení účtu</a>
+        <button id="logout" type="button">Odhlásit se</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="auth-screen" id="welcome">
+      <div class="auth-intro">
+        <p class="eyebrow">OCEAN // SOUKROMÝ SYSTÉM</p>
+        <h1>Vstupte <span>pod hladinu.</span></h1>
+        <p class="lead">Váš osobní řídicí prostor. Přístup pouze pro oprávněné uživatele.</p>
+        <div class="trust-line"><span>Šifrovaný přístup</span><span>Systém připraven</span></div>
+      </div>
+      <div class="auth-card">
+        <div class="tabs" role="tablist">
+          <button class="tab active" data-tab="register">Vytvořit účet</button>
+          <button class="tab" data-tab="login">Přihlásit se</button>
+        </div>
+        <form id="register-form" autocomplete="off">
+          <label>E-mail<input name="email" type="email" autocomplete="off" required></label>
+          <label>Uživatelské jméno<input name="username" autocomplete="off" minlength="3" maxlength="32" pattern="[A-Za-z0-9_]+" required></label>
+          <label>Heslo<input name="password" type="password" autocomplete="off" minlength="8" required></label>
+          <button class="primary" type="submit">Vstoupit do Oceanu <span>→</span></button>
+        </form>
+        <form id="login-form" class="hidden" autocomplete="off">
+          <label>Uživatelské jméno<input name="username" autocomplete="off" required></label>
+          <label>Heslo<input name="password" type="password" autocomplete="off" required></label>
+          <button class="primary" type="submit">Přihlásit se <span>→</span></button>
+          <a class="form-link" href="/forgot-password.html">Zapomenuté heslo?</a>
+        </form>
+        <p class="message" id="message" role="alert"></p>
+      </div>
+    </section>
+
+    <section class="dashboard hidden" id="dashboard">
+      <div class="verify-banner hidden" id="verify-banner">
+        <div><strong>Ověřte e-mail</strong><span>Dokončete zabezpečení účtu.</span></div>
+        <a href="/mailbox.html">Otevřít schránku</a>
+        <button id="resend-verification">Poslat znovu</button>
+      </div>
+      <div class="minimal-apps" aria-label="Ocean aplikace">
+        <details class="kryptotron-card" id="kryptotron">
+          <summary>
+            <span class="app-icon machine-icon"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 4 27 11v10L16 28 5 21V11Z"/><circle cx="16" cy="10" r="2"/><circle cx="10" cy="20" r="2"/><circle cx="22" cy="20" r="2"/><path d="m16 12-5 7m5-7 5 7M12 20h8"/></svg></span>
+            <span class="summary-copy"><strong>Kryptotron</strong></span>
+            <span class="app-status" id="kryptotron-status"><i></i> Načítám</span><b class="expand-mark">⌄</b>
+          </summary>
+          <div class="kryptotron-detail">
+            <div class="bot-stats"><span><small>POZICE</small><strong id="bot-position">Načítám</strong></span><span><small>REŽIM</small><strong>Trend</strong></span><span><small>VÝSLEDEK</small><strong id="bot-result">—</strong></span></div>
+            <div class="live-detail">
+              <div><small>Poslední obchod</small><strong id="bot-last-trade">—</strong></div>
+              <div><small>Obchody tento týden</small><strong id="bot-trades-week">—</strong></div>
+              <div><small>Poslední kontrola</small><strong id="bot-updated">—</strong></div>
+              <div><small>Další kontrola</small><strong id="bot-next-check">—</strong></div>
+              <div class="bot-error hidden" id="bot-error-wrap"><small>Upozornění</small><strong id="bot-error"></strong></div>
+            </div>
+          </div>
+        </details>
+        <div class="future-apps">
+          <article class="app-card disabled compact-app"><div class="app-top"><span class="app-icon"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 12h20v14H6zM11 12V8h10v4M11 19h4m-2-2v4m7-2h.1"/></svg></span></div><div class="app-copy"><h2>Arcade</h2></div></article>
+          <article class="app-card disabled compact-app"><div class="app-top"><span class="app-icon"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m16 4 11 6v12l-11 6-11-6V10zM11 15h10v8H11zM13 15v-3a3 3 0 0 1 6 0v3"/></svg></span></div><div class="app-copy"><h2>Vault</h2></div></article>
+        </div>
+      </div>
+      <span class="hidden" id="username"></span><span class="hidden" id="avatar"></span><b class="hidden" id="email-status"></b>
+    </section>
+  </main>
+  <script src="/app.js" defer></script>
+</body>
+</html>
