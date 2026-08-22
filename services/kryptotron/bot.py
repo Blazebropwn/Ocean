@@ -31,6 +31,7 @@ from config.settings import (
 )
 from strategy import get_cross_data
 from utils import get_balance, get_symbol_filters, round_step, round_price, notify
+from order_safety import apply_filled_buy, classify_order, new_buy_intent
 
 Path("logs").mkdir(exist_ok=True)
 
@@ -75,6 +76,7 @@ DEFAULT_STATE = {
     "last_market_check_at": None,
     "next_check_at":        None,
     "last_error":           None,
+    "pending_order":        None,
 }
 
 DIVIDER = "─" * 22
@@ -117,9 +119,37 @@ def load_state():
 
 
 def save_state(state):
-    db.save_state(state)
-    with open(STATE_FILE, "w") as f:
+    remote_saved = db.save_state(state)
+    temporary = STATE_FILE.with_suffix(".tmp")
+    with open(temporary, "w") as f:
         json.dump(state, f, indent=2, default=str)
+    temporary.replace(STATE_FILE)
+    return remote_saved
+
+
+def reconcile_pending_order(client, state):
+    intent = state.get("pending_order")
+    if not intent:
+        return state
+    if intent.get("side") != "BUY":
+        raise RuntimeError("Neznámý nedokončený typ objednávky")
+    order = client.get_order(
+        symbol=intent["symbol"],
+        origClientOrderId=intent["client_order_id"],
+    )
+    outcome = classify_order(order)
+    if outcome == "filled":
+        apply_filled_buy(state, intent, order)
+        if not save_state(state):
+            raise RuntimeError("Vyplněná objednávka nebyla bezpečně uložena")
+        log.warning(f"[{intent['symbol']}] Obnovena vyplněná objednávka po restartu")
+    elif outcome == "failed":
+        state["pending_order"] = None
+        if not save_state(state):
+            raise RuntimeError("Zrušenou objednávku se nepodařilo bezpečně uložit")
+    else:
+        raise RuntimeError(f"Objednávka {intent['client_order_id']} stále čeká na dokončení")
+    return state
 
 
 def reset_periods(state):
@@ -133,6 +163,8 @@ def reset_periods(state):
 
 
 def can_trade(state):
+    if state.get("pending_order"):
+        return False, "Předchozí objednávka čeká na bezpečné ověření"
     if state["daily_loss"] >= MAX_DAILY_LOSS_USDT:
         return False, f"Denní ztráta: -{state['daily_loss']:.2f} {QUOTE_ASSET}"
     if state["weekly_loss"] >= MAX_WEEKLY_LOSS_USDT:
@@ -269,6 +301,7 @@ def run():
         raise SystemExit(1)
 
     state = load_state()
+    state = reconcile_pending_order(client, state)
     save_state(state)
 
     balance = get_balance(client, QUOTE_ASSET)
@@ -379,13 +412,21 @@ def run():
                                     tg(f"⚠️ <b>Golden Cross — {symbol}</b>\nNedostatečný balance: {balance:.2f} {QUOTE_ASSET}")
                                 else:
                                     log.info(f"[{symbol}] ⚡ GOLDEN CROSS — Nakupuji za {spend:.2f} {QUOTE_ASSET}")
+                                    intent = new_buy_intent(symbol, spend)
+                                    state["pending_order"] = intent
+                                    if not save_state(state):
+                                        state["pending_order"] = None
+                                        save_state(state)
+                                        raise RuntimeError("Bezpečný zápis objednávky selhal — nákup zablokován")
+
                                     order       = client.order_market_buy(
                                         symbol=symbol,
                                         quoteOrderQty=str(round(spend, 2)),
+                                        newClientOrderId=intent["client_order_id"],
                                     )
-                                    qty_filled  = float(order["executedQty"])
-                                    quote_spent = float(order["cummulativeQuoteQty"])
-                                    entry_price = quote_spent / qty_filled
+                                    ps = apply_filled_buy(state, intent, order)
+                                    qty_filled = ps["position_qty"]
+                                    entry_price = ps["entry_price"]
 
                                     log.info(f"[{symbol}] Nakoupeno: {qty_filled} {base} @ {entry_price:.2f}")
                                     tg(
@@ -398,20 +439,10 @@ def run():
                                         f"Trail aktivace: +{TRAIL_ACTIVATE_PCT}%"
                                     )
 
-                                    ps.update(
-                                        in_position=True,
-                                        position_qty=qty_filled,
-                                        entry_price=entry_price,
-                                        entry_time=now_utc().isoformat(),
-                                        highest_price=entry_price,
-                                        trail_active=False,
-                                        trail_sl=0.0,
-                                        pre_cross_alerted="",
-                                    )
-                                    state["last_trade_time"] = now_utc().isoformat()
-                                    state["trades_today"]   += 1
-                                    state["trades_week"]    += 1
-                                    save_state(state)
+                                    if not save_state(state):
+                                        state["pending_order"] = intent
+                                        save_state(state)
+                                        raise RuntimeError("Nákup proběhl, ale stav se nepodařilo potvrdit")
                         else:
                             gap_pct   = (data["ema_slow"] - data["ema_fast"]) / data["ema_slow"] * 100
                             today_str = now_utc().strftime("%Y-%m-%d")

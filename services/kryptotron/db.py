@@ -40,15 +40,17 @@ def load_state():
 
 def save_state(state):
     if _sb is None:
-        return
+        return False
     try:
         _sb.table("bot_state").upsert({
             "key": "main",
             "data": state,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }).execute()
+        return True
     except Exception as e:
         log.error(f"Supabase save_state chyba: {e}")
+        return False
 
 
 def log_trade(symbol, entry_price, exit_price, qty, pnl, result, reason=None, entry_time=None):
@@ -67,4 +69,3 @@ def log_trade(symbol, entry_price, exit_price, qty, pnl, result, reason=None, en
         }).execute()
     except Exception as e:
         log.error(f"Supabase log_trade chyba: {e}")
-
