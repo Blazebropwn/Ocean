@@ -9,6 +9,7 @@ export type KryptotronSnapshot = {
   lastError: string | null;
   updatedAt: string | null;
   entriesPaused: boolean;
+  events: Array<{ type: string; message: string; at: string }>;
   balance: { amount: number | null; asset: string };
   positions: Array<{
     symbol: string;
@@ -39,7 +40,13 @@ export async function setKryptotronEntriesPaused(url: string, key: string, entri
   const states = await supabaseRows(url, key, "bot_state?key=eq.main&select=data&limit=1");
   const state = states[0];
   if (!state?.data || typeof state.data !== "object") throw new Error("Stav Kryptotronu neexistuje");
-  const data = { ...(state.data as Record<string, unknown>), entries_paused: entriesPaused };
+  const data: Record<string, unknown> = { ...(state.data as Record<string, unknown>), entries_paused: entriesPaused };
+  const events = Array.isArray(data.events) ? data.events : [];
+  data.events = [{
+    type: "CONTROL",
+    message: entriesPaused ? "Nové obchody pozastaveny" : "Automatizace obnovena",
+    at: new Date().toISOString(),
+  }, ...events].slice(0, 20);
   const response = await fetch(`${url}/rest/v1/bot_state?key=eq.main`, {
     method: "PATCH",
     headers: {
@@ -85,6 +92,12 @@ export async function loadKryptotronSnapshot(url: string, key: string): Promise<
     lastError: stringOrNull(data.last_error),
     updatedAt: typeof state?.updated_at === "string" ? state.updated_at : null,
     entriesPaused: data.entries_paused === true,
+    events: Array.isArray(data.events) ? data.events.flatMap((event) => {
+      if (!event || typeof event !== "object") return [];
+      const item = event as Record<string, unknown>;
+      if (typeof item.message !== "string" || typeof item.at !== "string") return [];
+      return [{ type: typeof item.type === "string" ? item.type : "SYSTEM", message: item.message, at: item.at }];
+    }).slice(0, 10) : [],
     balance: {
       amount: finiteNumberOrNull(data.account_balance),
       asset: typeof data.quote_asset === "string" ? data.quote_asset : "USDC",

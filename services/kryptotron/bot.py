@@ -32,6 +32,8 @@ from config.settings import (
 from strategy import get_cross_data
 from utils import get_balance, get_symbol_filters, round_step, round_price, notify
 from order_safety import apply_filled_buy, classify_order, new_buy_intent
+from events import add_event
+from schedule import daily_summary_due, mark_daily_summary_sent
 from protection import (
     build_protection_oco,
     cancel_protection,
@@ -96,6 +98,9 @@ DEFAULT_STATE = {
     "entries_paused":       False,
     "account_balance":      None,
     "quote_asset":          QUOTE_ASSET,
+    "events":               [],
+    "market_snapshot":      {},
+    "last_daily_summary_date": "",
 }
 
 DIVIDER = "─" * 22
@@ -203,6 +208,7 @@ def place_protection(client, state, symbol, request):
     response = client.create_oco_order(**request)
     store_protection(ps, response, request)
     state["pending_protection"] = None
+    add_event(state, "PROTECTION", f"{symbol} · OCO ochrana aktivní")
     if not save_state(state):
         state["pending_protection"] = request
         save_state(state)
@@ -365,7 +371,42 @@ def record_close(state, symbol, exit_price, reason):
     )
     clear_protection(ps)
     state["last_trade_time"] = now_utc().isoformat()
+    add_event(state, "TRADE", f"{symbol} · pozice uzavřena · {pnl:+.2f} {QUOTE_ASSET}")
     return state
+
+
+def send_daily_summary(state):
+    snapshot = state.get("market_snapshot", {})
+    lines = []
+    for pair in PAIRS:
+        symbol = pair["symbol"]
+        market = snapshot.get(symbol, {})
+        ps = get_pair_state(state, symbol)
+        trend = "🟢 BULL" if market.get("bull") is True else \
+                "🔴 BEAR" if market.get("bull") is False else "⚪ bez dat"
+        if ps["in_position"] and market.get("close"):
+            pnl = (market["close"] - ps["entry_price"]) / ps["entry_price"] * 100
+            lines.append(f"<b>{symbol}</b>: {trend} | P/L: {pnl:+.2f}%")
+        else:
+            lines.append(f"<b>{symbol}</b>: {trend} — bez pozice")
+    balance = state.get("account_balance")
+    balance_text = f"{balance:.2f}" if isinstance(balance, (int, float)) else "—"
+    tg(
+        f"📊 <b>Denní shrnutí</b> · 20:00\n"
+        f"{DIVIDER}\n"
+        f"{chr(10).join(lines)}\n"
+        f"{DIVIDER}\n"
+        f"💰 Balance: <b>{balance_text} {QUOTE_ASSET}</b>\n"
+        f"📉 Ztráta týden: {state['weekly_loss']:.2f} {QUOTE_ASSET}"
+    )
+    mark_daily_summary_sent(state)
+    add_event(state, "SUMMARY", "Denní shrnutí odesláno")
+    save_state(state)
+
+
+def maybe_send_daily_summary(state):
+    if daily_summary_due(state):
+        send_daily_summary(state)
 
 
 def sleep_until_next_4h_candle(state, cycle_errors):
@@ -382,7 +423,13 @@ def sleep_until_next_4h_candle(state, cycle_errors):
     )
     save_state(state)
     log.info(f"Čekám {wait // 3600}h {(wait % 3600) // 60}m na další 4h svíčku…")
-    time.sleep(wait)
+    deadline = time.monotonic() + wait
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        maybe_send_daily_summary(state)
+        time.sleep(min(60, remaining))
 
 
 def run():
@@ -441,8 +488,6 @@ def run():
         f"🛡️ SL: -{MAX_SL_PCT}% | Trail: +{TRAIL_ACTIVATE_PCT}% → -{TRAIL_DISTANCE_PCT}%\n"
         f"⚙️ Režim: {mode}"
     )
-
-    _last_summary_d = ""
 
     while True:
         cycle_errors = []
@@ -586,6 +631,8 @@ def run():
                                         step_size, tick_size, protection_filters[symbol]
                                     )
                                     place_protection(client, state, symbol, request)
+                                    add_event(state, "TRADE", f"{symbol} · pozice otevřena @ {entry_price:.2f}")
+                                    save_state(state)
 
                                     log.info(f"[{symbol}] Nakoupeno a chráněno: {qty_filled} {base} @ {entry_price:.2f}")
                                     tg(
@@ -624,36 +671,15 @@ def run():
             # ── BALANCE LOG ──────────────────────────────────────────────────
             balance   = get_balance(client, QUOTE_ASSET, raise_on_error=True)
             state.update(account_balance=balance, quote_asset=QUOTE_ASSET)
+            state["market_snapshot"] = {
+                symbol: {"close": data["close"], "bull": data["bull"]}
+                for symbol, data in pair_data.items()
+            }
+            add_event(state, "MARKET", "Trh zkontrolován")
             log.info(
                 f"Balance: {balance:.2f} {QUOTE_ASSET} | "
                 f"Ztráty: den={state['daily_loss']:.2f} týden={state['weekly_loss']:.2f}"
             )
-
-            # ── DENNÍ SHRNUTÍ (půlnoc UTC) ───────────────────────────────────
-            today_str = now_utc().strftime("%Y-%m-%d")
-            if now_utc().hour == 0 and today_str != _last_summary_d:
-                _last_summary_d = today_str
-                lines = []
-                for pair in PAIRS:
-                    sym = pair["symbol"]
-                    ps  = get_pair_state(state, sym)
-                    d   = pair_data.get(sym)
-                    if d:
-                        trend = "🟢 BULL" if d["bull"] else "🔴 BEAR"
-                        if ps["in_position"]:
-                            pnl = (d["close"] - ps["entry_price"]) / ps["entry_price"] * 100
-                            trail = " | 🛡️ Trail ON" if ps.get("trail_active") else ""
-                            lines.append(f"<b>{sym}</b>: {trend} | P/L: {pnl:+.2f}%{trail}")
-                        else:
-                            lines.append(f"<b>{sym}</b>: {trend} — bez pozice")
-                tg(
-                    f"📊 <b>Denní shrnutí</b>\n"
-                    f"{DIVIDER}\n"
-                    f"{chr(10).join(lines)}\n"
-                    f"{DIVIDER}\n"
-                    f"💰 Balance: <b>{balance:.2f} {QUOTE_ASSET}</b>\n"
-                    f"📉 Ztráta týden: {state['weekly_loss']:.2f} {QUOTE_ASSET}"
-                )
 
             # ── TÝDENNÍ HEARTBEAT (každou neděli) ───────────────────────────
             if now_utc().weekday() == 6:

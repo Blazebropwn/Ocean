@@ -71,9 +71,26 @@ async function loadKryptotron() {
     $("#bot-error").textContent = kryptotron.lastError || "";
     $("#bot-control").textContent = entriesPaused ? "Obnovit automatizaci" : "Pozastavit nové obchody";
     $("#bot-control").classList.toggle("resume", entriesPaused);
+    renderEvents(kryptotron.events);
   } catch (error) {
     $("#kryptotron-status").lastChild.textContent = " Nepřipojeno";
     $("#bot-position").textContent = error.message;
+  }
+}
+
+function renderEvents(events) {
+  const list = $("#bot-events");
+  list.replaceChildren();
+  const visible = events.slice(0, 5);
+  if (!visible.length) visible.push({ at: null, message: "Zatím žádné události" });
+  for (const event of visible) {
+    const item = document.createElement("li");
+    const time = document.createElement("time");
+    const text = document.createElement("span");
+    time.textContent = event.at ? new Intl.DateTimeFormat("cs-CZ", { hour: "2-digit", minute: "2-digit" }).format(new Date(event.at)) : "—";
+    text.textContent = event.message;
+    item.append(time, text);
+    list.append(item);
   }
 }
 

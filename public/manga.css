@@ -1,0 +1,18 @@
+:root { --manga: #ff68c8; }
+.kryptotron-card::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .11; background-image: radial-gradient(circle, var(--cyan) .7px, transparent .8px); background-size: 7px 7px; mask-image: linear-gradient(135deg, transparent 38%, #000 82%); }
+.kryptotron-card summary, .kryptotron-detail { position: relative; z-index: 1; }
+.summary-copy strong { text-shadow: 3px 3px 0 rgba(255, 104, 200, .12); }
+.app-status { padding: 7px 10px; border: 1px solid rgba(82, 227, 237, .2); clip-path: polygon(7px 0, 100% 0, calc(100% - 7px) 100%, 0 100%); background: rgba(3, 16, 22, .76); }
+.kryptotron-card[open]::after { background: linear-gradient(90deg, var(--cyan), var(--manga)); box-shadow: 0 0 18px var(--manga); }
+.logbook { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
+.logbook-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; color: var(--text); font: 700 10px DM Mono, monospace; letter-spacing: .16em; }
+.logbook-title::before { content: "//"; margin-right: 9px; color: var(--manga); }
+.logbook-title span { margin-right: auto; }
+.logbook-title b { color: var(--aqua); font-size: 8px; letter-spacing: .12em; }
+.logbook ol { list-style: none; margin: 0; padding: 0; border: 1px solid rgba(82, 227, 237, .12); background: rgba(1, 10, 14, .48); }
+.logbook li { display: grid; grid-template-columns: 48px 1fr; gap: 12px; padding: 9px 12px; border-bottom: 1px solid rgba(82, 227, 237, .08); font: 10px DM Mono, monospace; }
+.logbook li:last-child { border-bottom: 0; }
+.logbook time { color: var(--manga); }
+.logbook li span { color: #a7bec3; }
+.compact-app:first-child .app-icon { box-shadow: -4px 4px 0 rgba(255, 104, 200, .1); }
+@media (max-height: 850px) and (min-width: 851px) { .logbook li:nth-child(n + 4) { display: none; } .logbook li { padding-block: 7px; } }
