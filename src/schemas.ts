@@ -24,3 +24,7 @@ export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1).max(128),
   newPassword: z.string().min(8, "Nové heslo musí mít alespoň 8 znaků.").max(128),
 });
+
+export const kryptotronControlSchema = z.object({
+  entriesPaused: z.boolean(),
+});

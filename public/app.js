@@ -1,6 +1,7 @@
 const $ = (selector) => document.querySelector(selector);
 const message = $("#message");
 let kryptotronRefresh;
+let entriesPaused = false;
 
 function setLoading(form, loading) {
   const button = form.querySelector("button[type=submit]");
@@ -40,13 +41,15 @@ function showUser(user) {
 async function loadKryptotron() {
   try {
     const { kryptotron } = await request("/api/kryptotron");
-    const statuses = { running: "Kontroluje trh", waiting: "Aktivní", degraded: "Má problém", offline: "Nedostupný", unknown: "Propojeno" };
-    $("#kryptotron-status").lastChild.textContent = ` ${statuses[kryptotron.status] || "Propojeno"}`;
+    const statuses = { running: "Kontroluje trh", waiting: "Čeká na signál", degraded: "Vyžaduje pozornost", offline: "Nedostupný", unknown: "Propojeno" };
+    const open = kryptotron.positions.find((position) => position.inPosition);
+    entriesPaused = kryptotron.entriesPaused;
+    const status = entriesPaused ? "Pozastaveno" : open ? "V pozici" : (statuses[kryptotron.status] || "Propojeno");
+    $("#kryptotron-status").lastChild.textContent = ` ${status}`;
     $("#kryptotron-status").classList.toggle("warning", kryptotron.status === "degraded" || kryptotron.status === "offline");
     $("#bot-balance").textContent = kryptotron.balance.amount === null
       ? "—"
       : `${new Intl.NumberFormat("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(kryptotron.balance.amount)} ${kryptotron.balance.asset}`;
-    const open = kryptotron.positions.find((position) => position.inPosition);
     $("#bot-position").textContent = open ? `${open.symbol} · v pozici` : "Bez otevřené pozice";
     $("#bot-protection").textContent = open
       ? (open.protectionActive ? "OCO aktivní" : "Vyžaduje kontrolu")
@@ -66,11 +69,31 @@ async function loadKryptotron() {
     $("#bot-next-check").textContent = formatDate(kryptotron.nextCheckAt);
     $("#bot-error-wrap").classList.toggle("hidden", !kryptotron.lastError);
     $("#bot-error").textContent = kryptotron.lastError || "";
+    $("#bot-control").textContent = entriesPaused ? "Obnovit automatizaci" : "Pozastavit nové obchody";
+    $("#bot-control").classList.toggle("resume", entriesPaused);
   } catch (error) {
     $("#kryptotron-status").lastChild.textContent = " Nepřipojeno";
     $("#bot-position").textContent = error.message;
   }
 }
+
+$("#bot-control").addEventListener("click", async () => {
+  const button = $("#bot-control");
+  button.disabled = true;
+  try {
+    const result = await request("/api/kryptotron/control", {
+      method: "POST",
+      body: JSON.stringify({ entriesPaused: !entriesPaused }),
+    });
+    entriesPaused = result.entriesPaused;
+    await loadKryptotron();
+  } catch (error) {
+    $("#bot-error-wrap").classList.remove("hidden");
+    $("#bot-error").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
 
 function formatDate(value) {
   return value ? new Intl.DateTimeFormat("cs-CZ", { dateStyle: "short", timeStyle: "short" }).format(new Date(value)) : "—";

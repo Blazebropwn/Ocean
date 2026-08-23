@@ -8,6 +8,7 @@ export type KryptotronSnapshot = {
   nextCheckAt: string | null;
   lastError: string | null;
   updatedAt: string | null;
+  entriesPaused: boolean;
   balance: { amount: number | null; asset: string };
   positions: Array<{
     symbol: string;
@@ -32,6 +33,26 @@ async function supabaseRows(url: string, key: string, path: string): Promise<Sup
   });
   if (!response.ok) throw new Error(`Supabase odpověděl ${response.status}`);
   return await response.json() as SupabaseRow[];
+}
+
+export async function setKryptotronEntriesPaused(url: string, key: string, entriesPaused: boolean) {
+  const states = await supabaseRows(url, key, "bot_state?key=eq.main&select=data&limit=1");
+  const state = states[0];
+  if (!state?.data || typeof state.data !== "object") throw new Error("Stav Kryptotronu neexistuje");
+  const data = { ...(state.data as Record<string, unknown>), entries_paused: entriesPaused };
+  const response = await fetch(`${url}/rest/v1/bot_state?key=eq.main`, {
+    method: "PATCH",
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!response.ok) throw new Error(`Supabase odpověděl ${response.status}`);
+  return entriesPaused;
 }
 
 export async function loadKryptotronSnapshot(url: string, key: string): Promise<KryptotronSnapshot> {
@@ -63,6 +84,7 @@ export async function loadKryptotronSnapshot(url: string, key: string): Promise<
     nextCheckAt: stringOrNull(data.next_check_at),
     lastError: stringOrNull(data.last_error),
     updatedAt: typeof state?.updated_at === "string" ? state.updated_at : null,
+    entriesPaused: data.entries_paused === true,
     balance: {
       amount: finiteNumberOrNull(data.account_balance),
       asset: typeof data.quote_asset === "string" ? data.quote_asset : "USDC",

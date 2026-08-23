@@ -93,6 +93,7 @@ DEFAULT_STATE = {
     "last_error":           None,
     "pending_order":        None,
     "pending_protection":   None,
+    "entries_paused":       False,
     "account_balance":      None,
     "quote_asset":          QUOTE_ASSET,
 }
@@ -167,6 +168,13 @@ def reconcile_pending_order(client, state):
             raise RuntimeError("Zrušenou objednávku se nepodařilo bezpečně uložit")
     else:
         raise RuntimeError(f"Objednávka {intent['client_order_id']} stále čeká na dokončení")
+    return state
+
+
+def refresh_entries_control(state):
+    remote_state = db.load_state()
+    if remote_state is not None:
+        state["entries_paused"] = remote_state.get("entries_paused", False)
     return state
 
 
@@ -274,6 +282,8 @@ def reset_periods(state):
 
 
 def can_trade(state):
+    if state.get("entries_paused"):
+        return False, "Nové obchody jsou pozastavené uživatelem"
     if state.get("pending_order") or state.get("pending_protection"):
         return False, "Předchozí objednávka čeká na bezpečné ověření"
     if state["daily_loss"] >= MAX_DAILY_LOSS_USDT:
@@ -436,6 +446,7 @@ def run():
 
     while True:
         cycle_errors = []
+        state = refresh_entries_control(state)
         state.update(
             runtime_status="running",
             last_heartbeat_at=now_utc().isoformat(),
@@ -535,6 +546,7 @@ def run():
                     # ── BEZ POZICE ────────────────────────────────────────────
                     else:
                         if data["golden_cross"]:
+                            state = refresh_entries_control(state)
                             allowed, reason = can_trade(state)
                             if not allowed:
                                 log.info(f"[{symbol}] Golden Cross ale trading pozastaven: {reason}")

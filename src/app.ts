@@ -6,9 +6,9 @@ import staticFiles from "@fastify/static";
 import { join } from "node:path";
 import type { Config } from "./config.js";
 import { openDatabase, publicUser, type UserRecord, type OceanDatabase } from "./db.js";
-import { changePasswordSchema, loginSchema, recoveryConfirmSchema, recoveryRequestSchema, registerSchema } from "./schemas.js";
+import { changePasswordSchema, kryptotronControlSchema, loginSchema, recoveryConfirmSchema, recoveryRequestSchema, registerSchema } from "./schemas.js";
 import { DUMMY_PASSWORD_HASH, hashPassword, hashToken, newSessionToken, newUserId, newVerificationToken, SESSION_TTL_SECONDS, verifyPassword } from "./security.js";
-import { loadKryptotronSnapshot } from "./kryptotron.js";
+import { loadKryptotronSnapshot, setKryptotronEntriesPaused } from "./kryptotron.js";
 
 const COOKIE_NAME = "zero_session";
 
@@ -249,6 +249,28 @@ export function buildApp(config: Config, database?: OceanDatabase) {
       return { kryptotron: await loadKryptotronSnapshot(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey) };
     } catch {
       return reply.code(502).send({ error: "Stav Kryptotronu se nepodařilo načíst." });
+    }
+  });
+
+  app.post("/api/kryptotron/control", { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } }, async (request, reply) => {
+    const user = currentUser(db, request);
+    if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
+    if (user.username.toLowerCase() !== "blazebro") return reply.code(404).send({ error: "Kryptotron není k tomuto účtu připojen." });
+    const parsed = kryptotronControlSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "Neplatný požadavek." });
+    if (!config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return reply.code(503).send({ error: "Kryptotron není dostupný." });
+    try {
+      await setKryptotronEntriesPaused(
+        config.kryptotronSupabaseUrl,
+        config.kryptotronSupabaseKey,
+        parsed.data.entriesPaused,
+      );
+      const meta = requestMeta(request);
+      db.prepare("INSERT INTO security_events (user_id, event_type, ip_address, user_agent) VALUES (?, ?, ?, ?)")
+        .run(user.id, parsed.data.entriesPaused ? "KRYPTOTRON_PAUSED" : "KRYPTOTRON_RESUMED", meta.ip, meta.agent);
+      return { entriesPaused: parsed.data.entriesPaused };
+    } catch {
+      return reply.code(502).send({ error: "Ovládání Kryptotronu se nepodařilo uložit." });
     }
   });
 
