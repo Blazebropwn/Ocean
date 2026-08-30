@@ -50,6 +50,7 @@ async function loadKryptotron() {
     $("#bot-balance").textContent = kryptotron.balance.amount === null
       ? "—"
       : `${new Intl.NumberFormat("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(kryptotron.balance.amount)} ${kryptotron.balance.asset}`;
+    document.querySelectorAll(".balance-copy").forEach((element) => { element.textContent = $("#bot-balance").textContent; });
     $("#bot-position").textContent = open ? `${open.symbol} · v pozici` : "Bez otevřené pozice";
     $("#bot-protection").textContent = open
       ? (open.protectionActive ? "OCO aktivní" : "Vyžaduje kontrolu")
@@ -129,6 +130,7 @@ function formatBips(value) {
 }
 
 $("#profile-button").addEventListener("click", () => $("#profile-menu").classList.toggle("hidden"));
+$("#close-kryptotron").addEventListener("click", () => $("#kryptotron").removeAttribute("open"));
 
 document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => {
   document.querySelectorAll(".tab").forEach((item) => item.classList.toggle("active", item === tab));
