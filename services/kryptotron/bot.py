@@ -429,6 +429,7 @@ def maybe_send_daily_summary(state):
 
 
 def maybe_run_streak_paper(client, state, pair_filters):
+    refresh_entries_control(state)
     streak = state.setdefault("streak", {})
     if not streak.get("enabled") or not streak.get("paper_mode", True):
         return
