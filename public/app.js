@@ -4,12 +4,9 @@ let kryptotronRefresh;
 let entriesPaused = false;
 let dcaEnabled = false;
 let streakEnabled = false;
-const MINES_CELLS = 25;
-const MINES_STAKE = 10;
-let minesBalance = Number(localStorage.getItem("ocean-arcade-points") || 1000);
-let mines = new Set();
-let minesSafe = 0;
-let minesActive = false;
+let arcadeName = null;
+let arcadeState = null;
+let arcadeFrame = null;
 
 function setLoading(form, loading) {
   const button = form.querySelector("button[type=submit]");
@@ -51,6 +48,10 @@ function showUser(user) {
 
 function showAppView(view, activeLink = null) {
   const selected = ["overview", "arcade", "vault"].includes(view) ? view : "overview";
+  if (selected !== "arcade") {
+    cancelAnimationFrame(arcadeFrame);
+    if (arcadeState) arcadeState.active = false;
+  }
   document.querySelectorAll(".app-view").forEach((panel) => panel.classList.toggle("hidden", panel.id !== `${selected}-view`));
   document.querySelectorAll(".side-link[data-view]").forEach((link) => link.classList.toggle("active", activeLink ? link === activeLink : link.dataset.view === selected));
   $("#workspace-title").textContent = selected === "overview" ? "Přehled" : selected === "arcade" ? "Arcade" : "Vault";
@@ -62,97 +63,139 @@ document.querySelectorAll(".side-link[data-view]").forEach((link) => link.addEve
   showAppView(link.dataset.view, link);
 }));
 
-function randomMines(count) {
-  const cells = Array.from({ length: MINES_CELLS }, (_, index) => index);
-  for (let index = cells.length - 1; index > 0; index -= 1) {
-    const target = secureRandomInt(index + 1);
-    [cells[index], cells[target]] = [cells[target], cells[index]];
+const arcadeGames = {
+  sonar: { title: "Sonar", kicker: "ARCADE / 01", hint: "Zastav pulz v cílovém kruhu." },
+  dive: { title: "Dive", kicker: "ARCADE / 02", hint: "Tapnutím měníš směr ponoru." },
+  depth: { title: "Depth", kicker: "ARCADE / 03", hint: "Zastav sestup v zelené zóně." },
+};
+
+function arcadeBest(name) {
+  return Number(localStorage.getItem(`ocean-${name}-best`) || 0);
+}
+
+function sizeArcadeCanvas() {
+  const canvas = $("#game-canvas");
+  const bounds = canvas.getBoundingClientRect();
+  const ratio = Math.min(devicePixelRatio || 1, 2);
+  canvas.width = Math.max(1, Math.floor(bounds.width * ratio));
+  canvas.height = Math.max(1, Math.floor(bounds.height * ratio));
+  return { canvas, ctx: canvas.getContext("2d"), width: canvas.width, height: canvas.height };
+}
+
+function openArcade(name) {
+  arcadeName = name;
+  cancelAnimationFrame(arcadeFrame);
+  arcadeState = null;
+  $("#arcade-library").classList.add("hidden");
+  $("#arcade-game").classList.remove("hidden");
+  $("#game-title").textContent = arcadeGames[name].title;
+  $("#game-kicker").textContent = arcadeGames[name].kicker;
+  $("#game-hint").textContent = arcadeGames[name].hint;
+  $("#game-score").textContent = "0";
+  $("#game-best").textContent = arcadeBest(name);
+  $("#game-tap").textContent = "Spustit";
+  drawArcadeIdle();
+}
+
+function drawArcadeIdle() {
+  const { ctx, width, height } = sizeArcadeCanvas();
+  ctx.clearRect(0, 0, width, height);
+  ctx.strokeStyle = "#8fcbd0";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(width / 2, height / 2, Math.min(width, height) * .16, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+function startArcade() {
+  const now = performance.now();
+  if (arcadeName === "sonar") arcadeState = { active: true, start: now, score: 0, combo: 0, target: .3 };
+  if (arcadeName === "dive") arcadeState = { active: true, last: now, start: now, score: 0, y: .5, direction: 1, obstacles: [] };
+  if (arcadeName === "depth") arcadeState = { active: true, start: now, score: 0, rounds: 0, target: .72 };
+  $("#game-tap").textContent = arcadeName === "sonar" ? "PING" : arcadeName === "dive" ? "ZMĚNIT SMĚR" : "ZASTAVIT";
+  cancelAnimationFrame(arcadeFrame);
+  arcadeFrame = requestAnimationFrame(runArcade);
+}
+
+function finishArcade() {
+  arcadeState.active = false;
+  const score = Math.floor(arcadeState.score);
+  const best = Math.max(score, arcadeBest(arcadeName));
+  localStorage.setItem(`ocean-${arcadeName}-best`, String(best));
+  $("#game-score").textContent = score;
+  $("#game-best").textContent = best;
+  $("#game-tap").textContent = "Hrát znovu";
+  $("#game-hint").textContent = `Konec hry · ${score} bodů`;
+}
+
+function arcadeTap() {
+  if (!arcadeState?.active) return startArcade();
+  if (arcadeName === "sonar") {
+    const phase = ((performance.now() - arcadeState.start) % 1500) / 1500;
+    const distance = Math.abs(phase - arcadeState.target);
+    const gain = distance < .025 ? 100 : distance < .07 ? 50 : distance < .13 ? 20 : 0;
+    arcadeState.combo = gain ? arcadeState.combo + 1 : 0;
+    arcadeState.score += gain + Math.max(0, arcadeState.combo - 1) * 5;
+    arcadeState.target = .2 + Math.random() * .55;
+  } else if (arcadeName === "dive") {
+    arcadeState.direction *= -1;
+  } else {
+    const phase = (Math.sin((performance.now() - arcadeState.start) / 430) + 1) / 2;
+    const distance = Math.abs(phase - arcadeState.target);
+    arcadeState.score += distance < .035 ? 100 : distance < .09 ? 50 : distance < .16 ? 20 : 0;
+    arcadeState.rounds += 1;
+    arcadeState.target = .18 + Math.random() * .64;
+    if (arcadeState.rounds >= 5) finishArcade();
   }
-  return new Set(cells.slice(0, count));
+  $("#game-score").textContent = Math.floor(arcadeState.score);
 }
 
-function secureRandomInt(maxExclusive) {
-  const range = 2 ** 32;
-  const limit = Math.floor(range / maxExclusive) * maxExclusive;
-  const random = new Uint32Array(1);
-  do crypto.getRandomValues(random); while (random[0] >= limit);
-  return random[0] % maxExclusive;
-}
-
-function minesMultiplier(safe, mineCount) {
-  let survival = 1;
-  for (let index = 0; index < safe; index += 1) survival *= (MINES_CELLS - mineCount - index) / (MINES_CELLS - index);
-  return safe ? 1 / survival : 1;
-}
-
-function updateMines() {
-  const multiplier = minesMultiplier(minesSafe, Number($("#mines-count").value));
-  $("#mines-balance").textContent = minesBalance.toLocaleString("cs-CZ");
-  $("#mines-multiplier").textContent = `${multiplier.toFixed(2)}×`;
-  $("#mines-win").textContent = `${Math.floor(MINES_STAKE * multiplier)} bodů`;
-  $("#mines-count").disabled = minesActive;
-  $("#mines-action").textContent = minesActive ? (minesSafe ? `Vybrat ${Math.floor(MINES_STAKE * multiplier)} bodů` : "Ukončit hru") : "Spustit hru";
-}
-
-function revealAllMines() {
-  document.querySelectorAll(".mine-cell").forEach((cell, index) => {
-    if (mines.has(index)) {
-      cell.classList.add("mine");
-      cell.textContent = "✕";
+function runArcade(now) {
+  if (!arcadeState?.active) return;
+  const { ctx, width, height } = sizeArcadeCanvas();
+  ctx.clearRect(0, 0, width, height);
+  ctx.lineWidth = Math.max(2, width / 300);
+  if (arcadeName === "sonar") {
+    const phase = ((now - arcadeState.start) % 1500) / 1500;
+    const maxRadius = Math.min(width, height) * .44;
+    ctx.strokeStyle = "#afdadd";
+    ctx.beginPath(); ctx.arc(width / 2, height / 2, arcadeState.target * maxRadius, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = "#087f8c";
+    ctx.beginPath(); ctx.arc(width / 2, height / 2, phase * maxRadius, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = "#087f8c"; ctx.beginPath(); ctx.arc(width / 2, height / 2, 7, 0, Math.PI * 2); ctx.fill();
+    if (now - arcadeState.start >= 30000) finishArcade();
+  } else if (arcadeName === "dive") {
+    const delta = Math.min((now - arcadeState.last) / 1000, .04); arcadeState.last = now;
+    arcadeState.y += arcadeState.direction * delta * .34;
+    if (arcadeState.y < .06 || arcadeState.y > .94) return finishArcade();
+    if (!arcadeState.obstacles.length || arcadeState.obstacles.at(-1).x < .68) arcadeState.obstacles.push({ x: 1.08, gap: .18 + Math.random() * .64, passed: false });
+    ctx.fillStyle = "#c6e3e5";
+    for (const obstacle of arcadeState.obstacles) {
+      obstacle.x -= delta * .24;
+      const x = obstacle.x * width, gap = obstacle.gap * height, gapSize = height * .28;
+      ctx.fillRect(x, 0, width * .035, Math.max(0, gap - gapSize / 2));
+      ctx.fillRect(x, gap + gapSize / 2, width * .035, height);
+      if (!obstacle.passed && obstacle.x < .24) { obstacle.passed = true; arcadeState.score += 100; }
+      if (Math.abs(obstacle.x - .24) < .035 && Math.abs(arcadeState.y - obstacle.gap) > .14) return finishArcade();
     }
-    cell.disabled = true;
-  });
-}
-
-function finishMines(cashOut) {
-  if (cashOut && minesSafe) minesBalance += Math.floor(MINES_STAKE * minesMultiplier(minesSafe, Number($("#mines-count").value)));
-  minesActive = false;
-  localStorage.setItem("ocean-arcade-points", String(minesBalance));
-  revealAllMines();
-  $("#mines-message").textContent = cashOut && minesSafe ? "Body jsou v bezpečí. Další kolo?" : "Kolo skončilo. Zkus to znovu.";
-  updateMines();
-}
-
-function startMines() {
-  if (minesBalance < MINES_STAKE) {
-    minesBalance = 1000;
-    localStorage.setItem("ocean-arcade-points", String(minesBalance));
-    $("#mines-message").textContent = "Demo body byly obnoveny.";
+    arcadeState.obstacles = arcadeState.obstacles.filter((item) => item.x > -.1);
+    ctx.fillStyle = "#087f8c"; ctx.beginPath(); ctx.arc(width * .24, height * arcadeState.y, 9, 0, Math.PI * 2); ctx.fill();
+  } else {
+    const phase = (Math.sin((now - arcadeState.start) / 430) + 1) / 2;
+    const x = width / 2, top = height * .12, span = height * .76;
+    ctx.strokeStyle = "#d2e4e6"; ctx.lineWidth = width * .025; ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, top + span); ctx.stroke();
+    ctx.strokeStyle = "#75bfa7"; ctx.lineWidth = width * .035; ctx.beginPath(); ctx.moveTo(x, top + (arcadeState.target - .06) * span); ctx.lineTo(x, top + (arcadeState.target + .06) * span); ctx.stroke();
+    ctx.fillStyle = "#087f8c"; ctx.beginPath(); ctx.arc(x, top + phase * span, 10, 0, Math.PI * 2); ctx.fill();
   }
-  minesBalance -= MINES_STAKE;
-  minesSafe = 0;
-  minesActive = true;
-  mines = randomMines(Number($("#mines-count").value));
-  document.querySelectorAll(".mine-cell").forEach((cell) => { cell.className = "mine-cell"; cell.disabled = false; cell.textContent = ""; });
-  $("#mines-message").textContent = "Kolo běží. Každé bezpečné pole zvyšuje násobitel.";
-  updateMines();
+  $("#game-score").textContent = Math.floor(arcadeState.score);
+  arcadeFrame = requestAnimationFrame(runArcade);
 }
 
-for (let index = 0; index < MINES_CELLS; index += 1) {
-  const cell = document.createElement("button");
-  cell.type = "button";
-  cell.className = "mine-cell";
-  cell.disabled = true;
-  cell.setAttribute("aria-label", `Pole ${index + 1}`);
-  cell.addEventListener("click", () => {
-    if (!minesActive || cell.classList.contains("safe")) return;
-    if (mines.has(index)) {
-      cell.textContent = "✕";
-      finishMines(false);
-      return;
-    }
-    cell.classList.add("safe");
-    cell.textContent = "◆";
-    minesSafe += 1;
-    $("#mines-message").textContent = `${minesSafe} bezpečných polí. Pokračovat, nebo vybrat?`;
-    updateMines();
-  });
-  $("#mines-grid").append(cell);
-}
-
-$("#mines-action").addEventListener("click", () => minesActive ? finishMines(true) : startMines());
-$("#mines-count").addEventListener("change", updateMines);
-updateMines();
+document.querySelectorAll(".game-card").forEach((card) => card.addEventListener("click", () => openArcade(card.dataset.game)));
+$("#game-back").addEventListener("click", () => { cancelAnimationFrame(arcadeFrame); arcadeState = null; $("#arcade-game").classList.add("hidden"); $("#arcade-library").classList.remove("hidden"); });
+$("#game-tap").addEventListener("click", arcadeTap);
+$("#game-canvas").addEventListener("pointerdown", arcadeTap);
+window.addEventListener("keydown", (event) => { if (event.code === "Space" && !$("#arcade-game").classList.contains("hidden")) { event.preventDefault(); arcadeTap(); } });
 
 async function loadKryptotron() {
   try {

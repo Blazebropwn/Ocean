@@ -256,15 +256,15 @@
             class="ocean-module arcade-view app-view hidden"
             id="arcade-view"
           >
-            <div class="mines-panel">
-              <div class="mines-heading"><div><small>ARCADE / 01</small><h2>Mines</h2></div><span>Demo body · bez hodnoty</span></div>
-              <div class="mines-balance"><small>Arcade balance</small><strong><span id="mines-balance">1 000</span> bodů</strong></div>
-              <div class="mines-settings"><label>Vklad<strong>10 bodů</strong></label><label>Miny<select id="mines-count"><option value="3">3</option><option value="5">5</option><option value="7">7</option></select></label></div>
-              <div class="mines-result"><span><small>Násobitel</small><strong id="mines-multiplier">1.00×</strong></span><span><small>Výhra</small><strong id="mines-win">10 bodů</strong></span></div>
-              <button class="mines-primary" id="mines-action" type="button">Spustit hru</button>
-              <p id="mines-message">Odhal bezpečné pole. Skončit můžeš kdykoliv.</p>
+            <div class="arcade-library" id="arcade-library">
+              <div class="arcade-intro"><small>OCEAN ARCADE</small><h2>Vyber si ponor.</h2><p>Tři krátké hry. Jeden vstup.</p></div>
+              <div class="game-list">
+                <button class="game-card sonar" type="button" data-game="sonar"><span>01</span><div><h3>Sonar</h3><p>Zastav pulz v cílovém kruhu.</p></div><b>◎</b></button>
+                <button class="game-card dive" type="button" data-game="dive"><span>02</span><div><h3>Dive</h3><p>Měň směr a propluj hlubinou.</p></div><b>⌁</b></button>
+                <button class="game-card depth" type="button" data-game="depth"><span>03</span><div><h3>Depth</h3><p>Zastav sestup v bezpečné zóně.</p></div><b>↓</b></button>
+              </div>
             </div>
-            <div class="mines-stage"><div class="mines-grid" id="mines-grid" aria-label="Herní pole Mines"></div></div>
+            <div class="arcade-game hidden" id="arcade-game"><div class="game-top"><button id="game-back" type="button">← Arcade</button><div><small id="game-kicker">ARCADE / 01</small><h2 id="game-title">Sonar</h2></div><div class="game-score"><small>Skóre</small><strong id="game-score">0</strong></div></div><div class="game-canvas-wrap"><canvas id="game-canvas" aria-label="Herní plocha"></canvas><button id="game-tap" type="button">Spustit</button></div><div class="game-bottom"><span id="game-hint">Klikni nebo stiskni mezerník.</span><strong>Rekord <span id="game-best">0</span></strong></div></div>
           </section>
           <section
             class="ocean-module vault-view app-view hidden"
