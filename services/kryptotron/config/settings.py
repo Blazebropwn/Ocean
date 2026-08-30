@@ -20,6 +20,13 @@ PAIRS = [
 ]
 QUOTE_ASSET = "USDC"
 
+# --- Týdenní DCA (aktivujte až po ověření na Testnetu) ---
+DCA_ENABLED = _e("DCA_ENABLED", "false").lower() == "true"
+DCA_AMOUNT_USDC = float(_e("DCA_AMOUNT_USDC", "5"))
+DCA_SYMBOLS = [symbol.strip().upper() for symbol in _e(
+    "DCA_SYMBOLS", "BTCUSDC,ETHUSDC,SOLUSDC"
+).split(",") if symbol.strip()]
+
 # --- Timeframes ---
 TIMEFRAME_1H = "1h"
 TIMEFRAME_4H = "4h"
@@ -44,4 +51,3 @@ MAX_TRADES_PER_DAY      = 3
 MAX_TRADES_PER_WEEK     = 9
 COOLDOWN_AFTER_LOSS_HRS = 24
 COOLDOWN_AFTER_WIN_HRS  = 6
-

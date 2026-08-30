@@ -11,6 +11,7 @@ export type KryptotronSnapshot = {
   entriesPaused: boolean;
   events: Array<{ type: string; message: string; at: string }>;
   balance: { amount: number | null; asset: string };
+  dca: { enabled: boolean; amount: number; symbols: string[]; completedWeek: string | null };
   positions: Array<{
     symbol: string;
     inPosition: boolean;
@@ -83,6 +84,7 @@ export async function loadKryptotronSnapshot(url: string, key: string): Promise<
     protectionTrailingBips: Number(position.protection_trailing_bips ?? 0),
   }));
   const trade = trades[0];
+  const rawDca = data.dca && typeof data.dca === "object" ? data.dca as Record<string, unknown> : {};
   return {
     connected: Boolean(state),
     status: runtimeStatus(data.runtime_status, data.last_heartbeat_at),
@@ -101,6 +103,12 @@ export async function loadKryptotronSnapshot(url: string, key: string): Promise<
     balance: {
       amount: finiteNumberOrNull(data.account_balance),
       asset: typeof data.quote_asset === "string" ? data.quote_asset : "USDC",
+    },
+    dca: {
+      enabled: rawDca.enabled === true,
+      amount: Number(rawDca.amount ?? 5),
+      symbols: Array.isArray(rawDca.symbols) ? rawDca.symbols.filter((symbol): symbol is string => typeof symbol === "string") : [],
+      completedWeek: stringOrNull(rawDca.completed_week),
     },
     positions,
     limits: {

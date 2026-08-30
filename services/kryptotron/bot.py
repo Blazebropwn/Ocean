@@ -28,11 +28,13 @@ from config.settings import (
     MAX_CONSECUTIVE_LOSSES, MAX_TRADES_PER_DAY, MAX_TRADES_PER_WEEK,
     COOLDOWN_AFTER_LOSS_HRS, COOLDOWN_AFTER_WIN_HRS,
     TELEGRAM_TOKEN, TELEGRAM_CHAT_ID,
+    DCA_ENABLED, DCA_AMOUNT_USDC, DCA_SYMBOLS,
 )
 from strategy import get_cross_data
 from utils import get_balance, get_symbol_filters, round_step, round_price, notify
 from order_safety import apply_filled_buy, classify_order, new_buy_intent
 from events import add_event
+from dca import run_weekly_dca
 from schedule import (
     daily_summary_due,
     mark_daily_summary_sent,
@@ -106,6 +108,7 @@ DEFAULT_STATE = {
     "events":               [],
     "market_snapshot":      {},
     "last_daily_summary_date": "",
+    "dca":                    {},
 }
 
 DIVIDER = "─" * 22
@@ -445,17 +448,37 @@ def send_weekly_summary(state):
     save_state(state)
 
 
+def maybe_run_weekly_dca(client, state, pair_filters):
+    if not DCA_ENABLED or not weekly_summary_due(state):
+        return
+    min_notionals = {symbol: pair_filters[symbol][2] for symbol in DCA_SYMBOLS}
+    results = run_weekly_dca(
+        client, state, DCA_SYMBOLS, DCA_AMOUNT_USDC, min_notionals,
+        save_state, lambda binance: get_balance(binance, QUOTE_ASSET, raise_on_error=True),
+    )
+    filled = [item for item in results if item["status"] == "filled"]
+    skipped = [item for item in results if item["status"] != "filled"]
+    for item in filled:
+        add_event(state, "DCA", f"{item['symbol']} · DCA nákup {item['amount']:.2f} {QUOTE_ASSET}")
+    lines = [f"✅ {item['symbol']}: {item['amount']:.2f} {QUOTE_ASSET}" for item in filled]
+    lines += [f"⚠️ {item['symbol']}: {item['reason']}" for item in skipped]
+    if lines:
+        tg(f"🌱 <b>Týdenní DCA</b>\n{DIVIDER}\n" + "\n".join(lines))
+    save_state(state)
+
+
 def maybe_send_weekly_summary(state):
     if weekly_summary_due(state):
         send_weekly_summary(state)
 
 
-def maybe_send_scheduled_summaries(state):
+def maybe_send_scheduled_summaries(client, state, pair_filters):
     maybe_send_daily_summary(state)
+    maybe_run_weekly_dca(client, state, pair_filters)
     maybe_send_weekly_summary(state)
 
 
-def sleep_until_next_4h_candle(state, cycle_errors):
+def sleep_until_next_4h_candle(client, state, pair_filters, cycle_errors):
     n          = now_utc()
     h_in_block = n.hour % 4
     secs_past  = h_in_block * 3600 + n.minute * 60 + n.second
@@ -474,7 +497,7 @@ def sleep_until_next_4h_candle(state, cycle_errors):
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             break
-        maybe_send_scheduled_summaries(state)
+        maybe_send_scheduled_summaries(client, state, pair_filters)
         time.sleep(min(60, remaining))
 
 
@@ -506,8 +529,7 @@ def run():
     try:
         pair_filters = {}
         protection_filters = {}
-        for pair in PAIRS:
-            sym = pair["symbol"]
+        for sym in sorted(set(symbols + (DCA_SYMBOLS if DCA_ENABLED else []))):
             step_size, tick_size, min_notional = get_symbol_filters(client, sym)
             pair_filters[sym] = (step_size, tick_size, min_notional)
             protection_filters[sym] = trailing_delta_filter(client.get_symbol_info(sym))
@@ -518,6 +540,7 @@ def run():
         raise SystemExit(1)
 
     state = load_state()
+    state.setdefault("dca", {}).update(enabled=DCA_ENABLED, amount=DCA_AMOUNT_USDC, symbols=DCA_SYMBOLS)
     state = reconcile_pending_order(client, state)
     state = reconcile_pending_protection(client, state)
     save_state(state)
@@ -736,7 +759,7 @@ def run():
             log.error(f"Neočekávaná chyba: {e}", exc_info=True)
             tg(f"❌ <b>Chyba bota</b>\n{str(e)[:300]}")
 
-        sleep_until_next_4h_candle(state, cycle_errors)
+        sleep_until_next_4h_candle(client, state, pair_filters, cycle_errors)
 
 
 if __name__ == "__main__":

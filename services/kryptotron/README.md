@@ -90,6 +90,18 @@ __pycache__/
 4. Pokud EMA9 klesne pod EMA21 → **SELL** (market order)
 5. Zapíše výsledek do logu
 
+## Týdenní DCA
+
+DCA je samostatná automatizace, která v neděli od 08:00 českého času před týdenním reportem nakoupí zvolené páry. Výchozí konfigurace je bezpečně vypnutá.
+
+```env
+DCA_ENABLED=false
+DCA_AMOUNT_USDC=5
+DCA_SYMBOLS=BTCUSDC,ETHUSDC,SOLUSDC
+```
+
+`DCA_AMOUNT_USDC` je částka pro každý symbol, tedy při výchozím nastavení celkem 15 USDC týdně. Před aktivací ověřte nákupy na Testnetu. Modul kontroluje minimální hodnotu příkazu a ukládá stabilní ID objednávky, aby restart workeru nevytvořil druhý nákup.
+
 ---
 
 ## Možná rozšíření
@@ -99,4 +111,3 @@ __pycache__/
 - Backtest modul na historických datech
 - Více párů současně
 - Web dashboard (Flask/FastAPI)
-
