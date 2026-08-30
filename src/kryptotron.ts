@@ -63,6 +63,25 @@ export async function setKryptotronEntriesPaused(url: string, key: string, entri
   return entriesPaused;
 }
 
+export async function setDcaEnabled(url: string, key: string, enabled: boolean) {
+  const states = await supabaseRows(url, key, "bot_state?key=eq.main&select=data&limit=1");
+  const state = states[0];
+  if (!state?.data || typeof state.data !== "object") throw new Error("Stav Kryptotronu neexistuje");
+  const data: Record<string, unknown> = { ...(state.data as Record<string, unknown>) };
+  const dca = data.dca && typeof data.dca === "object" ? data.dca as Record<string, unknown> : {};
+  data.dca = { ...dca, enabled };
+  const events = Array.isArray(data.events) ? data.events : [];
+  data.events = [{ type: "CONTROL", message: enabled ? "Týdenní DCA zapnuto" : "Týdenní DCA vypnuto", at: new Date().toISOString() }, ...events].slice(0, 20);
+  const response = await fetch(`${url}/rest/v1/bot_state?key=eq.main`, {
+    method: "PATCH",
+    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+    body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!response.ok) throw new Error(`Supabase odpověděl ${response.status}`);
+  return enabled;
+}
+
 export async function loadKryptotronSnapshot(url: string, key: string): Promise<KryptotronSnapshot> {
   const [states, trades] = await Promise.all([
     supabaseRows(url, key, "bot_state?key=eq.main&select=data,updated_at&limit=1"),

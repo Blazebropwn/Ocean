@@ -28,3 +28,7 @@ export const changePasswordSchema = z.object({
 export const kryptotronControlSchema = z.object({
   entriesPaused: z.boolean(),
 });
+
+export const dcaControlSchema = z.object({
+  enabled: z.boolean(),
+});

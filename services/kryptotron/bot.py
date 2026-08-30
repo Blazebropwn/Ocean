@@ -189,6 +189,9 @@ def refresh_entries_control(state):
     remote_state = db.load_state()
     if remote_state is not None:
         state["entries_paused"] = remote_state.get("entries_paused", False)
+        remote_dca = remote_state.get("dca", {})
+        if isinstance(remote_dca, dict) and "enabled" in remote_dca:
+            state.setdefault("dca", {})["enabled"] = remote_dca["enabled"] is True
     return state
 
 
@@ -450,7 +453,10 @@ def send_weekly_summary(state):
 
 
 def maybe_run_weekly_dca(client, state, pair_filters):
-    if not DCA_ENABLED or not weekly_summary_due(state):
+    if not weekly_summary_due(state):
+        return
+    refresh_entries_control(state)
+    if not state.get("dca", {}).get("enabled", False):
         return
     min_notionals = {symbol: pair_filters[symbol][2] for symbol in DCA_SYMBOLS}
     results = run_weekly_dca(
@@ -544,7 +550,9 @@ def run():
         tg(f"❌ <b>Bot se nespustil!</b>\n{e}")
         raise SystemExit(1)
 
-    state.setdefault("dca", {}).update(enabled=DCA_ENABLED, amount=DCA_AMOUNT_USDC, symbols=DCA_SYMBOLS)
+    dca_state = state.setdefault("dca", {})
+    dca_state.setdefault("enabled", DCA_ENABLED)
+    dca_state.update(amount=DCA_AMOUNT_USDC, symbols=DCA_SYMBOLS)
     state = reconcile_pending_order(client, state)
     state = reconcile_pending_protection(client, state)
     save_state(state)

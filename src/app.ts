@@ -6,9 +6,9 @@ import staticFiles from "@fastify/static";
 import { join } from "node:path";
 import type { Config } from "./config.js";
 import { openDatabase, publicUser, type UserRecord, type OceanDatabase } from "./db.js";
-import { changePasswordSchema, kryptotronControlSchema, loginSchema, recoveryConfirmSchema, recoveryRequestSchema, registerSchema } from "./schemas.js";
+import { changePasswordSchema, dcaControlSchema, kryptotronControlSchema, loginSchema, recoveryConfirmSchema, recoveryRequestSchema, registerSchema } from "./schemas.js";
 import { DUMMY_PASSWORD_HASH, hashPassword, hashToken, newSessionToken, newUserId, newVerificationToken, SESSION_TTL_SECONDS, verifyPassword } from "./security.js";
-import { loadKryptotronSnapshot, setKryptotronEntriesPaused } from "./kryptotron.js";
+import { loadKryptotronSnapshot, setDcaEnabled, setKryptotronEntriesPaused } from "./kryptotron.js";
 
 const COOKIE_NAME = "zero_session";
 
@@ -271,6 +271,24 @@ export function buildApp(config: Config, database?: OceanDatabase) {
       return { entriesPaused: parsed.data.entriesPaused };
     } catch {
       return reply.code(502).send({ error: "Ovládání Kryptotronu se nepodařilo uložit." });
+    }
+  });
+
+  app.post("/api/kryptotron/dca/control", { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } }, async (request, reply) => {
+    const user = currentUser(db, request);
+    if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
+    if (user.username.toLowerCase() !== "blazebro") return reply.code(404).send({ error: "Kryptotron není k tomuto účtu připojen." });
+    const parsed = dcaControlSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "Neplatný požadavek." });
+    if (!config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return reply.code(503).send({ error: "Kryptotron není dostupný." });
+    try {
+      await setDcaEnabled(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, parsed.data.enabled);
+      const meta = requestMeta(request);
+      db.prepare("INSERT INTO security_events (user_id, event_type, ip_address, user_agent) VALUES (?, ?, ?, ?)")
+        .run(user.id, parsed.data.enabled ? "DCA_ENABLED" : "DCA_DISABLED", meta.ip, meta.agent);
+      return { enabled: parsed.data.enabled };
+    } catch {
+      return reply.code(502).send({ error: "Nastavení DCA se nepodařilo uložit." });
     }
   });
 

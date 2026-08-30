@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { loadKryptotronSnapshot, setKryptotronEntriesPaused } from "../src/kryptotron.js";
+import { loadKryptotronSnapshot, setDcaEnabled, setKryptotronEntriesPaused } from "../src/kryptotron.js";
 
 test("maps Kryptotron state and latest trade into the Ocean contract", async (t) => {
   const originalFetch = globalThis.fetch;
@@ -52,4 +52,19 @@ test("pause control preserves the worker state and changes only new entries", as
   assert.equal(patch.data.account_balance, 73.93);
   assert.equal(patch.data.events[0].type, "CONTROL");
   assert.equal(patch.data.events[0].message, "Nové obchody pozastaveny");
+});
+
+test("DCA control preserves its configuration and changes only enabled state", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const requests: Array<{ method: string; body?: string }> = [];
+  globalThis.fetch = async (_input, init) => {
+    requests.push({ method: init?.method ?? "GET", body: typeof init?.body === "string" ? init.body : undefined });
+    if (!init?.method) return new Response(JSON.stringify([{ data: { dca: { enabled: false, amount: 5, symbols: ["BTCUSDC"] }, events: [] } }]), { status: 200 });
+    return new Response(null, { status: 204 });
+  };
+  assert.equal(await setDcaEnabled("https://example.supabase.co", "key", true), true);
+  const patch = JSON.parse(requests[1]?.body ?? "{}");
+  assert.deepEqual(patch.data.dca, { enabled: true, amount: 5, symbols: ["BTCUSDC"] });
+  assert.equal(patch.data.events[0].message, "Týdenní DCA zapnuto");
 });

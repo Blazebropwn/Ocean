@@ -2,6 +2,7 @@ const $ = (selector) => document.querySelector(selector);
 const message = $("#message");
 let kryptotronRefresh;
 let entriesPaused = false;
+let dcaEnabled = false;
 
 function setLoading(form, loading) {
   const button = form.querySelector("button[type=submit]");
@@ -53,8 +54,11 @@ async function loadKryptotron() {
     $("#bot-position").textContent = open ? `${open.symbol} · v pozici` : "Bez otevřené pozice";
     const dcaAssets = kryptotron.dca.symbols.map((symbol) => symbol.replace(kryptotron.balance.asset, "")).join(" / ") || "BTC / ETH / SOL";
     $("#dca-plan").textContent = `${kryptotron.dca.amount} ${kryptotron.balance.asset} · ${dcaAssets}`;
-    $("#dca-status").textContent = kryptotron.dca.enabled ? (kryptotron.dca.completedWeek ? "Tento týden provedeno" : "Aktivní") : "Vypnuto";
-    $("#dca-status").classList.toggle("active", kryptotron.dca.enabled);
+    dcaEnabled = kryptotron.dca.enabled;
+    $("#dca-status").textContent = dcaEnabled ? (kryptotron.dca.completedWeek ? "Tento týden provedeno" : "Čeká na neděli") : "Pozastaveno";
+    $("#dca-control").textContent = dcaEnabled ? "Vypnout" : "Zapnout";
+    $("#dca-control").classList.toggle("enabled", dcaEnabled);
+    $("#dca-control").setAttribute("aria-checked", String(dcaEnabled));
     $("#dca-invested").textContent = `${new Intl.NumberFormat("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(kryptotron.dca.totalInvested)} ${kryptotron.balance.asset}`;
     $("#bot-protection").textContent = open
       ? (open.protectionActive ? "OCO aktivní" : "Vyžaduje kontrolu")
@@ -108,6 +112,21 @@ $("#bot-control").addEventListener("click", async () => {
       body: JSON.stringify({ entriesPaused: !entriesPaused }),
     });
     entriesPaused = result.entriesPaused;
+    await loadKryptotron();
+  } catch (error) {
+    $("#bot-error-wrap").classList.remove("hidden");
+    $("#bot-error").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("#dca-control").addEventListener("click", async () => {
+  const button = $("#dca-control");
+  button.disabled = true;
+  try {
+    const result = await request("/api/kryptotron/dca/control", { method: "POST", body: JSON.stringify({ enabled: !dcaEnabled }) });
+    dcaEnabled = result.enabled;
     await loadKryptotron();
   } catch (error) {
     $("#bot-error-wrap").classList.remove("hidden");
