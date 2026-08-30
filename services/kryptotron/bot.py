@@ -36,6 +36,8 @@ from utils import get_balance, get_symbol_filters, round_step, round_price, noti
 from order_safety import apply_filled_buy, classify_order, new_buy_intent
 from events import add_event
 from dca import run_weekly_dca
+from streak import can_trade as streak_can_trade, close_trade as streak_close_trade, ensure_session as ensure_streak_session, open_trade as streak_open_trade
+from streak_strategy import paper_close_result, size_paper_setup, trend_pullback_signal
 from schedule import (
     daily_summary_due,
     mark_daily_summary_sent,
@@ -426,6 +428,73 @@ def maybe_send_daily_summary(state):
         send_daily_summary(state)
 
 
+def maybe_run_streak_paper(client, state, pair_filters):
+    streak = state.setdefault("streak", {})
+    if not streak.get("enabled") or not streak.get("paper_mode", True):
+        return
+    ensure_streak_session(streak)
+    allowed, _ = streak_can_trade(streak)
+    session = streak["session"]
+    symbols = streak.get("symbols", DCA_SYMBOLS)
+    candles = client.get_klines(symbol=symbols[0], interval="15m", limit=60)
+    closed_candle = candles[-2]
+    candle_time = int(closed_candle[0])
+    if streak.get("last_candle_time") == candle_time:
+        return
+    streak["last_candle_time"] = candle_time
+
+    if session.get("status") == "IN_POSITION":
+        setup_data = session.get("open_trade", {})
+        symbol = setup_data.get("symbol")
+        symbol_candles = candles if symbol == symbols[0] else client.get_klines(symbol=symbol, interval="15m", limit=3)
+        candle = symbol_candles[-2]
+        if int(candle[0]) == setup_data.get("opened_candle_time"):
+            save_state(state)
+            return
+        low, high = float(candle[3]), float(candle[2])
+        exit_price = setup_data["stop_price"] if low <= setup_data["stop_price"] else setup_data["target_price"] if high >= setup_data["target_price"] else None
+        if exit_price is None:
+            save_state(state)
+            return
+        class Setup: pass
+        setup = Setup()
+        for key, value in setup_data.items():
+            setattr(setup, key, value)
+        result = paper_close_result(setup, exit_price)
+        record = streak_close_trade(streak, result["gross_pnl"], result["fees"], result["slippage"])
+        add_event(state, "STREAK", f"{symbol} · PAPER {record['result']} · {record['net_pnl']:+.2f} {QUOTE_ASSET}")
+        save_state(state)
+        return
+
+    if not allowed:
+        save_state(state)
+        return
+    for symbol in symbols:
+        symbol_candles = candles if symbol == symbols[0] else client.get_klines(symbol=symbol, interval="15m", limit=60)
+        closes = [float(item[4]) for item in symbol_candles[:-1]]
+        lows = [float(item[3]) for item in symbol_candles[:-1]]
+        signal, reason = trend_pullback_signal(closes, lows)
+        candidate = {"at": now_utc().isoformat(), "symbol": symbol, "reason": reason}
+        streak.setdefault("candidates", []).append(candidate)
+        streak["candidates"] = streak["candidates"][-90:]
+        if signal is None:
+            continue
+        setup, size_reason = size_paper_setup(
+            symbol, signal["entry_price"], signal["stop_price"],
+            state.get("account_balance") or 0, streak.get("r_usdc", 1),
+            min_notional=pair_filters[symbol][2],
+        )
+        candidate["reason"] = size_reason
+        if setup is None:
+            continue
+        setup_data = setup.to_dict()
+        setup_data["opened_candle_time"] = candle_time
+        streak_open_trade(streak, setup_data)
+        add_event(state, "STREAK", f"{symbol} · PAPER setup otevřen")
+        break
+    save_state(state)
+
+
 def send_weekly_summary(state):
     snapshot = state.get("market_snapshot", {})
     lines = []
@@ -485,6 +554,7 @@ def maybe_send_weekly_summary(state):
 
 
 def maybe_send_scheduled_summaries(client, state, pair_filters):
+    maybe_run_streak_paper(client, state, pair_filters)
     maybe_send_daily_summary(state)
     maybe_run_weekly_dca(client, state, pair_filters)
     maybe_send_weekly_summary(state)
@@ -560,7 +630,7 @@ def run():
     dca_state.update(amount=DCA_AMOUNT_USDC, symbols=DCA_SYMBOLS)
     streak_state = state.setdefault("streak", {})
     streak_state.setdefault("enabled", STREAK_ENABLED)
-    streak_state.update(r_usdc=STREAK_R_USDC, paper_mode=STREAK_PAPER_MODE)
+    streak_state.update(r_usdc=STREAK_R_USDC, paper_mode=STREAK_PAPER_MODE, symbols=DCA_SYMBOLS)
     state = reconcile_pending_order(client, state)
     state = reconcile_pending_protection(client, state)
     save_state(state)
