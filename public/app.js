@@ -51,6 +51,11 @@ async function loadKryptotron() {
       ? "—"
       : `${new Intl.NumberFormat("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(kryptotron.balance.amount)} ${kryptotron.balance.asset}`;
     $("#bot-position").textContent = open ? `${open.symbol} · v pozici` : "Bez otevřené pozice";
+    const dcaAssets = kryptotron.dca.symbols.map((symbol) => symbol.replace(kryptotron.balance.asset, "")).join(" / ") || "BTC / ETH / SOL";
+    $("#dca-plan").textContent = `${kryptotron.dca.amount} ${kryptotron.balance.asset} · ${dcaAssets}`;
+    $("#dca-status").textContent = kryptotron.dca.enabled ? (kryptotron.dca.completedWeek ? "Tento týden provedeno" : "Aktivní") : "Vypnuto";
+    $("#dca-status").classList.toggle("active", kryptotron.dca.enabled);
+    $("#dca-invested").textContent = `${new Intl.NumberFormat("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(kryptotron.dca.totalInvested)} ${kryptotron.balance.asset}`;
     $("#bot-protection").textContent = open
       ? (open.protectionActive ? "OCO aktivní" : "Vyžaduje kontrolu")
       : "Čeká na pozici";

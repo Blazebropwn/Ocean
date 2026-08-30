@@ -11,7 +11,7 @@ export type KryptotronSnapshot = {
   entriesPaused: boolean;
   events: Array<{ type: string; message: string; at: string }>;
   balance: { amount: number | null; asset: string };
-  dca: { enabled: boolean; amount: number; symbols: string[]; completedWeek: string | null };
+  dca: { enabled: boolean; amount: number; symbols: string[]; completedWeek: string | null; totalInvested: number; purchaseCount: number; lastRun: Array<{ symbol: string; status: string; amount: number | null; reason: string | null }> };
   positions: Array<{
     symbol: string;
     inPosition: boolean;
@@ -85,6 +85,7 @@ export async function loadKryptotronSnapshot(url: string, key: string): Promise<
   }));
   const trade = trades[0];
   const rawDca = data.dca && typeof data.dca === "object" ? data.dca as Record<string, unknown> : {};
+  const dcaPurchases = Array.isArray(rawDca.purchases) ? rawDca.purchases.filter((purchase): purchase is Record<string, unknown> => Boolean(purchase) && typeof purchase === "object") : [];
   return {
     connected: Boolean(state),
     status: runtimeStatus(data.runtime_status, data.last_heartbeat_at),
@@ -109,6 +110,14 @@ export async function loadKryptotronSnapshot(url: string, key: string): Promise<
       amount: Number(rawDca.amount ?? 5),
       symbols: Array.isArray(rawDca.symbols) ? rawDca.symbols.filter((symbol): symbol is string => typeof symbol === "string") : [],
       completedWeek: stringOrNull(rawDca.completed_week),
+      totalInvested: dcaPurchases.reduce((sum, purchase) => sum + (finiteNumberOrNull(purchase.amount) ?? 0), 0),
+      purchaseCount: dcaPurchases.length,
+      lastRun: Array.isArray(rawDca.last_results) ? rawDca.last_results.flatMap((result) => {
+        if (!result || typeof result !== "object") return [];
+        const item = result as Record<string, unknown>;
+        if (typeof item.symbol !== "string" || typeof item.status !== "string") return [];
+        return [{ symbol: item.symbol, status: item.status, amount: finiteNumberOrNull(item.amount), reason: stringOrNull(item.reason) }];
+      }) : [],
     },
     positions,
     limits: {
