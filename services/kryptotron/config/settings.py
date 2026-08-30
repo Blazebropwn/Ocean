@@ -27,6 +27,11 @@ DCA_SYMBOLS = [symbol.strip().upper() for symbol in _e(
     "DCA_SYMBOLS", "BTCUSDC,ETHUSDC,SOLUSDC"
 ).split(",") if symbol.strip()]
 
+# --- Streak Governor (první verze je vždy pouze paper trading) ---
+STREAK_ENABLED = _e("STREAK_ENABLED", "false").lower() == "true"
+STREAK_R_USDC = float(_e("STREAK_R_USDC", "1"))
+STREAK_PAPER_MODE = True
+
 # --- Timeframes ---
 TIMEFRAME_1H = "1h"
 TIMEFRAME_4H = "4h"

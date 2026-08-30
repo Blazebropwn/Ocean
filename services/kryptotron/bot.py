@@ -29,6 +29,7 @@ from config.settings import (
     COOLDOWN_AFTER_LOSS_HRS, COOLDOWN_AFTER_WIN_HRS,
     TELEGRAM_TOKEN, TELEGRAM_CHAT_ID,
     DCA_ENABLED, DCA_AMOUNT_USDC, DCA_SYMBOLS,
+    STREAK_ENABLED, STREAK_R_USDC, STREAK_PAPER_MODE,
 )
 from strategy import get_cross_data
 from utils import get_balance, get_symbol_filters, round_step, round_price, notify
@@ -109,6 +110,7 @@ DEFAULT_STATE = {
     "market_snapshot":      {},
     "last_daily_summary_date": "",
     "dca":                    {},
+    "streak":                 {},
     "last_outbound_ip":       None,
 }
 
@@ -192,6 +194,9 @@ def refresh_entries_control(state):
         remote_dca = remote_state.get("dca", {})
         if isinstance(remote_dca, dict) and "enabled" in remote_dca:
             state.setdefault("dca", {})["enabled"] = remote_dca["enabled"] is True
+        remote_streak = remote_state.get("streak", {})
+        if isinstance(remote_streak, dict) and "enabled" in remote_streak:
+            state.setdefault("streak", {})["enabled"] = remote_streak["enabled"] is True
     return state
 
 
@@ -553,6 +558,9 @@ def run():
     dca_state = state.setdefault("dca", {})
     dca_state.setdefault("enabled", DCA_ENABLED)
     dca_state.update(amount=DCA_AMOUNT_USDC, symbols=DCA_SYMBOLS)
+    streak_state = state.setdefault("streak", {})
+    streak_state.setdefault("enabled", STREAK_ENABLED)
+    streak_state.update(r_usdc=STREAK_R_USDC, paper_mode=STREAK_PAPER_MODE)
     state = reconcile_pending_order(client, state)
     state = reconcile_pending_protection(client, state)
     save_state(state)

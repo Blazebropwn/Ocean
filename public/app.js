@@ -3,6 +3,7 @@ const message = $("#message");
 let kryptotronRefresh;
 let entriesPaused = false;
 let dcaEnabled = false;
+let streakEnabled = false;
 
 function setLoading(form, loading) {
   const button = form.querySelector("button[type=submit]");
@@ -60,6 +61,13 @@ async function loadKryptotron() {
     $("#dca-control").classList.toggle("enabled", dcaEnabled);
     $("#dca-control").setAttribute("aria-checked", String(dcaEnabled));
     $("#dca-invested").textContent = `${new Intl.NumberFormat("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(kryptotron.dca.totalInvested)} ${kryptotron.balance.asset}`;
+    streakEnabled = kryptotron.streak.enabled;
+    $("#streak-control").textContent = streakEnabled ? "Vypnout" : "Zapnout";
+    $("#streak-control").classList.toggle("enabled", streakEnabled);
+    $("#streak-control").setAttribute("aria-checked", String(streakEnabled));
+    $("#streak-status").textContent = streakEnabled ? kryptotron.streak.status.replace("_", " ") : "POZASTAVENO";
+    $("#streak-count").textContent = `${kryptotron.streak.streak} výher`;
+    $("#streak-pnl").textContent = `${kryptotron.streak.netPnl >= 0 ? "+" : ""}${kryptotron.streak.netPnl.toFixed(2)} ${kryptotron.balance.asset}`;
     $("#bot-protection").textContent = open
       ? (open.protectionActive ? "OCO aktivní" : "Vyžaduje kontrolu")
       : "Čeká na pozici";
@@ -127,6 +135,21 @@ $("#dca-control").addEventListener("click", async () => {
   try {
     const result = await request("/api/kryptotron/dca/control", { method: "POST", body: JSON.stringify({ enabled: !dcaEnabled }) });
     dcaEnabled = result.enabled;
+    await loadKryptotron();
+  } catch (error) {
+    $("#bot-error-wrap").classList.remove("hidden");
+    $("#bot-error").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("#streak-control").addEventListener("click", async () => {
+  const button = $("#streak-control");
+  button.disabled = true;
+  try {
+    const result = await request("/api/kryptotron/streak/control", { method: "POST", body: JSON.stringify({ enabled: !streakEnabled }) });
+    streakEnabled = result.enabled;
     await loadKryptotron();
   } catch (error) {
     $("#bot-error-wrap").classList.remove("hidden");

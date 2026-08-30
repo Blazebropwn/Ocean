@@ -32,3 +32,7 @@ export const kryptotronControlSchema = z.object({
 export const dcaControlSchema = z.object({
   enabled: z.boolean(),
 });
+
+export const streakControlSchema = z.object({
+  enabled: z.boolean(),
+});

@@ -12,6 +12,7 @@ export type KryptotronSnapshot = {
   events: Array<{ type: string; message: string; at: string }>;
   balance: { amount: number | null; asset: string };
   dca: { enabled: boolean; amount: number; symbols: string[]; completedWeek: string | null; totalInvested: number; purchaseCount: number; lastRun: Array<{ symbol: string; status: string; amount: number | null; reason: string | null }> };
+  streak: { enabled: boolean; paperMode: boolean; rUsdc: number; status: string; streak: number; trades: number; wins: number; losses: number; netPnl: number; sessionDate: string | null; lockReason: string | null };
   positions: Array<{
     symbol: string;
     inPosition: boolean;
@@ -82,6 +83,20 @@ export async function setDcaEnabled(url: string, key: string, enabled: boolean) 
   return enabled;
 }
 
+export async function setStreakEnabled(url: string, key: string, enabled: boolean) {
+  const states = await supabaseRows(url, key, "bot_state?key=eq.main&select=data&limit=1");
+  const state = states[0];
+  if (!state?.data || typeof state.data !== "object") throw new Error("Stav Kryptotronu neexistuje");
+  const data: Record<string, unknown> = { ...(state.data as Record<string, unknown>) };
+  const streak = data.streak && typeof data.streak === "object" ? data.streak as Record<string, unknown> : {};
+  data.streak = { ...streak, enabled };
+  const events = Array.isArray(data.events) ? data.events : [];
+  data.events = [{ type: "CONTROL", message: enabled ? "Streak Governor zapnut" : "Streak Governor vypnut", at: new Date().toISOString() }, ...events].slice(0, 20);
+  const response = await fetch(`${url}/rest/v1/bot_state?key=eq.main`, { method: "PATCH", headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=minimal" }, body: JSON.stringify({ data, updated_at: new Date().toISOString() }), signal: AbortSignal.timeout(8000) });
+  if (!response.ok) throw new Error(`Supabase odpověděl ${response.status}`);
+  return enabled;
+}
+
 export async function loadKryptotronSnapshot(url: string, key: string): Promise<KryptotronSnapshot> {
   const [states, trades] = await Promise.all([
     supabaseRows(url, key, "bot_state?key=eq.main&select=data,updated_at&limit=1"),
@@ -104,6 +119,8 @@ export async function loadKryptotronSnapshot(url: string, key: string): Promise<
   }));
   const trade = trades[0];
   const rawDca = data.dca && typeof data.dca === "object" ? data.dca as Record<string, unknown> : {};
+  const rawStreak = data.streak && typeof data.streak === "object" ? data.streak as Record<string, unknown> : {};
+  const rawStreakSession = rawStreak.session && typeof rawStreak.session === "object" ? rawStreak.session as Record<string, unknown> : {};
   const dcaPurchases = Array.isArray(rawDca.purchases) ? rawDca.purchases.filter((purchase): purchase is Record<string, unknown> => Boolean(purchase) && typeof purchase === "object") : [];
   return {
     connected: Boolean(state),
@@ -137,6 +154,16 @@ export async function loadKryptotronSnapshot(url: string, key: string): Promise<
         if (typeof item.symbol !== "string" || typeof item.status !== "string") return [];
         return [{ symbol: item.symbol, status: item.status, amount: finiteNumberOrNull(item.amount), reason: stringOrNull(item.reason) }];
       }) : [],
+    },
+    streak: {
+      enabled: rawStreak.enabled === true,
+      paperMode: rawStreak.paper_mode !== false,
+      rUsdc: Number(rawStreak.r_usdc ?? 1),
+      status: typeof rawStreakSession.status === "string" ? rawStreakSession.status : "READY",
+      streak: Number(rawStreakSession.streak ?? 0), trades: Number(rawStreakSession.trades ?? 0),
+      wins: Number(rawStreakSession.wins ?? 0), losses: Number(rawStreakSession.losses ?? 0),
+      netPnl: Number(rawStreakSession.net_pnl ?? 0), sessionDate: stringOrNull(rawStreakSession.date),
+      lockReason: stringOrNull(rawStreakSession.lock_reason),
     },
     positions,
     limits: {
