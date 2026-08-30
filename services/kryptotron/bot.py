@@ -109,6 +109,7 @@ DEFAULT_STATE = {
     "market_snapshot":      {},
     "last_daily_summary_date": "",
     "dca":                    {},
+    "last_outbound_ip":       None,
 }
 
 DIVIDER = "─" * 22
@@ -515,12 +516,16 @@ def run():
     log.info("=" * 55)
 
     db.init()
+    state = load_state()
 
     try:
         import urllib.request
         current_ip = urllib.request.urlopen("https://api.ipify.org", timeout=5).read().decode()
         log.info(f"Outbound IP: {current_ip}")
-        tg(f"🌐 <b>Railway IP:</b> <code>{current_ip}</code>\nPřidej na Binance pokud se změnila.")
+        if state.get("last_outbound_ip") != current_ip:
+            state["last_outbound_ip"] = current_ip
+            save_state(state)
+            tg(f"🌐 <b>Railway IP:</b> <code>{current_ip}</code>\nPřidej na Binance pokud se změnila.")
     except Exception:
         pass
 
@@ -539,7 +544,6 @@ def run():
         tg(f"❌ <b>Bot se nespustil!</b>\n{e}")
         raise SystemExit(1)
 
-    state = load_state()
     state.setdefault("dca", {}).update(enabled=DCA_ENABLED, amount=DCA_AMOUNT_USDC, symbols=DCA_SYMBOLS)
     state = reconcile_pending_order(client, state)
     state = reconcile_pending_protection(client, state)
