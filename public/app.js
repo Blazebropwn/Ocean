@@ -35,10 +35,26 @@ function showUser(user) {
   $("#email-status").textContent = user.emailVerified ? "✓ OVĚŘENO" : "ČEKÁ NA OVĚŘENÍ";
   $("#email-status").className = user.emailVerified ? "hidden verified" : "hidden pending";
   $("#verify-banner").classList.toggle("hidden", user.emailVerified);
+  const initialView = location.hash === "#arcade" ? "arcade" : location.hash === "#vault" ? "vault" : "overview";
+  const initialLink = document.querySelector(`.side-link[href="${location.hash || "#dashboard"}"]`);
+  showAppView(initialView, initialLink);
   loadKryptotron();
   clearInterval(kryptotronRefresh);
   kryptotronRefresh = setInterval(loadKryptotron, 60_000);
 }
+
+function showAppView(view, activeLink = null) {
+  const selected = ["overview", "arcade", "vault"].includes(view) ? view : "overview";
+  document.querySelectorAll(".app-view").forEach((panel) => panel.classList.toggle("hidden", panel.id !== `${selected}-view`));
+  document.querySelectorAll(".side-link[data-view]").forEach((link) => link.classList.toggle("active", activeLink ? link === activeLink : link.dataset.view === selected));
+  $("#workspace-title").textContent = selected === "overview" ? "Přehled" : selected === "arcade" ? "Arcade" : "Vault";
+}
+
+document.querySelectorAll(".side-link[data-view]").forEach((link) => link.addEventListener("click", (event) => {
+  event.preventDefault();
+  history.replaceState(null, "", link.getAttribute("href"));
+  showAppView(link.dataset.view, link);
+}));
 
 async function loadKryptotron() {
   try {
