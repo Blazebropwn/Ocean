@@ -4,6 +4,12 @@ let kryptotronRefresh;
 let entriesPaused = false;
 let dcaEnabled = false;
 let streakEnabled = false;
+const MINES_CELLS = 25;
+const MINES_STAKE = 10;
+let minesBalance = Number(localStorage.getItem("ocean-arcade-points") || 1000);
+let mines = new Set();
+let minesSafe = 0;
+let minesActive = false;
 
 function setLoading(form, loading) {
   const button = form.querySelector("button[type=submit]");
@@ -55,6 +61,98 @@ document.querySelectorAll(".side-link[data-view]").forEach((link) => link.addEve
   history.replaceState(null, "", link.getAttribute("href"));
   showAppView(link.dataset.view, link);
 }));
+
+function randomMines(count) {
+  const cells = Array.from({ length: MINES_CELLS }, (_, index) => index);
+  for (let index = cells.length - 1; index > 0; index -= 1) {
+    const target = secureRandomInt(index + 1);
+    [cells[index], cells[target]] = [cells[target], cells[index]];
+  }
+  return new Set(cells.slice(0, count));
+}
+
+function secureRandomInt(maxExclusive) {
+  const range = 2 ** 32;
+  const limit = Math.floor(range / maxExclusive) * maxExclusive;
+  const random = new Uint32Array(1);
+  do crypto.getRandomValues(random); while (random[0] >= limit);
+  return random[0] % maxExclusive;
+}
+
+function minesMultiplier(safe, mineCount) {
+  let survival = 1;
+  for (let index = 0; index < safe; index += 1) survival *= (MINES_CELLS - mineCount - index) / (MINES_CELLS - index);
+  return safe ? 1 / survival : 1;
+}
+
+function updateMines() {
+  const multiplier = minesMultiplier(minesSafe, Number($("#mines-count").value));
+  $("#mines-balance").textContent = minesBalance.toLocaleString("cs-CZ");
+  $("#mines-multiplier").textContent = `${multiplier.toFixed(2)}×`;
+  $("#mines-win").textContent = `${Math.floor(MINES_STAKE * multiplier)} bodů`;
+  $("#mines-count").disabled = minesActive;
+  $("#mines-action").textContent = minesActive ? (minesSafe ? `Vybrat ${Math.floor(MINES_STAKE * multiplier)} bodů` : "Ukončit hru") : "Spustit hru";
+}
+
+function revealAllMines() {
+  document.querySelectorAll(".mine-cell").forEach((cell, index) => {
+    if (mines.has(index)) {
+      cell.classList.add("mine");
+      cell.textContent = "✕";
+    }
+    cell.disabled = true;
+  });
+}
+
+function finishMines(cashOut) {
+  if (cashOut && minesSafe) minesBalance += Math.floor(MINES_STAKE * minesMultiplier(minesSafe, Number($("#mines-count").value)));
+  minesActive = false;
+  localStorage.setItem("ocean-arcade-points", String(minesBalance));
+  revealAllMines();
+  $("#mines-message").textContent = cashOut && minesSafe ? "Body jsou v bezpečí. Další kolo?" : "Kolo skončilo. Zkus to znovu.";
+  updateMines();
+}
+
+function startMines() {
+  if (minesBalance < MINES_STAKE) {
+    minesBalance = 1000;
+    localStorage.setItem("ocean-arcade-points", String(minesBalance));
+    $("#mines-message").textContent = "Demo body byly obnoveny.";
+  }
+  minesBalance -= MINES_STAKE;
+  minesSafe = 0;
+  minesActive = true;
+  mines = randomMines(Number($("#mines-count").value));
+  document.querySelectorAll(".mine-cell").forEach((cell) => { cell.className = "mine-cell"; cell.disabled = false; cell.textContent = ""; });
+  $("#mines-message").textContent = "Kolo běží. Každé bezpečné pole zvyšuje násobitel.";
+  updateMines();
+}
+
+for (let index = 0; index < MINES_CELLS; index += 1) {
+  const cell = document.createElement("button");
+  cell.type = "button";
+  cell.className = "mine-cell";
+  cell.disabled = true;
+  cell.setAttribute("aria-label", `Pole ${index + 1}`);
+  cell.addEventListener("click", () => {
+    if (!minesActive || cell.classList.contains("safe")) return;
+    if (mines.has(index)) {
+      cell.textContent = "✕";
+      finishMines(false);
+      return;
+    }
+    cell.classList.add("safe");
+    cell.textContent = "◆";
+    minesSafe += 1;
+    $("#mines-message").textContent = `${minesSafe} bezpečných polí. Pokračovat, nebo vybrat?`;
+    updateMines();
+  });
+  $("#mines-grid").append(cell);
+}
+
+$("#mines-action").addEventListener("click", () => minesActive ? finishMines(true) : startMines());
+$("#mines-count").addEventListener("change", updateMines);
+updateMines();
 
 async function loadKryptotron() {
   try {
