@@ -32,12 +32,23 @@ from config.settings import (
     STREAK_ENABLED, STREAK_R_USDC, STREAK_PAPER_MODE,
 )
 from strategy import get_cross_data
-from utils import get_balance, get_symbol_filters, round_step, round_price, notify
+from utils import (
+    answer_telegram_callback, get_balance, get_symbol_filters, notify,
+    round_price, round_step, telegram_updates,
+)
 from order_safety import apply_filled_buy, classify_order, new_buy_intent
 from events import add_event
 from dca import run_weekly_dca
 from streak import can_trade as streak_can_trade, close_trade as streak_close_trade, ensure_session as ensure_streak_session, open_trade as streak_open_trade
 from streak_strategy import paper_close_result, size_paper_setup, trend_pullback_signal
+from telegram_control import (
+    apply_action as apply_telegram_action,
+    confirmation as telegram_confirmation,
+    confirmation_valid,
+    help_message as telegram_help_message,
+    report_message as telegram_report_message,
+    status_message as telegram_status_message,
+)
 from schedule import (
     daily_summary_due,
     mark_daily_summary_sent,
@@ -114,6 +125,7 @@ DEFAULT_STATE = {
     "dca":                    {},
     "streak":                 {},
     "last_outbound_ip":       None,
+    "telegram":               {},
 }
 
 DIVIDER = "─" * 22
@@ -121,6 +133,110 @@ DIVIDER = "─" * 22
 
 def tg(msg):
     notify(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, msg)
+
+
+def tg_alert(state, key, msg, cooldown_minutes=60):
+    """Stejný technický alarm odešle nejvýše jednou za cooldown."""
+    alerts = state.setdefault("telegram", {}).setdefault("alerts", {})
+    previous = alerts.get(key)
+    now = now_utc()
+    if previous:
+        try:
+            if now - datetime.fromisoformat(previous) < timedelta(minutes=cooldown_minutes):
+                return False
+        except (TypeError, ValueError):
+            pass
+    if notify(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, msg):
+        alerts[key] = now.isoformat()
+        save_state(state)
+        return True
+    return False
+
+
+def process_telegram(state):
+    """Zpracuje nové zprávy výhradně z nakonfigurovaného soukromého chatu."""
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        return state
+    control = state.setdefault("telegram", {})
+    try:
+        if control.get("update_offset") is None:
+            # Při prvním nasazení neprováděj historické příkazy z Telegram fronty.
+            backlog = telegram_updates(TELEGRAM_TOKEN, -1)
+            if backlog:
+                control["update_offset"] = backlog[-1]["update_id"] + 1
+                save_state(state)
+            else:
+                control["update_offset"] = 0
+                save_state(state)
+            return state
+        updates = telegram_updates(TELEGRAM_TOKEN, control.get("update_offset"))
+    except Exception as exc:
+        log.warning(f"Telegram polling selhal: {exc}")
+        return state
+
+    changed = False
+    for update in updates:
+        update_id = update.get("update_id")
+        if isinstance(update_id, int):
+            control["update_offset"] = update_id + 1
+            changed = True
+
+        callback = update.get("callback_query") or {}
+        message = update.get("message") or callback.get("message") or {}
+        chat_id = str((message.get("chat") or {}).get("id", ""))
+        if chat_id != str(TELEGRAM_CHAT_ID):
+            if callback.get("id"):
+                answer_telegram_callback(TELEGRAM_TOKEN, callback["id"], "Tento chat není autorizovaný.")
+            continue
+
+        if callback:
+            data = callback.get("data", "")
+            if data == "confirm:cancel":
+                control.pop("pending_action", None)
+                answer_telegram_callback(TELEGRAM_TOKEN, callback.get("id"), "Zrušeno")
+                tg("Akce byla zrušena.")
+            elif data.startswith("confirm:"):
+                action = data.split(":", 1)[1]
+                pending = control.get("pending_action")
+                if confirmation_valid(pending, action):
+                    response = apply_telegram_action(state, action)
+                    control.pop("pending_action", None)
+                    add_event(state, "CONTROL", f"Telegram · {action}")
+                    save_state(state)
+                    answer_telegram_callback(TELEGRAM_TOKEN, callback.get("id"), "Provedeno")
+                    tg(response)
+                else:
+                    answer_telegram_callback(TELEGRAM_TOKEN, callback.get("id"), "Potvrzení vypršelo")
+            continue
+
+        text = str(message.get("text", "")).strip()
+        command = text.split()[0].split("@", 1)[0].lower() if text.startswith("/") else ""
+        if command in {"/start", "/help"}:
+            tg(telegram_help_message())
+        elif command == "/status":
+            tg(telegram_status_message(state, QUOTE_ASSET))
+        elif command == "/report":
+            tg(telegram_report_message(state, QUOTE_ASSET))
+        elif command in {"/dca", "/streak"}:
+            tg(telegram_status_message(state, QUOTE_ASSET))
+        elif command in {"/pause", "/dca_off", "/streak_off"}:
+            action = command[1:]
+            response = apply_telegram_action(state, action)
+            add_event(state, "CONTROL", f"Telegram · {action}")
+            save_state(state)
+            tg(response)
+        elif command in {"/resume", "/dca_on", "/streak_on"}:
+            action = command[1:]
+            pending = telegram_confirmation(action)
+            control["pending_action"] = pending
+            save_state(state)
+            notify(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, pending["message"], pending["keyboard"])
+        elif command:
+            tg("Neznámý příkaz. Použij /help.")
+
+    if changed:
+        save_state(state)
+    return state
 
 
 def now_utc():
@@ -464,6 +580,15 @@ def maybe_run_streak_paper(client, state, pair_filters):
         result = paper_close_result(setup, exit_price)
         record = streak_close_trade(streak, result["gross_pnl"], result["fees"], result["slippage"])
         add_event(state, "STREAK", f"{symbol} · PAPER {record['result']} · {record['net_pnl']:+.2f} {QUOTE_ASSET}")
+        icon = "✅" if record["result"] == "WIN" else "🛑" if record["result"] == "LOSS" else "➖"
+        lock_text = "\nLicence pro dnešek uzavřena." if record["result"] == "LOSS" else ""
+        tg(
+            f"{icon} <b>Streak · {record['result']}</b>\n"
+            f"{DIVIDER}\n"
+            f"{symbol} · PAPER\n"
+            f"Výsledek: <b>{record['net_pnl']:+.2f} {QUOTE_ASSET}</b>\n"
+            f"Série: <b>{session.get('streak', 0)} výher</b>{lock_text}"
+        )
         save_state(state)
         return
 
@@ -492,6 +617,13 @@ def maybe_run_streak_paper(client, state, pair_filters):
         setup_data["opened_candle_time"] = candle_time
         streak_open_trade(streak, setup_data)
         add_event(state, "STREAK", f"{symbol} · PAPER setup otevřen")
+        tg(
+            f"🎯 <b>Streak · PAPER vstup</b>\n"
+            f"{DIVIDER}\n"
+            f"{symbol} @ {setup.entry_price:.2f}\n"
+            f"Cíl: {setup.target_price:.2f} · Stop: {setup.stop_price:.2f}\n"
+            f"Riziko: <b>{streak.get('r_usdc', 1):.2f} {QUOTE_ASSET}</b>"
+        )
         break
     save_state(state)
 
@@ -580,6 +712,7 @@ def sleep_until_next_4h_candle(client, state, pair_filters, cycle_errors):
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             break
+        process_telegram(state)
         maybe_send_scheduled_summaries(client, state, pair_filters)
         time.sleep(min(60, remaining))
 
@@ -600,14 +733,15 @@ def run():
     db.init()
     state = load_state()
 
+    current_ip = None
     try:
         import urllib.request
         current_ip = urllib.request.urlopen("https://api.ipify.org", timeout=5).read().decode()
         log.info(f"Outbound IP: {current_ip}")
         if state.get("last_outbound_ip") != current_ip:
             state["last_outbound_ip"] = current_ip
+            add_event(state, "SYSTEM", "Síťová adresa workeru byla aktualizována")
             save_state(state)
-            tg(f"🌐 <b>Railway IP:</b> <code>{current_ip}</code>\nPřidej na Binance pokud se změnila.")
     except Exception:
         pass
 
@@ -623,7 +757,7 @@ def run():
             log.info(f"[{sym}] step={step_size} | tick={tick_size} | minNotional={min_notional}")
     except Exception as e:
         log.error(f"Chyba při inicializaci párů: {e}")
-        tg(f"❌ <b>Bot se nespustil!</b>\n{e}")
+        tg_alert(state, "startup", f"🚨 <b>Kryptotron není dostupný</b>\n{str(e)[:220]}", 180)
         raise SystemExit(1)
 
     dca_state = state.setdefault("dca", {})
@@ -632,22 +766,23 @@ def run():
     streak_state = state.setdefault("streak", {})
     streak_state.setdefault("enabled", STREAK_ENABLED)
     streak_state.update(r_usdc=STREAK_R_USDC, paper_mode=STREAK_PAPER_MODE, symbols=DCA_SYMBOLS)
-    state = reconcile_pending_order(client, state)
-    state = reconcile_pending_protection(client, state)
-    save_state(state)
-
-    balance = get_balance(client, QUOTE_ASSET, raise_on_error=True)
+    try:
+        state = reconcile_pending_order(client, state)
+        state = reconcile_pending_protection(client, state)
+        balance = get_balance(client, QUOTE_ASSET, raise_on_error=True)
+    except Exception as exc:
+        ip_hint = f"\nRailway IP: <code>{current_ip}</code>" if current_ip else ""
+        tg_alert(
+            state, "startup-auth",
+            f"🚨 <b>Kryptotron se nepřipojil k Binance</b>\n{str(exc)[:180]}{ip_hint}",
+            180,
+        )
+        raise SystemExit(1)
     state.update(account_balance=balance, quote_asset=QUOTE_ASSET)
     save_state(state)
-    tg(
-        f"🚀 <b>Bot spuštěn</b>\n"
-        f"{DIVIDER}\n"
-        f"📊 Strategie: Golden Cross EMA{EMA_FAST_PERIOD}/EMA{EMA_SLOW_PERIOD} (4h)\n"
-        f"💱 Páry: {' | '.join(symbols)}\n"
-        f"💰 Balance: <b>{balance:.2f} {QUOTE_ASSET}</b>\n"
-        f"🛡️ SL: -{MAX_SL_PCT}% | Trail: +{TRAIL_ACTIVATE_PCT}% → -{TRAIL_DISTANCE_PCT}%\n"
-        f"⚙️ Režim: {mode}"
-    )
+    add_event(state, "SYSTEM", f"Kryptotron připraven · {mode.split()[-1]}")
+    save_state(state)
+    process_telegram(state)
 
     while True:
         cycle_errors = []
@@ -822,11 +957,11 @@ def run():
                 except BinanceAPIException as e:
                     cycle_errors.append(f"{symbol}: Binance API chyba")
                     log.error(f"[{symbol}] Binance API chyba: {e}")
-                    tg(f"❌ <b>API chyba — {symbol}</b>\n{e}")
+                    tg_alert(state, f"api:{symbol}:{getattr(e, 'code', 'unknown')}", f"🚨 <b>API chyba · {symbol}</b>\n{str(e)[:220]}")
                 except Exception as e:
                     cycle_errors.append(f"{symbol}: {str(e)[:160]}")
                     log.error(f"[{symbol}] Chyba: {e}", exc_info=True)
-                    tg(f"❌ <b>Chyba — {symbol}</b>\n{str(e)[:200]}")
+                    tg_alert(state, f"worker:{symbol}:{type(e).__name__}", f"🚨 <b>Chyba · {symbol}</b>\n{str(e)[:200]}")
 
             # ── BALANCE LOG ──────────────────────────────────────────────────
             balance   = get_balance(client, QUOTE_ASSET, raise_on_error=True)
@@ -844,11 +979,11 @@ def run():
         except BinanceAPIException as e:
             cycle_errors.append("Binance API chyba")
             log.error(f"Binance API chyba: {e}")
-            tg(f"❌ <b>Binance API chyba</b>\n{e}")
+            tg_alert(state, f"api:global:{getattr(e, 'code', 'unknown')}", f"🚨 <b>Binance API chyba</b>\n{str(e)[:220]}")
         except Exception as e:
             cycle_errors.append(str(e)[:160])
             log.error(f"Neočekávaná chyba: {e}", exc_info=True)
-            tg(f"❌ <b>Chyba bota</b>\n{str(e)[:300]}")
+            tg_alert(state, f"worker:global:{type(e).__name__}", f"🚨 <b>Chyba Kryptotronu</b>\n{str(e)[:240]}")
 
         sleep_until_next_4h_candle(client, state, pair_filters, cycle_errors)
 

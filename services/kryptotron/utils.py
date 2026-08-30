@@ -74,15 +74,51 @@ def round_price(price, tick_size):
     return round(math.floor(price / tick_size) * tick_size, p)
 
 
-def notify(token, chat_id, message):
+def notify(token, chat_id, message, reply_markup=None):
     """Pošle zprávu na Telegram. Selže tiše — nikdy nezastaví bota."""
     if not token or not chat_id:
         return
     try:
-        requests.post(
+        payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
+        response = requests.post(
             f"https://api.telegram.org/bot{token}/sendMessage",
-            json={"chat_id": chat_id, "text": message, "parse_mode": "HTML"},
+            json=payload,
             timeout=10,
         )
+        response.raise_for_status()
+        return True
     except Exception as ex:
         log.warning(f"Telegram notifikace selhala: {ex}")
+        return False
+
+
+def telegram_updates(token, offset=None):
+    """Načte nové příkazy bez dlouhého blokování workeru."""
+    if not token:
+        return []
+    payload = {"timeout": 0, "allowed_updates": ["message", "callback_query"]}
+    if offset is not None:
+        payload["offset"] = offset
+    response = requests.post(
+        f"https://api.telegram.org/bot{token}/getUpdates",
+        json=payload,
+        timeout=10,
+    )
+    response.raise_for_status()
+    body = response.json()
+    return body.get("result", []) if body.get("ok") else []
+
+
+def answer_telegram_callback(token, callback_query_id, text):
+    if not token or not callback_query_id:
+        return
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{token}/answerCallbackQuery",
+            json={"callback_query_id": callback_query_id, "text": text},
+            timeout=10,
+        ).raise_for_status()
+    except Exception as ex:
+        log.warning(f"Telegram callback selhal: {ex}")
