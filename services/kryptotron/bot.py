@@ -540,7 +540,7 @@ def run():
     try:
         pair_filters = {}
         protection_filters = {}
-        for sym in sorted(set(symbols + (DCA_SYMBOLS if DCA_ENABLED else []))):
+        for sym in sorted(set(symbols + DCA_SYMBOLS)):
             step_size, tick_size, min_notional = get_symbol_filters(client, sym)
             pair_filters[sym] = (step_size, tick_size, min_notional)
             protection_filters[sym] = trailing_delta_filter(client.get_symbol_info(sym))
