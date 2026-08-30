@@ -2,7 +2,12 @@ import unittest
 from datetime import datetime, timezone
 
 from events import add_event
-from schedule import daily_summary_due, mark_daily_summary_sent
+from schedule import (
+    daily_summary_due,
+    mark_daily_summary_sent,
+    mark_weekly_summary_sent,
+    weekly_summary_due,
+)
 
 
 class ScheduleTests(unittest.TestCase):
@@ -18,6 +23,22 @@ class ScheduleTests(unittest.TestCase):
         mark_daily_summary_sent(state, now)
         self.assertFalse(daily_summary_due(state, now))
         self.assertEqual(state["last_daily_summary_date"], "2026-12-01")
+
+    def test_weekly_summary_becomes_due_sunday_at_08_prague_summer_time(self):
+        state = {}
+        self.assertFalse(weekly_summary_due(state, datetime(2026, 8, 30, 5, 59, tzinfo=timezone.utc)))
+        self.assertTrue(weekly_summary_due(state, datetime(2026, 8, 30, 6, 0, tzinfo=timezone.utc)))
+
+    def test_weekly_summary_uses_winter_time_and_only_runs_once(self):
+        now = datetime(2026, 12, 6, 7, 0, tzinfo=timezone.utc)
+        state = {}
+        self.assertTrue(weekly_summary_due(state, now))
+        mark_weekly_summary_sent(state, now)
+        self.assertFalse(weekly_summary_due(state, now))
+        self.assertEqual(state["last_heartbeat_week"], "2026-W48")
+
+    def test_weekly_summary_does_not_run_after_08_on_another_day(self):
+        self.assertFalse(weekly_summary_due({}, datetime(2026, 8, 31, 8, 0, tzinfo=timezone.utc)))
 
 
 class EventTests(unittest.TestCase):

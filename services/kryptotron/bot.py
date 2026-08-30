@@ -33,7 +33,12 @@ from strategy import get_cross_data
 from utils import get_balance, get_symbol_filters, round_step, round_price, notify
 from order_safety import apply_filled_buy, classify_order, new_buy_intent
 from events import add_event
-from schedule import daily_summary_due, mark_daily_summary_sent
+from schedule import (
+    daily_summary_due,
+    mark_daily_summary_sent,
+    mark_weekly_summary_sent,
+    weekly_summary_due,
+)
 from protection import (
     build_protection_oco,
     cancel_protection,
@@ -409,6 +414,47 @@ def maybe_send_daily_summary(state):
         send_daily_summary(state)
 
 
+def send_weekly_summary(state):
+    snapshot = state.get("market_snapshot", {})
+    lines = []
+    for pair in PAIRS:
+        symbol = pair["symbol"]
+        market = snapshot.get(symbol, {})
+        ps = get_pair_state(state, symbol)
+        trend = "🟢 BULL" if market.get("bull") is True else \
+                "🔴 BEAR" if market.get("bull") is False else "⚪ bez dat"
+        if ps["in_position"] and market.get("close"):
+            pnl = (market["close"] - ps["entry_price"]) / ps["entry_price"] * 100
+            trail = " | 🛡️ Trail ON" if ps.get("trail_active") else ""
+            lines.append(f"<b>{symbol}</b>: {trend} | V pozici <b>{pnl:+.2f}%</b>{trail}")
+        else:
+            lines.append(f"<b>{symbol}</b>: {trend} — bez pozice")
+    balance = state.get("account_balance")
+    balance_text = f"{balance:.2f}" if isinstance(balance, (int, float)) else "—"
+    tg(
+        f"💓 <b>Týdenní report</b> · neděle 08:00\n"
+        f"{DIVIDER}\n"
+        f"{chr(10).join(lines)}\n"
+        f"{DIVIDER}\n"
+        f"💰 Balance: <b>{balance_text} {QUOTE_ASSET}</b>\n"
+        f"📉 Ztráta týden: {state['weekly_loss']:.2f} {QUOTE_ASSET}\n"
+        f"🤖 Bot běží normálně ✅"
+    )
+    mark_weekly_summary_sent(state)
+    add_event(state, "SUMMARY", "Týdenní report odeslán")
+    save_state(state)
+
+
+def maybe_send_weekly_summary(state):
+    if weekly_summary_due(state):
+        send_weekly_summary(state)
+
+
+def maybe_send_scheduled_summaries(state):
+    maybe_send_daily_summary(state)
+    maybe_send_weekly_summary(state)
+
+
 def sleep_until_next_4h_candle(state, cycle_errors):
     n          = now_utc()
     h_in_block = n.hour % 4
@@ -428,7 +474,7 @@ def sleep_until_next_4h_candle(state, cycle_errors):
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             break
-        maybe_send_daily_summary(state)
+        maybe_send_scheduled_summaries(state)
         time.sleep(min(60, remaining))
 
 
@@ -680,37 +726,6 @@ def run():
                 f"Balance: {balance:.2f} {QUOTE_ASSET} | "
                 f"Ztráty: den={state['daily_loss']:.2f} týden={state['weekly_loss']:.2f}"
             )
-
-            # ── TÝDENNÍ HEARTBEAT (každou neděli) ───────────────────────────
-            if now_utc().weekday() == 6:
-                week_key = now_utc().strftime("%Y-W%W")
-                if state.get("last_heartbeat_week") != week_key:
-                    state["last_heartbeat_week"] = week_key
-                    lines = []
-                    for pair in PAIRS:
-                        sym = pair["symbol"]
-                        ps  = get_pair_state(state, sym)
-                        d   = pair_data.get(sym)
-                        if d:
-                            trend   = "🟢 BULL" if d["bull"] else "🔴 BEAR"
-                            gap_pct = abs(d["ema_fast"] - d["ema_slow"]) / d["ema_slow"] * 100
-                            if ps["in_position"]:
-                                pnl   = (d["close"] - ps["entry_price"]) / ps["entry_price"] * 100
-                                trail = " | 🛡️ Trail ON" if ps.get("trail_active") else ""
-                                lines.append(f"<b>{sym}</b>: {trend} | V pozici <b>{pnl:+.2f}%</b>{trail}")
-                            else:
-                                direction = "nad" if d["bull"] else "pod"
-                                lines.append(f"<b>{sym}</b>: {trend} | EMA mezera: {gap_pct:.2f}% {direction} EMA200")
-                    tg(
-                        f"💓 <b>Týdenní report</b>\n"
-                        f"{DIVIDER}\n"
-                        f"{chr(10).join(lines)}\n"
-                        f"{DIVIDER}\n"
-                        f"💰 Balance: <b>{balance:.2f} {QUOTE_ASSET}</b>\n"
-                        f"📉 Ztráta týden: {state['weekly_loss']:.2f} {QUOTE_ASSET}\n"
-                        f"🤖 Bot běží normálně ✅"
-                    )
-                    save_state(state)
 
         except BinanceAPIException as e:
             cycle_errors.append("Binance API chyba")
