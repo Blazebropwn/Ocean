@@ -102,6 +102,8 @@ DCA_SYMBOLS=BTCUSDC,ETHUSDC,SOLUSDC
 
 `DCA_AMOUNT_USDC` je částka pro každý symbol, tedy při výchozím nastavení celkem 15 USDC týdně. Před aktivací ověřte nákupy na Testnetu. Modul kontroluje minimální hodnotu příkazu a ukládá stabilní ID objednávky, aby restart workeru nevytvořil druhý nákup.
 
+Dashboard umožňuje pro další týdenní nákup zvolit manuální preset `5, 10, 20, 50, 100, 200, 500 nebo 1000 USDC`. Jde vždy o částku pro každý symbol. Volba se ukládá do sdíleného stavu a hodnota z prostředí slouží pouze jako výchozí nastavení.
+
 ## Streak Governor
 
 Streak Governor je v první verzi vždy pouze paper trading. Udržuje denní session v časové zóně `Europe/Prague`: výhra povolí další kandidát, první ztráta session zamkne a technická chyba vytvoří nouzový zámek. Neodesílá Binance objednávky a nezasahuje do produkční Golden Cross strategie.

@@ -18,7 +18,7 @@ def status_message(state, quote_asset="USDC"):
         "🌊 <b>Ocean · stav</b>\n"
         f"{DIVIDER}\n"
         f"🤖 Trading: <b>{'pozastaven' if state.get('entries_paused') else 'aktivní'}</b>\n"
-        f"🌱 DCA: <b>{_on(state.get('dca', {}).get('enabled', False))}</b>\n"
+        f"🌱 DCA: <b>{_on(state.get('dca', {}).get('enabled', False))}</b> · {state.get('dca', {}).get('amount', 5):g} USDC / asset\n"
         f"🎯 Streak: <b>{_on(streak.get('enabled', False))}</b> · PAPER\n"
         f"💰 Balance: <b>{balance_text}</b>\n"
         f"🔥 Dnešní série: <b>{session.get('streak', 0)} výher</b>"

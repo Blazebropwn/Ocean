@@ -33,6 +33,10 @@ export const dcaControlSchema = z.object({
   enabled: z.boolean(),
 });
 
+export const dcaAmountSchema = z.object({
+  amount: z.union([z.literal(5), z.literal(10), z.literal(20), z.literal(50), z.literal(100), z.literal(200), z.literal(500), z.literal(1000)]),
+});
+
 export const streakControlSchema = z.object({
   enabled: z.boolean(),
 });

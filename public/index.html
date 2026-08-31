@@ -141,18 +141,11 @@
                         Načítám
                       </button>
                     </div>
-                    <div class="dca-data">
-                      <span
-                        ><small>Plán</small
-                        ><strong id="dca-plan">Načítám</strong></span
-                      ><span
-                        ><small>Investováno</small
-                        ><strong id="dca-invested">—</strong></span
-                      ><span
-                        ><small>Stav</small
-                        ><strong id="dca-status">—</strong></span
-                      >
+                    <div class="dca-presets" id="dca-presets" aria-label="DCA částka na každý asset">
+                      <button type="button" data-amount="5">5</button><button type="button" data-amount="10">10</button><button type="button" data-amount="20">20</button><button type="button" data-amount="50">50</button><button type="button" data-amount="100">100</button><button type="button" data-amount="200">200</button><button type="button" data-amount="500">500</button><button type="button" data-amount="1000">1000</button><span>USDC / asset</span>
                     </div>
+                    <div class="dca-progress" id="dca-progress"></div>
+                    <div class="dca-footer"><span><small>Další nákup</small><strong id="dca-status">—</strong></span><span><small>Celkem investováno</small><strong id="dca-invested">—</strong></span></div>
                   </section>
                   <section class="streak-module">
                     <div class="dca-head">

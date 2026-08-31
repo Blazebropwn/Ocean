@@ -11,7 +11,7 @@ export type KryptotronSnapshot = {
   entriesPaused: boolean;
   events: Array<{ type: string; message: string; at: string }>;
   balance: { amount: number | null; asset: string };
-  dca: { enabled: boolean; amount: number; symbols: string[]; completedWeek: string | null; totalInvested: number; purchaseCount: number; lastRun: Array<{ symbol: string; status: string; amount: number | null; reason: string | null }> };
+  dca: { enabled: boolean; amount: number; symbols: string[]; completedWeek: string | null; totalInvested: number; purchaseCount: number; progress: Array<{ symbol: string; asset: string; quantity: number; target: number; percentage: number }>; lastRun: Array<{ symbol: string; status: string; amount: number | null; reason: string | null }> };
   streak: { enabled: boolean; paperMode: boolean; rUsdc: number; status: string; streak: number; trades: number; wins: number; losses: number; netPnl: number; sessionDate: string | null; lockReason: string | null };
   positions: Array<{
     symbol: string;
@@ -83,6 +83,25 @@ export async function setDcaEnabled(url: string, key: string, enabled: boolean) 
   return enabled;
 }
 
+export async function setDcaAmount(url: string, key: string, amount: number) {
+  const states = await supabaseRows(url, key, "bot_state?key=eq.main&select=data&limit=1");
+  const state = states[0];
+  if (!state?.data || typeof state.data !== "object") throw new Error("Stav Kryptotronu neexistuje");
+  const data: Record<string, unknown> = { ...(state.data as Record<string, unknown>) };
+  const dca = data.dca && typeof data.dca === "object" ? data.dca as Record<string, unknown> : {};
+  data.dca = { ...dca, amount };
+  const events = Array.isArray(data.events) ? data.events : [];
+  data.events = [{ type: "CONTROL", message: `DCA preset změněn na ${amount} USDC`, at: new Date().toISOString() }, ...events].slice(0, 20);
+  const response = await fetch(`${url}/rest/v1/bot_state?key=eq.main`, {
+    method: "PATCH",
+    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+    body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!response.ok) throw new Error(`Supabase odpověděl ${response.status}`);
+  return amount;
+}
+
 export async function setStreakEnabled(url: string, key: string, enabled: boolean) {
   const states = await supabaseRows(url, key, "bot_state?key=eq.main&select=data&limit=1");
   const state = states[0];
@@ -122,6 +141,8 @@ export async function loadKryptotronSnapshot(url: string, key: string): Promise<
   const rawStreak = data.streak && typeof data.streak === "object" ? data.streak as Record<string, unknown> : {};
   const rawStreakSession = rawStreak.session && typeof rawStreak.session === "object" ? rawStreak.session as Record<string, unknown> : {};
   const dcaPurchases = Array.isArray(rawDca.purchases) ? rawDca.purchases.filter((purchase): purchase is Record<string, unknown> => Boolean(purchase) && typeof purchase === "object") : [];
+  const dcaTargets: Record<string, number> = { BTCUSDC: 1, ETHUSDC: 10, SOLUSDC: 100 };
+  const dcaSymbols = Array.isArray(rawDca.symbols) ? rawDca.symbols.filter((symbol): symbol is string => typeof symbol === "string") : [];
   return {
     connected: Boolean(state),
     status: runtimeStatus(data.runtime_status, data.last_heartbeat_at),
@@ -144,10 +165,15 @@ export async function loadKryptotronSnapshot(url: string, key: string): Promise<
     dca: {
       enabled: rawDca.enabled === true,
       amount: Number(rawDca.amount ?? 5),
-      symbols: Array.isArray(rawDca.symbols) ? rawDca.symbols.filter((symbol): symbol is string => typeof symbol === "string") : [],
+      symbols: dcaSymbols,
       completedWeek: stringOrNull(rawDca.completed_week),
       totalInvested: dcaPurchases.reduce((sum, purchase) => sum + (finiteNumberOrNull(purchase.amount) ?? 0), 0),
       purchaseCount: dcaPurchases.length,
+      progress: dcaSymbols.map((symbol) => {
+        const target = dcaTargets[symbol] ?? 1;
+        const quantity = dcaPurchases.reduce((sum, purchase) => purchase.symbol === symbol ? sum + (finiteNumberOrNull(purchase.quantity) ?? 0) : sum, 0);
+        return { symbol, asset: symbol.replace(/USDC$/, ""), quantity, target, percentage: Math.min(100, quantity / target * 100) };
+      }),
       lastRun: Array.isArray(rawDca.last_results) ? rawDca.last_results.flatMap((result) => {
         if (!result || typeof result !== "object") return [];
         const item = result as Record<string, unknown>;

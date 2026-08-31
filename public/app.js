@@ -210,14 +210,14 @@ async function loadKryptotron() {
       ? "—"
       : `${new Intl.NumberFormat("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(kryptotron.balance.amount)} ${kryptotron.balance.asset}`;
     $("#bot-position").textContent = open ? `${open.symbol} · v pozici` : "Bez otevřené pozice";
-    const dcaAssets = kryptotron.dca.symbols.map((symbol) => symbol.replace(kryptotron.balance.asset, "")).join(" / ") || "BTC / ETH / SOL";
-    $("#dca-plan").textContent = `${kryptotron.dca.amount} ${kryptotron.balance.asset} · ${dcaAssets}`;
     dcaEnabled = kryptotron.dca.enabled;
     $("#dca-status").textContent = dcaEnabled ? (kryptotron.dca.completedWeek ? "Tento týden provedeno" : "Čeká na neděli") : "Pozastaveno";
     $("#dca-control").textContent = dcaEnabled ? "Vypnout" : "Zapnout";
     $("#dca-control").classList.toggle("enabled", dcaEnabled);
     $("#dca-control").setAttribute("aria-checked", String(dcaEnabled));
     $("#dca-invested").textContent = `${new Intl.NumberFormat("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(kryptotron.dca.totalInvested)} ${kryptotron.balance.asset}`;
+    document.querySelectorAll("#dca-presets button").forEach((button) => button.classList.toggle("active", Number(button.dataset.amount) === kryptotron.dca.amount));
+    renderDcaProgress(kryptotron.dca.progress);
     streakEnabled = kryptotron.streak.enabled;
     $("#streak-control").textContent = streakEnabled ? "Vypnout" : "Zapnout";
     $("#streak-control").classList.toggle("enabled", streakEnabled);
@@ -249,6 +249,24 @@ async function loadKryptotron() {
   } catch (error) {
     $("#kryptotron-status").lastChild.textContent = " Nepřipojeno";
     $("#bot-position").textContent = error.message;
+  }
+}
+
+function renderDcaProgress(progress) {
+  const container = $("#dca-progress");
+  container.replaceChildren();
+  for (const item of progress) {
+    const row = document.createElement("div");
+    const label = document.createElement("strong");
+    const track = document.createElement("span");
+    const fill = document.createElement("i");
+    const value = document.createElement("small");
+    label.textContent = item.asset;
+    fill.style.width = `${item.percentage}%`;
+    value.textContent = `${item.percentage.toFixed(2)} %`;
+    track.append(fill);
+    row.append(label, track, value);
+    container.append(row);
   }
 }
 
@@ -300,6 +318,21 @@ $("#dca-control").addEventListener("click", async () => {
     button.disabled = false;
   }
 });
+
+document.querySelectorAll("#dca-presets button").forEach((button) => button.addEventListener("click", async () => {
+  const amount = Number(button.dataset.amount);
+  if (amount >= 100 && !confirm(`${amount} USDC se použije pro každý asset — až ${amount * 3} USDC za týden. Pokračovat?`)) return;
+  document.querySelectorAll("#dca-presets button").forEach((item) => { item.disabled = true; });
+  try {
+    await request("/api/kryptotron/dca/amount", { method: "POST", body: JSON.stringify({ amount }) });
+    await loadKryptotron();
+  } catch (error) {
+    $("#bot-error-wrap").classList.remove("hidden");
+    $("#bot-error").textContent = error.message;
+  } finally {
+    document.querySelectorAll("#dca-presets button").forEach((item) => { item.disabled = false; });
+  }
+}));
 
 $("#streak-control").addEventListener("click", async () => {
   const button = $("#streak-control");

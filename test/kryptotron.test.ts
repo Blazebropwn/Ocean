@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { loadKryptotronSnapshot, setDcaEnabled, setKryptotronEntriesPaused } from "../src/kryptotron.js";
+import { loadKryptotronSnapshot, setDcaAmount, setDcaEnabled, setKryptotronEntriesPaused } from "../src/kryptotron.js";
 
 test("maps Kryptotron state and latest trade into the Ocean contract", async (t) => {
   const originalFetch = globalThis.fetch;
@@ -8,7 +8,7 @@ test("maps Kryptotron state and latest trade into the Ocean contract", async (t)
   globalThis.fetch = async (input) => {
     const url = String(input);
     const body = url.includes("bot_state") ? [{
-      data: { runtime_status: "waiting", entries_paused: true, last_heartbeat_at: new Date().toISOString(), last_market_check_at: "2026-08-22T08:00:00Z", next_check_at: "2026-08-22T12:00:00Z", account_balance: 73.93, quote_asset: "USDC", dca: { enabled: true, amount: 5, symbols: ["BTCUSDC", "ETHUSDC", "SOLUSDC"], completed_week: "2026-W33", purchases: [{ symbol: "BTCUSDC", amount: 5 }, { symbol: "ETHUSDC", amount: 5 }] }, events: [{ type: "MARKET", message: "Trh zkontrolován", at: "2026-08-22T08:00:00Z" }], positions: { BTCUSDC: { in_position: true, entry_price: 68000, position_qty: 0.001, highest_price: 70000, protection_status: "ACTIVE", protection_stop_price: 61200, protection_activation_price: 70040, protection_trailing_bips: 150 } }, daily_loss: 1, weekly_loss: 2, trades_today: 1, trades_week: 3 },
+      data: { runtime_status: "waiting", entries_paused: true, last_heartbeat_at: new Date().toISOString(), last_market_check_at: "2026-08-22T08:00:00Z", next_check_at: "2026-08-22T12:00:00Z", account_balance: 73.93, quote_asset: "USDC", dca: { enabled: true, amount: 5, symbols: ["BTCUSDC", "ETHUSDC", "SOLUSDC"], completed_week: "2026-W33", purchases: [{ symbol: "BTCUSDC", amount: 5, quantity: 0.0001 }, { symbol: "ETHUSDC", amount: 5, quantity: 0.002 }] }, events: [{ type: "MARKET", message: "Trh zkontrolován", at: "2026-08-22T08:00:00Z" }], positions: { BTCUSDC: { in_position: true, entry_price: 68000, position_qty: 0.001, highest_price: 70000, protection_status: "ACTIVE", protection_stop_price: 61200, protection_activation_price: 70040, protection_trailing_bips: 150 } }, daily_loss: 1, weekly_loss: 2, trades_today: 1, trades_week: 3 },
       updated_at: "2026-08-22T08:00:00Z",
     }] : [{ symbol: "BTCUSDC", entry_price: 65000, exit_price: 67000, qty: 0.001, pnl: 2, result: "WIN", reason: "TRAIL_SL", entry_time: "2026-08-20T08:00:00Z", exit_time: "2026-08-21T08:00:00Z" }];
     return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
@@ -24,6 +24,7 @@ test("maps Kryptotron state and latest trade into the Ocean contract", async (t)
   assert.equal(snapshot.dca.enabled, true);
   assert.equal(snapshot.dca.totalInvested, 10);
   assert.equal(snapshot.dca.purchaseCount, 2);
+  assert.deepEqual(snapshot.dca.progress[0], { symbol: "BTCUSDC", asset: "BTC", quantity: 0.0001, target: 1, percentage: 0.01 });
   assert.equal(snapshot.positions[0]?.protectionActive, true);
   assert.equal(snapshot.positions[0]?.protectionStatus, "ACTIVE");
   assert.equal(snapshot.positions[0]?.protectionPrice, 61200);
@@ -31,6 +32,21 @@ test("maps Kryptotron state and latest trade into the Ocean contract", async (t)
   assert.equal(snapshot.positions[0]?.protectionTrailingBips, 150);
   assert.equal(snapshot.limits.tradesWeek, 3);
   assert.equal(snapshot.lastTrade?.reason, "TRAIL_SL");
+});
+
+test("DCA amount control preserves the module and records the preset", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const requests: Array<{ method: string; body?: string }> = [];
+  globalThis.fetch = async (_input, init) => {
+    requests.push({ method: init?.method ?? "GET", body: typeof init?.body === "string" ? init.body : undefined });
+    if (!init?.method) return new Response(JSON.stringify([{ data: { dca: { enabled: true, amount: 5, symbols: ["BTCUSDC"] }, events: [] } }]), { status: 200 });
+    return new Response(null, { status: 204 });
+  };
+  assert.equal(await setDcaAmount("https://example.supabase.co", "key", 20), 20);
+  const patch = JSON.parse(requests[1]?.body ?? "{}");
+  assert.deepEqual(patch.data.dca, { enabled: true, amount: 20, symbols: ["BTCUSDC"] });
+  assert.equal(patch.data.events[0].message, "DCA preset změněn na 20 USDC");
 });
 
 test("pause control preserves the worker state and changes only new entries", async (t) => {

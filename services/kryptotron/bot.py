@@ -28,7 +28,7 @@ from config.settings import (
     MAX_CONSECUTIVE_LOSSES, MAX_TRADES_PER_DAY, MAX_TRADES_PER_WEEK,
     COOLDOWN_AFTER_LOSS_HRS, COOLDOWN_AFTER_WIN_HRS,
     TELEGRAM_TOKEN, TELEGRAM_CHAT_ID,
-    DCA_ENABLED, DCA_AMOUNT_USDC, DCA_SYMBOLS,
+    DCA_ENABLED, DCA_AMOUNT_USDC, DCA_PRESETS, DCA_SYMBOLS,
     STREAK_ENABLED, STREAK_R_USDC, STREAK_PAPER_MODE,
 )
 from strategy import get_cross_data
@@ -312,6 +312,8 @@ def refresh_entries_control(state):
         remote_dca = remote_state.get("dca", {})
         if isinstance(remote_dca, dict) and "enabled" in remote_dca:
             state.setdefault("dca", {})["enabled"] = remote_dca["enabled"] is True
+        if isinstance(remote_dca, dict) and remote_dca.get("amount") in DCA_PRESETS:
+            state.setdefault("dca", {})["amount"] = remote_dca["amount"]
         remote_streak = remote_state.get("streak", {})
         if isinstance(remote_streak, dict) and "enabled" in remote_streak:
             state.setdefault("streak", {})["enabled"] = remote_streak["enabled"] is True
@@ -666,8 +668,9 @@ def maybe_run_weekly_dca(client, state, pair_filters):
     if not state.get("dca", {}).get("enabled", False):
         return
     min_notionals = {symbol: pair_filters[symbol][2] for symbol in DCA_SYMBOLS}
+    dca_amount = float(state.get("dca", {}).get("amount", DCA_AMOUNT_USDC))
     results = run_weekly_dca(
-        client, state, DCA_SYMBOLS, DCA_AMOUNT_USDC, min_notionals,
+        client, state, DCA_SYMBOLS, dca_amount, min_notionals,
         save_state, lambda binance: get_balance(binance, QUOTE_ASSET, raise_on_error=True),
     )
     filled = [item for item in results if item["status"] == "filled"]
@@ -762,7 +765,8 @@ def run():
 
     dca_state = state.setdefault("dca", {})
     dca_state.setdefault("enabled", DCA_ENABLED)
-    dca_state.update(amount=DCA_AMOUNT_USDC, symbols=DCA_SYMBOLS)
+    dca_state.setdefault("amount", DCA_AMOUNT_USDC)
+    dca_state["symbols"] = DCA_SYMBOLS
     streak_state = state.setdefault("streak", {})
     streak_state.setdefault("enabled", STREAK_ENABLED)
     streak_state.update(r_usdc=STREAK_R_USDC, paper_mode=STREAK_PAPER_MODE, symbols=DCA_SYMBOLS)
