@@ -2,7 +2,7 @@ const $ = (selector) => document.querySelector(selector);
 async function api(path, options = {}) {
   const response = await fetch(path, { headers: { "Content-Type": "application/json" }, ...options });
   if (response.status === 204) return null;
-  const body = await response.json();
+  const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.error || "Něco se nepovedlo.");
   return body;
 }
@@ -25,5 +25,20 @@ $("#create-telegram-code").addEventListener("click", async () => {
     $("#telegram-message").textContent = "";
   } catch (error) { $("#telegram-message").textContent = error.message; }
 });
-$("#disconnect-telegram").addEventListener("click", async () => { await api("/api/telegram", { method: "DELETE" }); await loadTelegram(); });
+$("#disconnect-telegram").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  button.textContent = "Odpojuji…";
+  $("#telegram-message").textContent = "";
+  try {
+    await api("/api/telegram", { method: "DELETE", body: "{}" });
+    await loadTelegram();
+    $("#telegram-message").textContent = "Telegram byl odpojen.";
+  } catch (error) {
+    $("#telegram-message").textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = "Odpojit";
+  }
+});
 loadTelegram().catch((error) => { $("#telegram-message").textContent = error.message; });
