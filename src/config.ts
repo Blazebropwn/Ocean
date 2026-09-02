@@ -12,6 +12,8 @@ export type Config = {
   kryptotronSupervisorEnabled?: boolean;
   kryptotronPython?: string;
   trustedProxies?: string[];
+  resendApiKey?: string;
+  emailFrom?: string;
 };
 
 export function loadConfig(env = process.env): Config {
@@ -27,5 +29,7 @@ export function loadConfig(env = process.env): Config {
     kryptotronSupervisorEnabled: env.KRYPTOTRON_SUPERVISOR_ENABLED === "true",
     kryptotronPython: env.KRYPTOTRON_PYTHON ?? "python",
     trustedProxies: env.TRUST_PROXY?.split(",").map((value) => value.trim()).filter(Boolean),
+    resendApiKey: env.RESEND_API_KEY,
+    emailFrom: env.EMAIL_FROM,
   };
 }

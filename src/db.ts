@@ -158,6 +158,10 @@ export function openDatabase(path: string) {
   if (!userColumns.some((column) => column.name === "role")) {
     db.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'member'))");
   }
+  const mailColumns = db.prepare("PRAGMA table_info(mail_outbox)").all() as Array<{ name: string }>;
+  if (!mailColumns.some((column) => column.name === "sent_at")) db.exec("ALTER TABLE mail_outbox ADD COLUMN sent_at TEXT");
+  if (!mailColumns.some((column) => column.name === "attempts")) db.exec("ALTER TABLE mail_outbox ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0");
+  if (!mailColumns.some((column) => column.name === "last_error")) db.exec("ALTER TABLE mail_outbox ADD COLUMN last_error TEXT");
   db.prepare(`UPDATE users SET role = 'owner' WHERE public_id = (SELECT MIN(public_id) FROM users) AND NOT EXISTS (SELECT 1 FROM users WHERE role = 'owner')`).run();
   db.prepare(`
     INSERT INTO kryptotron_instances (id, user_id, remote_state_key, status, environment)
