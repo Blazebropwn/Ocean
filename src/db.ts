@@ -23,6 +23,16 @@ export type PublicUser = {
   createdAt: string;
 };
 
+export type KryptotronInstanceRecord = {
+  id: string;
+  user_id: string;
+  remote_state_key: string | null;
+  status: "unconfigured" | "provisioning" | "connected" | "suspended" | "error";
+  environment: "testnet" | "mainnet";
+  created_at: string;
+  updated_at: string;
+};
+
 export function publicUser(user: UserRecord): PublicUser {
   return {
     id: user.id,
@@ -112,12 +122,34 @@ export function openDatabase(path: string) {
     );
     CREATE INDEX IF NOT EXISTS invitations_created_by ON invitations(created_by, created_at DESC);
     CREATE INDEX IF NOT EXISTS invitations_token_hash ON invitations(token_hash);
+
+    CREATE TABLE IF NOT EXISTS kryptotron_instances (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      remote_state_key TEXT UNIQUE,
+      status TEXT NOT NULL DEFAULT 'unconfigured'
+        CHECK (status IN ('unconfigured', 'provisioning', 'connected', 'suspended', 'error')),
+      environment TEXT NOT NULL DEFAULT 'testnet'
+        CHECK (environment IN ('testnet', 'mainnet')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS kryptotron_instances_user_id ON kryptotron_instances(user_id);
   `);
   const userColumns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
   if (!userColumns.some((column) => column.name === "role")) {
     db.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'member'))");
   }
   db.prepare(`UPDATE users SET role = 'owner' WHERE public_id = (SELECT MIN(public_id) FROM users) AND NOT EXISTS (SELECT 1 FROM users WHERE role = 'owner')`).run();
+  db.prepare(`
+    INSERT INTO kryptotron_instances (id, user_id, remote_state_key, status, environment)
+    SELECT 'kry_' || lower(hex(randomblob(16))), id, 'main', 'connected', 'mainnet'
+    FROM users
+    WHERE role = 'owner'
+      AND NOT EXISTS (SELECT 1 FROM kryptotron_instances WHERE remote_state_key = 'main')
+    ORDER BY public_id
+    LIMIT 1
+  `).run();
   return db;
 }
 

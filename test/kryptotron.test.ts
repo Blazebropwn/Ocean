@@ -49,6 +49,22 @@ test("DCA amount control preserves the module and records the preset", async (t)
   assert.equal(patch.data.events[0].message, "DCA preset změněn na 20 USDC");
 });
 
+test("Kryptotron requests use only the assigned remote state key", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const urls: string[] = [];
+  globalThis.fetch = async (input, init) => {
+    urls.push(String(input));
+    if (!init?.method) return new Response(JSON.stringify([{ data: { dca: { enabled: false } } }]), { status: 200 });
+    return new Response(null, { status: 204 });
+  };
+
+  await setDcaEnabled("https://example.supabase.co", "key", true, "usr_alpha/state");
+  assert.equal(urls.length, 2);
+  assert.ok(urls.every((url) => url.includes("key=eq.usr_alpha%2Fstate")));
+  assert.ok(urls.every((url) => !url.includes("key=eq.main")));
+});
+
 test("pause control preserves the worker state and changes only new entries", async (t) => {
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });

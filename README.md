@@ -36,6 +36,8 @@ python bot.py
 
 Lokální `.env` Kryptotronu musí obsahovat jeho vlastní Binance, Supabase a případně Telegram údaje. Aktuální produkční worker může dál běžet na Railway; Ocean čte jeho stav serverově přes proměnné `KRYPTOTRON_SUPABASE_URL` a `KRYPTOTRON_SUPABASE_KEY` v kořenovém `.env`.
 
+Každý Ocean účet má vlastní záznam v `kryptotron_instances`. Původní Supabase stav `main` se při migraci přiřadí pouze vlastníkovi a zachová tak současného Kryptotrona beze změny. Noví členové začínají ve stavu `unconfigured`; dokud nemají přidělenou samostatnou vzdálenou instanci, nemohou číst ani ovládat Kryptotron jiného uživatele.
+
 Po registraci otevřete na profilu **Otevřít mailbox** a použijte poslední ověřovací odkaz. Jde o lokální vývojovou náhradu skutečného e-mailového providera; endpoint mailboxu v produkčním režimu vrací 404.
 
 ```bash

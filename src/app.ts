@@ -5,7 +5,7 @@ import rateLimit from "@fastify/rate-limit";
 import staticFiles from "@fastify/static";
 import { join } from "node:path";
 import type { Config } from "./config.js";
-import { openDatabase, publicUser, type UserRecord, type OceanDatabase } from "./db.js";
+import { openDatabase, publicUser, type KryptotronInstanceRecord, type UserRecord, type OceanDatabase } from "./db.js";
 import { changePasswordSchema, dcaAmountSchema, dcaControlSchema, invitationCreateSchema, kryptotronControlSchema, loginSchema, recoveryConfirmSchema, recoveryRequestSchema, registerSchema, streakControlSchema } from "./schemas.js";
 import { DUMMY_PASSWORD_HASH, hashPassword, hashToken, newInvitationId, newSessionToken, newUserId, newVerificationToken, SESSION_TTL_SECONDS, verifyPassword } from "./security.js";
 import { loadKryptotronSnapshot, setDcaAmount, setDcaEnabled, setKryptotronEntriesPaused, setStreakEnabled } from "./kryptotron.js";
@@ -63,6 +63,15 @@ function currentUser(db: OceanDatabase, request: FastifyRequest) {
   `).get(hashToken(token)) as UserRecord | undefined;
 }
 
+function kryptotronInstance(db: OceanDatabase, userId: string) {
+  return db.prepare("SELECT * FROM kryptotron_instances WHERE user_id = ?").get(userId) as KryptotronInstanceRecord | undefined;
+}
+
+function connectedKryptotronInstance(db: OceanDatabase, userId: string) {
+  const instance = kryptotronInstance(db, userId);
+  return instance?.status === "connected" && instance.remote_state_key ? instance : undefined;
+}
+
 function issueVerification(db: OceanDatabase, user: UserRecord, config: Config) {
   const token = newVerificationToken();
   const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
@@ -116,6 +125,8 @@ export function buildApp(config: Config, database?: OceanDatabase) {
           invitationId = invitation.id;
         }
         db.prepare("INSERT INTO users (id, email, username, password_hash, role) VALUES (?, ?, ?, ?, ?)").run(userId, email, username, passwordHash, role);
+        db.prepare("INSERT INTO kryptotron_instances (id, user_id, remote_state_key, status, environment) VALUES (?, ?, ?, ?, ?)")
+          .run(`kry_${userId.slice(4)}`, userId, role === "owner" ? "main" : null, role === "owner" ? "connected" : "unconfigured", role === "owner" ? "mainnet" : "testnet");
         if (invitationId) {
           const consumed = db.prepare("UPDATE invitations SET used_by = ?, used_at = datetime('now') WHERE id = ? AND used_at IS NULL AND revoked_at IS NULL").run(userId, invitationId);
           if (consumed.changes !== 1) throw new Error("INVITATION_REQUIRED");
@@ -307,10 +318,11 @@ export function buildApp(config: Config, database?: OceanDatabase) {
   app.get("/api/kryptotron", async (request, reply) => {
     const user = currentUser(db, request);
     if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
-    if (user.username.toLowerCase() !== "blazebro") return reply.code(404).send({ error: "Kryptotron není k tomuto účtu připojen." });
+    const instance = connectedKryptotronInstance(db, user.id);
+    if (!instance) return reply.code(404).send({ error: "Kryptotron není k tomuto účtu připojen." });
     if (!config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return reply.code(503).send({ error: "Kryptotron není dostupný." });
     try {
-      return { kryptotron: await loadKryptotronSnapshot(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey) };
+      return { kryptotron: await loadKryptotronSnapshot(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, instance.remote_state_key!) };
     } catch {
       return reply.code(502).send({ error: "Stav Kryptotronu se nepodařilo načíst." });
     }
@@ -319,7 +331,8 @@ export function buildApp(config: Config, database?: OceanDatabase) {
   app.post("/api/kryptotron/control", { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } }, async (request, reply) => {
     const user = currentUser(db, request);
     if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
-    if (user.username.toLowerCase() !== "blazebro") return reply.code(404).send({ error: "Kryptotron není k tomuto účtu připojen." });
+    const instance = connectedKryptotronInstance(db, user.id);
+    if (!instance) return reply.code(404).send({ error: "Kryptotron není k tomuto účtu připojen." });
     const parsed = kryptotronControlSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Neplatný požadavek." });
     if (!config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return reply.code(503).send({ error: "Kryptotron není dostupný." });
@@ -328,6 +341,7 @@ export function buildApp(config: Config, database?: OceanDatabase) {
         config.kryptotronSupabaseUrl,
         config.kryptotronSupabaseKey,
         parsed.data.entriesPaused,
+        instance.remote_state_key!,
       );
       const meta = requestMeta(request);
       db.prepare("INSERT INTO security_events (user_id, event_type, ip_address, user_agent) VALUES (?, ?, ?, ?)")
@@ -341,12 +355,13 @@ export function buildApp(config: Config, database?: OceanDatabase) {
   app.post("/api/kryptotron/dca/control", { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } }, async (request, reply) => {
     const user = currentUser(db, request);
     if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
-    if (user.username.toLowerCase() !== "blazebro") return reply.code(404).send({ error: "Kryptotron není k tomuto účtu připojen." });
+    const instance = connectedKryptotronInstance(db, user.id);
+    if (!instance) return reply.code(404).send({ error: "Kryptotron není k tomuto účtu připojen." });
     const parsed = dcaControlSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Neplatný požadavek." });
     if (!config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return reply.code(503).send({ error: "Kryptotron není dostupný." });
     try {
-      await setDcaEnabled(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, parsed.data.enabled);
+      await setDcaEnabled(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, parsed.data.enabled, instance.remote_state_key!);
       const meta = requestMeta(request);
       db.prepare("INSERT INTO security_events (user_id, event_type, ip_address, user_agent) VALUES (?, ?, ?, ?)")
         .run(user.id, parsed.data.enabled ? "DCA_ENABLED" : "DCA_DISABLED", meta.ip, meta.agent);
@@ -359,12 +374,13 @@ export function buildApp(config: Config, database?: OceanDatabase) {
   app.post("/api/kryptotron/dca/amount", { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } }, async (request, reply) => {
     const user = currentUser(db, request);
     if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
-    if (user.username.toLowerCase() !== "blazebro") return reply.code(404).send({ error: "Kryptotron není k tomuto účtu připojen." });
+    const instance = connectedKryptotronInstance(db, user.id);
+    if (!instance) return reply.code(404).send({ error: "Kryptotron není k tomuto účtu připojen." });
     const parsed = dcaAmountSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Neplatný DCA preset." });
     if (!config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return reply.code(503).send({ error: "Kryptotron není dostupný." });
     try {
-      await setDcaAmount(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, parsed.data.amount);
+      await setDcaAmount(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, parsed.data.amount, instance.remote_state_key!);
       const meta = requestMeta(request);
       db.prepare("INSERT INTO security_events (user_id, event_type, ip_address, user_agent) VALUES (?, ?, ?, ?)")
         .run(user.id, `DCA_AMOUNT_${parsed.data.amount}`, meta.ip, meta.agent);
@@ -377,12 +393,13 @@ export function buildApp(config: Config, database?: OceanDatabase) {
   app.post("/api/kryptotron/streak/control", { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } }, async (request, reply) => {
     const user = currentUser(db, request);
     if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
-    if (user.username.toLowerCase() !== "blazebro") return reply.code(404).send({ error: "Kryptotron není k tomuto účtu připojen." });
+    const instance = connectedKryptotronInstance(db, user.id);
+    if (!instance) return reply.code(404).send({ error: "Kryptotron není k tomuto účtu připojen." });
     const parsed = streakControlSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Neplatný požadavek." });
     if (!config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return reply.code(503).send({ error: "Kryptotron není dostupný." });
     try {
-      await setStreakEnabled(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, parsed.data.enabled);
+      await setStreakEnabled(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, parsed.data.enabled, instance.remote_state_key!);
       const meta = requestMeta(request);
       db.prepare("INSERT INTO security_events (user_id, event_type, ip_address, user_agent) VALUES (?, ?, ?, ?)")
         .run(user.id, parsed.data.enabled ? "STREAK_ENABLED" : "STREAK_DISABLED", meta.ip, meta.agent);
