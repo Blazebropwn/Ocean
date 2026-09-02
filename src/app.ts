@@ -11,6 +11,7 @@ import { DUMMY_PASSWORD_HASH, hashPassword, hashToken, newInvitationId, newSessi
 import { initializeKryptotronInstance, loadKryptotronSnapshot, requestTestDca, setDcaAmount, setDcaEnabled, setKryptotronEntriesPaused, setStreakEnabled } from "./kryptotron.js";
 import { verifyBinanceCredentials } from "./binance.js";
 import { credentialsKey, encryptCredential } from "./credentials.js";
+import { readinessIssues } from "./readiness.js";
 
 const COOKIE_NAME = "zero_session";
 
@@ -103,6 +104,10 @@ export function buildApp(config: Config, database?: OceanDatabase) {
   });
 
   app.get("/api/health", async () => ({ ok: true }));
+  app.get("/api/ready", async (_request, reply) => {
+    const issues = readinessIssues(config, db);
+    return reply.code(issues.length ? 503 : 200).send({ ok: issues.length === 0, issues: issues.length });
+  });
 
   app.post("/api/auth/register", { config: { rateLimit: { max: 5, timeWindow: "15 minutes" } } }, async (request, reply) => {
     const parsed = registerSchema.safeParse(request.body);
