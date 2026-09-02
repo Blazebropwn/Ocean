@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { Config } from "../src/config.js";
-import { workerEnvironment } from "../src/supervisor.js";
+import { restartDelayMs, workerEnvironment } from "../src/supervisor.js";
 
 test("personal worker environment is isolated and forced to Testnet", () => {
   const config = {
@@ -31,4 +31,10 @@ test("personal worker environment is isolated and forced to Testnet", () => {
   assert.equal(environment.PATH, "/usr/bin");
   assert.equal(environment.OCEAN_CREDENTIALS_KEY, undefined);
   assert.equal(environment.SESSION_SECRET, undefined);
+});
+
+test("worker restart backoff is bounded", () => {
+  assert.equal(restartDelayMs(1), 10_000);
+  assert.equal(restartDelayMs(2), 20_000);
+  assert.equal(restartDelayMs(20), 300_000);
 });

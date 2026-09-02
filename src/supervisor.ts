@@ -20,6 +20,11 @@ type RunnableInstance = {
 
 type SupervisorLogger = Pick<FastifyBaseLogger, "info" | "warn" | "error">;
 const POLL_MS = 10_000;
+const MAX_RESTART_DELAY_MS = 5 * 60_000;
+
+export function restartDelayMs(failures: number) {
+  return Math.min(POLL_MS * (2 ** Math.max(0, failures - 1)), MAX_RESTART_DELAY_MS);
+}
 
 export function workerEnvironment(base: NodeJS.ProcessEnv, instance: Pick<RunnableInstance, "id" | "environment">, apiKey: string, apiSecret: string, config: Config): NodeJS.ProcessEnv {
   const inherited = Object.fromEntries(
@@ -43,6 +48,7 @@ export function workerEnvironment(base: NodeJS.ProcessEnv, instance: Pick<Runnab
 
 export function startKryptotronSupervisor(config: Config, db: OceanDatabase, logger: SupervisorLogger) {
   const children = new Map<string, ChildProcess>();
+  const failures = new Map<string, { count: number; retryAt: number }>();
   let stopped = false;
   let timer: NodeJS.Timeout | undefined;
 
@@ -71,13 +77,15 @@ export function startKryptotronSupervisor(config: Config, db: OceanDatabase, log
         c.api_secret_ciphertext, c.api_secret_iv, c.api_secret_tag
       FROM kryptotron_instances i
       JOIN kryptotron_credentials c ON c.instance_id = i.id
-      WHERE i.status IN ('provisioning', 'connected')
+      WHERE i.status IN ('provisioning', 'connected', 'error')
         AND i.remote_state_key = i.id
         AND i.environment = 'testnet'
     `).all() as RunnableInstance[];
 
     for (const instance of instances) {
       if (children.has(instance.id)) continue;
+      const failure = failures.get(instance.id);
+      if (failure && failure.retryAt > Date.now()) continue;
       try {
         const context = `${instance.user_id}:${instance.id}`;
         const apiKey = decryptCredential({ ciphertext: instance.api_key_ciphertext, iv: instance.api_key_iv, tag: instance.api_key_tag }, encryptionKey, `${context}:api-key`);
@@ -91,19 +99,28 @@ export function startKryptotronSupervisor(config: Config, db: OceanDatabase, log
           stdio: ["ignore", "pipe", "pipe"],
         });
         children.set(instance.id, child);
+        db.prepare("UPDATE kryptotron_instances SET status = 'provisioning', updated_at = datetime('now') WHERE id = ?").run(instance.id);
         logger.info({ instanceId: instance.id, pid: child.pid }, "Osobní Kryptotron se spouští");
 
         const handleOutput = (chunk: Buffer) => {
           if (chunk.toString("utf8").includes("Kryptotron připraven")) {
+            failures.delete(instance.id);
             db.prepare("UPDATE kryptotron_instances SET status = 'connected', updated_at = datetime('now') WHERE id = ? AND status = 'provisioning'").run(instance.id);
           }
         };
         child.stdout?.on("data", handleOutput);
         child.stderr?.on("data", handleOutput);
+        let terminationHandled = false;
         const markFailed = () => {
+          if (terminationHandled) return;
+          terminationHandled = true;
           children.delete(instance.id);
           if (stopped) return;
+          const count = (failures.get(instance.id)?.count ?? 0) + 1;
+          const delay = restartDelayMs(count);
+          failures.set(instance.id, { count, retryAt: Date.now() + delay });
           db.prepare("UPDATE kryptotron_instances SET status = 'error', updated_at = datetime('now') WHERE id = ?").run(instance.id);
+          logger.warn({ instanceId: instance.id, failures: count, retryInMs: delay }, "Osobní Kryptotron bude znovu spuštěn");
         };
         child.on("error", (error) => {
           markFailed();
