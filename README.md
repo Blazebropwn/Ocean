@@ -54,7 +54,22 @@ Po registraci otevřete na profilu **Otevřít mailbox** a použijte poslední o
 npm test
 npm run typecheck
 npm run build
+npm run backup
+npm run verify
 ```
+
+`npm run backup` vytvoří konzistentní kopii SQLite databáze v `data/backups`. Soubory databáze, záloh, stavů a logů jsou lokálně omezené na vlastníka procesu. Umístění a retenci lze změnit pomocí `BACKUP_DIRECTORY` a `BACKUP_RETENTION_DAYS`. Šifrovací klíč `OCEAN_CREDENTIALS_KEY` zálohujte odděleně od databáze; bez obou částí nelze Binance připojení obnovit.
+
+Provozní kontrola je dostupná na `/api/ready`. HTTP 200 znamená, že databáze prošla kontrolou integrity a povinné integrace mají konfiguraci; HTTP 503 znamená, že instance nemá přijímat provoz. `/api/health` zůstává jednoduchý liveness endpoint.
+
+V produkci nastavte e-mailový outbox:
+
+```text
+RESEND_API_KEY=...
+EMAIL_FROM=Ocean <ocean@vase-domena.cz>
+```
+
+Pokud Ocean běží za reverzní proxy, vložte její přesnou adresu nebo CIDR do `TRUST_PROXY`. Nenechávejte aplikaci důvěřovat libovolnému proxy hopu.
 
 ## Bezpečnostní základy
 
@@ -66,7 +81,9 @@ npm run build
 - zapisují se události vytvoření účtu a přihlášení,
 - mutace kontrolují `Origin` proti `APP_ORIGIN`.
 
-Před produkčním nasazením je potřeba připojit skutečný e-mailový provider, recovery, správu sessions/zařízení, mazání účtu a správu tajemství. Tyto funkce jsou záměrně další iterace v0.1, ne makety.
+Před Mainnetem zůstává povinné dokončit rotaci tajemství, automatizované testy obnovy ze zálohy, oddělené omezené oprávnění každého workeru a provozní monitoring. Osobní supervisor proto automaticky spouští pouze Testnet instance. Mainnet se nesmí zpřístupnit pouhou změnou přepínače v rozhraní.
+
+Supabase tabulky Kryptotronu `bot_state` a `bot_trades` mají zapnuté RLS bez veřejných policy a server k nim přistupuje pouze serverovým klíčem. Ve společném projektu CrackleCore existují také tabulky jiných aplikací; jejich policy upravujte odděleně, protože plošné zapnutí RLS může danou aplikaci zastavit.
 # Ocean Invite Alpha
 
 Ocean je uzavřený systém. První účet získá roli `owner`; všechny další účty vyžadují jednorázovou pozvánku vytvořenou vlastníkem. Pozvánka platí sedm dní, lze ji omezit na konkrétní e-mail a před použitím ji lze zrušit. V databázi se ukládá pouze hash tokenu.
