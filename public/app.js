@@ -270,6 +270,7 @@ async function initializeKryptotron() {
     $("#kryptotron").classList.add("connection-active");
     const provisioning = connection.status === "provisioning";
     form.classList.toggle("hidden", provisioning);
+    $("#provisioning-status").classList.toggle("hidden", !provisioning);
   } catch (error) {
     $("#kryptotron-status").lastChild.textContent = " Nepřipojeno";
   }
