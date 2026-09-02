@@ -1,4 +1,4 @@
-import Fastify, { type FastifyRequest } from "fastify";
+import Fastify, { type FastifyRequest, type RawServerDefault } from "fastify";
 import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
@@ -88,7 +88,8 @@ function issueVerification(db: OceanDatabase, user: UserRecord, config: Config) 
 
 export function buildApp(config: Config, database?: OceanDatabase) {
   const db = database ?? openDatabase(config.databasePath);
-  const app = Fastify({ logger: process.env.NODE_ENV !== "test", trustProxy: config.isProduction ? 1 : false });
+  const trustProxy = config.trustedProxies?.length ? config.trustedProxies : false;
+  const app = Fastify<RawServerDefault>({ logger: process.env.NODE_ENV !== "test", trustProxy });
 
   app.register(cookie);
   app.register(helmet, { contentSecurityPolicy: { directives: { defaultSrc: ["'self'"], styleSrc: ["'self'"], scriptSrc: ["'self'"], imgSrc: ["'self'", "data:"] } } });

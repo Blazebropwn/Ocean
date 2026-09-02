@@ -11,6 +11,7 @@ export type Config = {
   credentialsEncryptionKey?: string;
   kryptotronSupervisorEnabled?: boolean;
   kryptotronPython?: string;
+  trustedProxies?: string[];
 };
 
 export function loadConfig(env = process.env): Config {
@@ -25,5 +26,6 @@ export function loadConfig(env = process.env): Config {
     credentialsEncryptionKey: env.OCEAN_CREDENTIALS_KEY,
     kryptotronSupervisorEnabled: env.KRYPTOTRON_SUPERVISOR_ENABLED === "true",
     kryptotronPython: env.KRYPTOTRON_PYTHON ?? "python",
+    trustedProxies: env.TRUST_PROXY?.split(",").map((value) => value.trim()).filter(Boolean),
   };
 }
