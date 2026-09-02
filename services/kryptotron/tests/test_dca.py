@@ -57,6 +57,17 @@ class DcaTests(unittest.TestCase):
         self.assertEqual(client.orders, [])
         self.assertEqual(results[0]["status"], "filled")
 
+    def test_manual_run_does_not_complete_the_week(self):
+        state = {"dca": {}}
+        client = FakeClient()
+        results = run_weekly_dca(
+            client, state, ["BTCUSDC"], 5, {"BTCUSDC": 5},
+            lambda _: True, lambda _: 20, run_key="test-request",
+        )
+        self.assertEqual(results[0]["status"], "filled")
+        self.assertNotIn("completed_week", state["dca"])
+        self.assertEqual(state["dca"]["purchases"][0]["week"], "test-request")
+
 
 if __name__ == "__main__":
     unittest.main()

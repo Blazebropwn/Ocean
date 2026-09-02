@@ -2,6 +2,7 @@ type SupabaseRow = Record<string, unknown>;
 
 export type KryptotronSnapshot = {
   connected: boolean;
+  environment: "testnet" | "mainnet" | null;
   status: "running" | "waiting" | "degraded" | "offline" | "unknown";
   lastHeartbeatAt: string | null;
   lastMarketCheckAt: string | null;
@@ -138,6 +139,30 @@ export async function setDcaAmount(url: string, key: string, amount: number, sta
   return amount;
 }
 
+export async function requestTestDca(url: string, key: string, stateKey: string) {
+  const states = await supabaseRows(url, key, statePath(stateKey));
+  const state = states[0];
+  if (!state?.data || typeof state.data !== "object") throw new Error("Stav Kryptotronu neexistuje");
+  const data: Record<string, unknown> = { ...(state.data as Record<string, unknown>) };
+  if (data.environment !== "testnet") throw new Error("Testovací nákup je dostupný pouze na Testnetu");
+  const dca = data.dca && typeof data.dca === "object" ? data.dca as Record<string, unknown> : {};
+  const existing = dca.test_request && typeof dca.test_request === "object" ? dca.test_request as Record<string, unknown> : null;
+  if (existing?.status === "pending" || existing?.status === "processing") throw new Error("Testovací nákup už čeká na zpracování");
+  // Keep the derived Binance client order ID within Binance's 36-character limit.
+  const requestId = `test-${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
+  data.dca = { ...dca, test_request: { id: requestId, status: "pending", requested_at: new Date().toISOString() } };
+  const events = Array.isArray(data.events) ? data.events : [];
+  data.events = [{ type: "DCA", message: "Testovací DCA zařazeno", at: new Date().toISOString() }, ...events].slice(0, 20);
+  const response = await fetch(`${url}/rest/v1/bot_state?key=eq.${encodeURIComponent(stateKey)}`, {
+    method: "PATCH",
+    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+    body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!response.ok) throw new Error(`Supabase odpověděl ${response.status}`);
+  return requestId;
+}
+
 export async function setStreakEnabled(url: string, key: string, enabled: boolean, stateKey = "main") {
   const states = await supabaseRows(url, key, statePath(stateKey));
   const state = states[0];
@@ -181,6 +206,7 @@ export async function loadKryptotronSnapshot(url: string, key: string, stateKey 
   const dcaSymbols = Array.isArray(rawDca.symbols) ? rawDca.symbols.filter((symbol): symbol is string => typeof symbol === "string") : [];
   return {
     connected: Boolean(state),
+    environment: data.environment === "testnet" || data.environment === "mainnet" ? data.environment : null,
     status: runtimeStatus(data.runtime_status, data.last_heartbeat_at),
     lastHeartbeatAt: stringOrNull(data.last_heartbeat_at),
     lastMarketCheckAt: stringOrNull(data.last_market_check_at),

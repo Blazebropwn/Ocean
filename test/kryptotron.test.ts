@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { initializeKryptotronInstance, loadKryptotronSnapshot, setDcaAmount, setDcaEnabled, setKryptotronEntriesPaused } from "../src/kryptotron.js";
+import { initializeKryptotronInstance, loadKryptotronSnapshot, requestTestDca, setDcaAmount, setDcaEnabled, setKryptotronEntriesPaused } from "../src/kryptotron.js";
 
 test("new Kryptotron instances receive an isolated paused state", async (t) => {
   const originalFetch = globalThis.fetch;
@@ -118,4 +118,21 @@ test("DCA control preserves its configuration and changes only enabled state", a
   const patch = JSON.parse(requests[1]?.body ?? "{}");
   assert.deepEqual(patch.data.dca, { enabled: true, amount: 5, symbols: ["BTCUSDC"] });
   assert.equal(patch.data.events[0].message, "Týdenní DCA zapnuto");
+});
+
+test("test DCA creates a single isolated Testnet request", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const requests: Array<{ url: string; method: string; body?: string }> = [];
+  globalThis.fetch = async (input, init) => {
+    requests.push({ url: String(input), method: init?.method ?? "GET", body: typeof init?.body === "string" ? init.body : undefined });
+    if (!init?.method) return new Response(JSON.stringify([{ data: { environment: "testnet", dca: { enabled: true, amount: 5 }, events: [] } }]), { status: 200 });
+    return new Response(null, { status: 204 });
+  };
+  const id = await requestTestDca("https://example.supabase.co", "key", "kry_0123456789abcdef0123456789abcdef");
+  assert.match(id, /^test-[a-f0-9]{12}$/);
+  assert.ok(requests.every((item) => item.url.includes("key=eq.kry_0123456789abcdef0123456789abcdef")));
+  const patch = JSON.parse(requests[1]?.body ?? "{}");
+  assert.equal(patch.data.dca.test_request.status, "pending");
+  assert.equal(patch.data.events[0].message, "Testovací DCA zařazeno");
 });

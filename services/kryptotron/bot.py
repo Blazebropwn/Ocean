@@ -314,6 +314,8 @@ def refresh_entries_control(state):
             state.setdefault("dca", {})["enabled"] = remote_dca["enabled"] is True
         if isinstance(remote_dca, dict) and remote_dca.get("amount") in DCA_PRESETS:
             state.setdefault("dca", {})["amount"] = remote_dca["amount"]
+        if isinstance(remote_dca, dict) and isinstance(remote_dca.get("test_request"), dict):
+            state.setdefault("dca", {})["test_request"] = remote_dca["test_request"]
         remote_streak = remote_state.get("streak", {})
         if isinstance(remote_streak, dict) and "enabled" in remote_streak:
             state.setdefault("streak", {})["enabled"] = remote_streak["enabled"] is True
@@ -684,12 +686,46 @@ def maybe_run_weekly_dca(client, state, pair_filters):
     save_state(state)
 
 
+def maybe_run_test_dca(client, state, pair_filters):
+    request = state.get("dca", {}).get("test_request")
+    if not isinstance(request, dict) or request.get("status") != "pending":
+        return
+    if not TESTNET:
+        request.update(status="rejected", error="Testovací DCA je povoleno pouze na Testnetu")
+        save_state(state)
+        return
+    request_id = request.get("id")
+    if not isinstance(request_id, str) or not request_id.startswith("test-"):
+        request.update(status="rejected", error="Neplatný požadavek")
+        save_state(state)
+        return
+    request["status"] = "processing"
+    save_state(state)
+    try:
+        amount = float(state.get("dca", {}).get("amount", DCA_AMOUNT_USDC))
+        min_notionals = {symbol: pair_filters[symbol][2] for symbol in DCA_SYMBOLS}
+        results = run_weekly_dca(
+            client, state, DCA_SYMBOLS, amount, min_notionals,
+            save_state, lambda binance: get_balance(binance, QUOTE_ASSET, raise_on_error=True),
+            run_key=request_id,
+        )
+        request.update(status="completed", completed_at=now_utc().isoformat(), results=results)
+        add_event(state, "DCA", "Testovací DCA dokončeno")
+        state["account_balance"] = get_balance(client, QUOTE_ASSET, raise_on_error=True)
+    except Exception as exc:
+        request.update(status="failed", completed_at=now_utc().isoformat(), error=str(exc)[:180])
+        add_event(state, "DCA", "Testovací DCA selhalo")
+    save_state(state)
+
+
 def maybe_send_weekly_summary(state):
     if weekly_summary_due(state):
         send_weekly_summary(state)
 
 
 def maybe_send_scheduled_summaries(client, state, pair_filters):
+    refresh_entries_control(state)
+    maybe_run_test_dca(client, state, pair_filters)
     maybe_run_streak_paper(client, state, pair_filters)
     maybe_send_daily_summary(state)
     maybe_run_weekly_dca(client, state, pair_filters)

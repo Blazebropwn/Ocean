@@ -8,7 +8,7 @@ import type { Config } from "./config.js";
 import { openDatabase, publicUser, type KryptotronInstanceRecord, type UserRecord, type OceanDatabase } from "./db.js";
 import { binanceConnectionSchema, changePasswordSchema, dcaAmountSchema, dcaControlSchema, invitationCreateSchema, kryptotronControlSchema, loginSchema, recoveryConfirmSchema, recoveryRequestSchema, registerSchema, streakControlSchema } from "./schemas.js";
 import { DUMMY_PASSWORD_HASH, hashPassword, hashToken, newInvitationId, newSessionToken, newUserId, newVerificationToken, SESSION_TTL_SECONDS, verifyPassword } from "./security.js";
-import { initializeKryptotronInstance, loadKryptotronSnapshot, setDcaAmount, setDcaEnabled, setKryptotronEntriesPaused, setStreakEnabled } from "./kryptotron.js";
+import { initializeKryptotronInstance, loadKryptotronSnapshot, requestTestDca, setDcaAmount, setDcaEnabled, setKryptotronEntriesPaused, setStreakEnabled } from "./kryptotron.js";
 import { verifyBinanceCredentials } from "./binance.js";
 import { credentialsKey, encryptCredential } from "./credentials.js";
 
@@ -460,6 +460,25 @@ export function buildApp(config: Config, database?: OceanDatabase) {
       return { amount: parsed.data.amount };
     } catch {
       return reply.code(502).send({ error: "DCA preset se nepodařilo uložit." });
+    }
+  });
+
+  app.post("/api/kryptotron/dca/test", { config: { rateLimit: { max: 2, timeWindow: "1 hour" } } }, async (request, reply) => {
+    const user = currentUser(db, request);
+    if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
+    const instance = connectedKryptotronInstance(db, user.id);
+    if (!instance) return reply.code(404).send({ error: "Kryptotron není k tomuto účtu připojen." });
+    if (instance.environment !== "testnet") return reply.code(403).send({ error: "Testovací nákup je dostupný pouze na Testnetu." });
+    if (!config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return reply.code(503).send({ error: "Kryptotron není dostupný." });
+    try {
+      const requestId = await requestTestDca(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, instance.remote_state_key!);
+      const meta = requestMeta(request);
+      db.prepare("INSERT INTO security_events (user_id, event_type, ip_address, user_agent) VALUES (?, 'DCA_TEST_REQUESTED', ?, ?)")
+        .run(user.id, meta.ip, meta.agent);
+      return reply.code(202).send({ requestId });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Testovací DCA se nepodařilo zařadit.";
+      return reply.code(409).send({ error: message });
     }
   });
 

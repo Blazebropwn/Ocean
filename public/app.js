@@ -214,6 +214,7 @@ async function loadKryptotron() {
       : `${new Intl.NumberFormat("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(kryptotron.balance.amount)} ${kryptotron.balance.asset}`;
     $("#bot-position").textContent = open ? `${open.symbol} · v pozici` : "Bez otevřené pozice";
     dcaEnabled = kryptotron.dca.enabled;
+    $("#dca-test").classList.toggle("hidden", kryptotron.environment !== "testnet");
     $("#dca-status").textContent = dcaEnabled ? (kryptotron.dca.completedWeek ? "Tento týden provedeno" : "Čeká na neděli") : "Pozastaveno";
     $("#dca-control").textContent = dcaEnabled ? "Vypnout" : "Zapnout";
     $("#dca-control").classList.toggle("enabled", dcaEnabled);
@@ -365,6 +366,23 @@ $("#dca-control").addEventListener("click", async () => {
     $("#bot-error-wrap").classList.remove("hidden");
     $("#bot-error").textContent = error.message;
   } finally {
+    button.disabled = false;
+  }
+});
+
+$("#dca-test").addEventListener("click", async () => {
+  const button = $("#dca-test");
+  if (!confirm("Provést jednorázový Testnet nákup BTC, ETH a SOL podle zvoleného presetu?")) return;
+  button.disabled = true;
+  button.textContent = "Zařazuji…";
+  try {
+    await request("/api/kryptotron/dca/test", { method: "POST", body: "{}" });
+    button.textContent = "Zařazeno";
+    setTimeout(loadKryptotron, 3000);
+  } catch (error) {
+    $("#bot-error-wrap").classList.remove("hidden");
+    $("#bot-error").textContent = error.message;
+    button.textContent = "Otestovat nákup";
     button.disabled = false;
   }
 });

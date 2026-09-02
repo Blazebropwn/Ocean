@@ -44,10 +44,11 @@ def purchase_record(symbol, amount, order, current_week):
     }
 
 
-def run_weekly_dca(client, state, symbols, amount, min_notionals, save_state, get_balance, now=None):
-    if not dca_due(state, now):
+def run_weekly_dca(client, state, symbols, amount, min_notionals, save_state, get_balance, now=None, run_key=None):
+    manual_run = run_key is not None
+    if not manual_run and not dca_due(state, now):
         return []
-    current_week = week_key(now)
+    current_week = run_key or week_key(now)
     dca = state.setdefault("dca", {})
     dca.setdefault("purchases", [])
     completed = {item["symbol"] for item in dca["purchases"] if item.get("week") == current_week}
@@ -92,7 +93,8 @@ def run_weekly_dca(client, state, symbols, amount, min_notionals, save_state, ge
             raise RuntimeError("DCA nákup proběhl, ale výsledek se nepodařilo uložit")
         results.append({"symbol": symbol, "status": "filled", **record})
 
-    dca["completed_week"] = current_week
+    if not manual_run:
+        dca["completed_week"] = current_week
     dca["last_results"] = results
     if not save_state(state):
         raise RuntimeError("Dokončení DCA týdne se nepodařilo uložit")

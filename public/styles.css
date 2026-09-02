@@ -859,6 +859,8 @@ input:focus {
 .dca-progress span { height: 5px; overflow: hidden; border-radius: 5px; background: #e5ecef; }.dca-progress i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#21a4ad,#63d2b6); transition: width .3s ease; }
 .dca-footer { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--line); }
 .dca-footer span + span { padding-left: 10px; border-left: 1px solid var(--line); }.dca-footer small { display: block; color: var(--muted); font-size: 8px; }.dca-footer strong { display: block; margin-top: 3px; font-size: 9px; }
+.dca-test { width: 100%; margin-top: 8px; padding: 7px; border: 1px solid #9dd8cf; border-radius: 8px; color: #087f6a; background: #f2fbf8; font-size: 9px; font-weight: 700; cursor: pointer; }
+.dca-test:disabled { cursor: wait; opacity: .65; }
 .ocean-module {
   height: calc(100% - 52px);
   position: relative;
