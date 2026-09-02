@@ -25,6 +25,12 @@ test("Telegram pairing code is hashed, single-use and binds one chat", async () 
   assert.match(messages[0]!, /propojen/);
   assert.deepEqual(db.prepare("SELECT chat_id, telegram_username FROM telegram_connections").get(), { chat_id: "12345", telegram_username: "diver" });
   assert.equal((db.prepare("SELECT COUNT(*) AS count FROM telegram_pairings").get() as { count: number }).count, 0);
+
+  const disconnected = await app.inject({ method: "DELETE", url: "/api/telegram", headers: { cookie: cookie! } });
+  assert.equal(disconnected.statusCode, 204);
+  assert.equal((db.prepare("SELECT COUNT(*) AS count FROM telegram_connections").get() as { count: number }).count, 0);
+  const status = await app.inject({ method: "GET", url: "/api/telegram", headers: { cookie: cookie! } });
+  assert.equal(status.json().telegram.connected, false);
   await app.close();
 });
 
