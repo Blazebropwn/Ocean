@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { Config } from "../src/config.js";
-import { restartDelayMs, workerEnvironment } from "../src/supervisor.js";
+import { restartDelayMs, workerEnvironment, workerHeartbeatExpired } from "../src/supervisor.js";
 
 test("personal worker environment is isolated and forced to Testnet", () => {
   const config = {
@@ -37,4 +37,10 @@ test("worker restart backoff is bounded", () => {
   assert.equal(restartDelayMs(1), 10_000);
   assert.equal(restartDelayMs(2), 20_000);
   assert.equal(restartDelayMs(20), 300_000);
+});
+
+test("ready worker expires on a missing heartbeat", () => {
+  assert.equal(workerHeartbeatExpired({ ready: true, startedAt: 0, lastHeartbeatAt: 1_000 }, 181_000), false);
+  assert.equal(workerHeartbeatExpired({ ready: true, startedAt: 0, lastHeartbeatAt: 1_000 }, 181_001), true);
+  assert.equal(workerHeartbeatExpired({ ready: false, startedAt: 1_000, lastHeartbeatAt: 1_000 }, 421_000), false);
 });

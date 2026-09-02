@@ -19,11 +19,19 @@ type RunnableInstance = {
 };
 
 type SupervisorLogger = Pick<FastifyBaseLogger, "info" | "warn" | "error">;
+type ManagedChild = { process: ChildProcess; startedAt: number; lastHeartbeatAt: number; ready: boolean };
 const POLL_MS = 10_000;
 const MAX_RESTART_DELAY_MS = 5 * 60_000;
+const STARTUP_TIMEOUT_MS = 7 * 60_000;
+const HEARTBEAT_TIMEOUT_MS = 3 * 60_000;
 
 export function restartDelayMs(failures: number) {
   return Math.min(POLL_MS * (2 ** Math.max(0, failures - 1)), MAX_RESTART_DELAY_MS);
+}
+
+export function workerHeartbeatExpired(worker: Pick<ManagedChild, "ready" | "startedAt" | "lastHeartbeatAt">, now = Date.now()) {
+  const deadline = worker.ready ? worker.lastHeartbeatAt + HEARTBEAT_TIMEOUT_MS : worker.startedAt + STARTUP_TIMEOUT_MS;
+  return now > deadline;
 }
 
 export function workerEnvironment(base: NodeJS.ProcessEnv, instance: Pick<RunnableInstance, "id" | "environment">, apiKey: string, apiSecret: string, config: Config): NodeJS.ProcessEnv {
@@ -47,7 +55,7 @@ export function workerEnvironment(base: NodeJS.ProcessEnv, instance: Pick<Runnab
 }
 
 export function startKryptotronSupervisor(config: Config, db: OceanDatabase, logger: SupervisorLogger) {
-  const children = new Map<string, ChildProcess>();
+  const children = new Map<string, ManagedChild>();
   const failures = new Map<string, { count: number; retryAt: number }>();
   let stopped = false;
   let timer: NodeJS.Timeout | undefined;
@@ -71,6 +79,13 @@ export function startKryptotronSupervisor(config: Config, db: OceanDatabase, log
 
   const scan = () => {
     if (stopped) return;
+    const now = Date.now();
+    for (const [instanceId, child] of children) {
+      if (workerHeartbeatExpired(child, now)) {
+        logger.warn({ instanceId }, "Osobní Kryptotron přestal odpovídat a bude restartován");
+        child.process.kill("SIGTERM");
+      }
+    }
     const instances = db.prepare(`
       SELECT i.id, i.user_id, i.environment,
         c.api_key_ciphertext, c.api_key_iv, c.api_key_tag,
@@ -98,12 +113,17 @@ export function startKryptotronSupervisor(config: Config, db: OceanDatabase, log
           env: workerEnvironment(process.env, instance, apiKey, apiSecret, config),
           stdio: ["ignore", "pipe", "pipe"],
         });
-        children.set(instance.id, child);
+        const managed = { process: child, startedAt: Date.now(), lastHeartbeatAt: Date.now(), ready: false };
+        children.set(instance.id, managed);
         db.prepare("UPDATE kryptotron_instances SET status = 'provisioning', updated_at = datetime('now') WHERE id = ?").run(instance.id);
         logger.info({ instanceId: instance.id, pid: child.pid }, "Osobní Kryptotron se spouští");
 
         const handleOutput = (chunk: Buffer) => {
-          if (chunk.toString("utf8").includes("Kryptotron připraven")) {
+          const output = chunk.toString("utf8");
+          if (output.includes("OCEAN_HEARTBEAT")) managed.lastHeartbeatAt = Date.now();
+          if (output.includes("Kryptotron připraven")) {
+            managed.ready = true;
+            managed.lastHeartbeatAt = Date.now();
             failures.delete(instance.id);
             db.prepare("UPDATE kryptotron_instances SET status = 'connected', updated_at = datetime('now') WHERE id = ? AND status = 'provisioning'").run(instance.id);
           }
@@ -144,7 +164,7 @@ export function startKryptotronSupervisor(config: Config, db: OceanDatabase, log
     stop() {
       stopped = true;
       if (timer) clearTimeout(timer);
-      for (const child of children.values()) child.kill("SIGTERM");
+      for (const child of children.values()) child.process.kill("SIGTERM");
       children.clear();
     },
   };

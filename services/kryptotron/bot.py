@@ -753,6 +753,9 @@ def sleep_until_next_4h_candle(client, state, pair_filters, cycle_errors):
             break
         process_telegram(state)
         maybe_send_scheduled_summaries(client, state, pair_filters)
+        state["last_heartbeat_at"] = now_utc().isoformat()
+        save_state(state)
+        log.info("OCEAN_HEARTBEAT")
         time.sleep(min(60, remaining))
 
 
@@ -834,6 +837,7 @@ def run():
     add_event(state, "SYSTEM", f"Kryptotron připraven · {mode.split()[-1]}")
     save_state(state)
     log.info(f"Kryptotron připraven · {mode.split()[-1]}")
+    log.info("OCEAN_HEARTBEAT")
     process_telegram(state)
 
     while True:
@@ -845,6 +849,7 @@ def run():
             next_check_at=None,
         )
         save_state(state)
+        log.info("OCEAN_HEARTBEAT")
         try:
             state     = reset_periods(state)
             pair_data = {}
