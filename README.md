@@ -38,6 +38,8 @@ Lokální `.env` Kryptotronu musí obsahovat jeho vlastní Binance, Supabase a p
 
 Každý Ocean účet má vlastní záznam v `kryptotron_instances`. Původní Supabase stav `main` se při migraci přiřadí pouze vlastníkovi a zachová tak současného Kryptotrona beze změny. Noví členové začínají ve stavu `unconfigured`; dokud nemají přidělenou samostatnou vzdálenou instanci, nemohou číst ani ovládat Kryptotron jiného uživatele.
 
+Supabase používá `bot_state.key` jako identifikátor instance a `bot_trades.instance_id` pro oddělenou historii. Worker čte `KRYPTOTRON_INSTANCE_ID` a bez jeho nastavení zachová kompatibilní hodnotu `main`. Ocean vždy filtruje stav i poslední obchod podle instance přiřazené přihlášenému účtu.
+
 Nové Binance připojení Ocean ověří přímo proti zvolenému Testnet/Mainnet API. Mainnet klíč přijme pouze s povoleným čtením a spotovým obchodováním a se zakázanými výběry. Údaje se ukládají samostatně zašifrované pomocí AES-256-GCM a po ověření čekají ve stavu `provisioning` na vytvoření workeru. Před prvním připojením nastavte v `.env` stabilní klíč, který je nutné bezpečně zálohovat:
 
 ```bash

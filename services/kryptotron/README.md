@@ -100,6 +100,12 @@ DCA_AMOUNT_USDC=5
 DCA_SYMBOLS=BTCUSDC,ETHUSDC,SOLUSDC
 ```
 
+Každý worker musí mít vlastní neměnný identifikátor. Původní produkční instance používá výchozí hodnotu `main`; pro další účty nastavte unikátní hodnotu přidělenou Oceanem:
+
+```env
+KRYPTOTRON_INSTANCE_ID=main
+```
+
 `DCA_AMOUNT_USDC` je částka pro každý symbol, tedy při výchozím nastavení celkem 15 USDC týdně. Před aktivací ověřte nákupy na Testnetu. Modul kontroluje minimální hodnotu příkazu a ukládá stabilní ID objednávky, aby restart workeru nevytvořil druhý nákup.
 
 Dashboard umožňuje pro další týdenní nákup zvolit manuální preset `5, 10, 20, 50, 100, 200, 500 nebo 1000 USDC`. Jde vždy o částku pro každý symbol. Volba se ukládá do sdíleného stavu a hodnota z prostředí slouží pouze jako výchozí nastavení.

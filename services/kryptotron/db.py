@@ -6,6 +6,7 @@ Falls back silently if SUPABASE_URL / SUPABASE_KEY are not set.
 import os
 import logging
 from datetime import datetime, timezone
+from config.settings import INSTANCE_ID
 
 log = logging.getLogger(__name__)
 _sb = None
@@ -30,7 +31,7 @@ def load_state():
     if _sb is None:
         return None
     try:
-        res = _sb.table("bot_state").select("data").eq("key", "main").execute()
+        res = _sb.table("bot_state").select("data").eq("key", INSTANCE_ID).execute()
         if res.data:
             return res.data[0]["data"]
     except Exception as e:
@@ -43,7 +44,7 @@ def save_state(state):
         return False
     try:
         _sb.table("bot_state").upsert({
-            "key": "main",
+            "key": INSTANCE_ID,
             "data": state,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }).execute()
@@ -58,6 +59,7 @@ def log_trade(symbol, entry_price, exit_price, qty, pnl, result, reason=None, en
         return
     try:
         _sb.table("bot_trades").insert({
+            "instance_id": INSTANCE_ID,
             "symbol": symbol,
             "entry_price": float(entry_price),
             "exit_price": float(exit_price),

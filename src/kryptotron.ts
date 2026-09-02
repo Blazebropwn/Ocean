@@ -123,7 +123,7 @@ export async function setStreakEnabled(url: string, key: string, enabled: boolea
 export async function loadKryptotronSnapshot(url: string, key: string, stateKey = "main"): Promise<KryptotronSnapshot> {
   const [states, trades] = await Promise.all([
     supabaseRows(url, key, statePath(stateKey, "data,updated_at")),
-    stateKey === "main" ? supabaseRows(url, key, "bot_trades?select=symbol,entry_price,exit_price,qty,pnl,result,reason,entry_time,exit_time&order=exit_time.desc&limit=1") : Promise.resolve([]),
+    supabaseRows(url, key, `bot_trades?instance_id=eq.${encodeURIComponent(stateKey)}&select=symbol,entry_price,exit_price,qty,pnl,result,reason,entry_time,exit_time&order=exit_time.desc&limit=1`),
   ]);
   const state = states[0];
   const data = state?.data && typeof state.data === "object" ? state.data as Record<string, unknown> : {};

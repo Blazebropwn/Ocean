@@ -5,8 +5,10 @@ import { loadKryptotronSnapshot, setDcaAmount, setDcaEnabled, setKryptotronEntri
 test("maps Kryptotron state and latest trade into the Ocean contract", async (t) => {
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });
+  const urls: string[] = [];
   globalThis.fetch = async (input) => {
     const url = String(input);
+    urls.push(url);
     const body = url.includes("bot_state") ? [{
       data: { runtime_status: "waiting", entries_paused: true, last_heartbeat_at: new Date().toISOString(), last_market_check_at: "2026-08-22T08:00:00Z", next_check_at: "2026-08-22T12:00:00Z", account_balance: 73.93, quote_asset: "USDC", dca: { enabled: true, amount: 5, symbols: ["BTCUSDC", "ETHUSDC", "SOLUSDC"], completed_week: "2026-W33", purchases: [{ symbol: "BTCUSDC", amount: 5, quantity: 0.0001 }, { symbol: "ETHUSDC", amount: 5, quantity: 0.002 }] }, events: [{ type: "MARKET", message: "Trh zkontrolován", at: "2026-08-22T08:00:00Z" }], positions: { BTCUSDC: { in_position: true, entry_price: 68000, position_qty: 0.001, highest_price: 70000, protection_status: "ACTIVE", protection_stop_price: 61200, protection_activation_price: 70040, protection_trailing_bips: 150 } }, daily_loss: 1, weekly_loss: 2, trades_today: 1, trades_week: 3 },
       updated_at: "2026-08-22T08:00:00Z",
@@ -32,6 +34,7 @@ test("maps Kryptotron state and latest trade into the Ocean contract", async (t)
   assert.equal(snapshot.positions[0]?.protectionTrailingBips, 150);
   assert.equal(snapshot.limits.tradesWeek, 3);
   assert.equal(snapshot.lastTrade?.reason, "TRAIL_SL");
+  assert.ok(urls.some((url) => url.includes("bot_trades?instance_id=eq.main")));
 });
 
 test("DCA amount control preserves the module and records the preset", async (t) => {

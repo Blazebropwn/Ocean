@@ -8,6 +8,9 @@ _e = os.environ.get
 API_KEY    = _e("BINANCE_API_KEY",    "")
 API_SECRET = _e("BINANCE_API_SECRET", "")
 TESTNET    = _e("TESTNET", "true").lower() == "true"
+INSTANCE_ID = _e("KRYPTOTRON_INSTANCE_ID", "main").strip()
+if not INSTANCE_ID or len(INSTANCE_ID) > 128 or not all(char.isalnum() or char in "_-" for char in INSTANCE_ID):
+    raise ValueError("KRYPTOTRON_INSTANCE_ID smí obsahovat pouze písmena, čísla, _ a -")
 
 # --- Telegram ---
 TELEGRAM_TOKEN   = _e("TELEGRAM_TOKEN", "")
