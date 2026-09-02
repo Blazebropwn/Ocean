@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { dirname } from "node:path";
-import { mkdirSync } from "node:fs";
+import { chmodSync, mkdirSync } from "node:fs";
 
 export type UserRecord = {
   id: string;
@@ -46,10 +46,14 @@ export function publicUser(user: UserRecord): PublicUser {
 }
 
 export function openDatabase(path: string) {
-  if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
+  if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const db = new Database(path);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
+  if (path !== ":memory:") {
+    chmodSync(dirname(path), 0o700);
+    chmodSync(path, 0o600);
+  }
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       public_id INTEGER PRIMARY KEY AUTOINCREMENT,
