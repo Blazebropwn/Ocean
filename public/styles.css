@@ -638,7 +638,9 @@ input:focus {
 .connection-copy p { max-width: 430px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
 .connection-form { width: min(440px,calc(100% - 56px)); margin: auto; padding: 30px; border: 1px solid var(--line); border-radius: 16px; background: #fff; }
 .provisioning-status { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
-.provisioning-status i { width: 9px; height: 9px; border: 2px solid #b8d9dc; border-top-color: var(--accent); border-radius: 50%; animation: provisioning-spin .8s linear infinite; }
+.provisioning-status i { width: 9px; height: 9px; flex-shrink: 0; border: 2px solid #b8d9dc; border-top-color: var(--accent); border-radius: 50%; animation: provisioning-spin .8s linear infinite; }
+.provisioning-status > div { display: flex; flex-direction: column; gap: 2px; }
+.provisioning-status small { font-size: 11px; font-weight: 400; }
 @keyframes provisioning-spin { to { transform: rotate(360deg); } }
 .environment-switch { display: grid; grid-template-columns: 1fr 1fr; padding: 4px; margin-bottom: 22px; border-radius: 10px; background: var(--soft); }
 .environment-switch label { margin: 0; }

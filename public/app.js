@@ -271,6 +271,13 @@ async function initializeKryptotron() {
     const provisioning = connection.status === "provisioning";
     form.classList.toggle("hidden", provisioning);
     $("#provisioning-status").classList.toggle("hidden", !provisioning);
+    if (provisioning) {
+      const mainnet = connection.environment === "mainnet";
+      $("#provisioning-heading").textContent = mainnet ? "Mainnet čeká na ruční aktivaci" : "Připravuji Kryptotron";
+      $("#provisioning-detail").textContent = mainnet
+        ? "Automatické spouštění mainnet workerů zatím Ocean nepodporuje. Ozvěte se prosím správci účtu."
+        : "Testnet worker se po ověření spustí automaticky.";
+    }
   } catch (error) {
     $("#kryptotron-status").lastChild.textContent = " Nepřipojeno";
   }
