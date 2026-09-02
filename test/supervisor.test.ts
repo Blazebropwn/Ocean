@@ -10,7 +10,14 @@ test("personal worker environment is isolated and forced to Testnet", () => {
     kryptotronSupabaseUrl: "https://example.supabase.co", kryptotronSupabaseKey: "secret-service-key",
   } satisfies Config;
   const environment = workerEnvironment(
-    { BINANCE_API_KEY: "owner-key", BINANCE_API_SECRET: "owner-secret", TELEGRAM_TOKEN: "owner-telegram" },
+    {
+      PATH: "/usr/bin",
+      BINANCE_API_KEY: "owner-key",
+      BINANCE_API_SECRET: "owner-secret",
+      TELEGRAM_TOKEN: "owner-telegram",
+      OCEAN_CREDENTIALS_KEY: "ocean-encryption-key",
+      SESSION_SECRET: "ocean-session-secret",
+    },
     { id: "kry_0123456789abcdef0123456789abcdef", environment: "testnet" },
     "member-key", "member-secret", config,
   );
@@ -21,4 +28,7 @@ test("personal worker environment is isolated and forced to Testnet", () => {
   assert.equal(environment.TELEGRAM_TOKEN, "");
   assert.equal(environment.DCA_ENABLED, "false");
   assert.equal(environment.STREAK_ENABLED, "false");
+  assert.equal(environment.PATH, "/usr/bin");
+  assert.equal(environment.OCEAN_CREDENTIALS_KEY, undefined);
+  assert.equal(environment.SESSION_SECRET, undefined);
 });

@@ -21,9 +21,13 @@ type RunnableInstance = {
 type SupervisorLogger = Pick<FastifyBaseLogger, "info" | "warn" | "error">;
 const POLL_MS = 10_000;
 
-export function workerEnvironment(base: NodeJS.ProcessEnv, instance: Pick<RunnableInstance, "id" | "environment">, apiKey: string, apiSecret: string, config: Config) {
+export function workerEnvironment(base: NodeJS.ProcessEnv, instance: Pick<RunnableInstance, "id" | "environment">, apiKey: string, apiSecret: string, config: Config): NodeJS.ProcessEnv {
+  const inherited = Object.fromEntries(
+    ["PATH", "LANG", "LC_ALL", "TZ", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"]
+      .flatMap((name) => base[name] === undefined ? [] : [[name, base[name]]]),
+  );
   return {
-    ...base,
+    ...inherited,
     BINANCE_API_KEY: apiKey,
     BINANCE_API_SECRET: apiSecret,
     TESTNET: String(instance.environment === "testnet"),
