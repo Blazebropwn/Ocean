@@ -42,6 +42,38 @@ function statePath(stateKey: string, select = "data") {
   return `bot_state?key=eq.${encodeURIComponent(stateKey)}&select=${select}&limit=1`;
 }
 
+export async function initializeKryptotronInstance(url: string, key: string, stateKey: string, environment: "testnet" | "mainnet") {
+  if (!/^kry_[a-f0-9]{32}$/.test(stateKey)) throw new Error("Neplatný identifikátor instance");
+  const now = new Date().toISOString();
+  const response = await fetch(`${url}/rest/v1/bot_state?on_conflict=key`, {
+    method: "POST",
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      Prefer: "resolution=merge-duplicates,return=minimal",
+    },
+    body: JSON.stringify({
+      key: stateKey,
+      data: {
+        runtime_status: "provisioning",
+        environment,
+        entries_paused: true,
+        account_balance: null,
+        quote_asset: "USDC",
+        positions: {},
+        events: [{ type: "SYSTEM", message: "Instance připravena ke spuštění", at: now }],
+        dca: { enabled: false, amount: 5, symbols: ["BTCUSDC", "ETHUSDC", "SOLUSDC"], purchases: [] },
+        streak: { enabled: false, paper_mode: true, r_usdc: 1 },
+      },
+      updated_at: now,
+    }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!response.ok) throw new Error(`Supabase odpověděl ${response.status}`);
+  return stateKey;
+}
+
 export async function setKryptotronEntriesPaused(url: string, key: string, entriesPaused: boolean, stateKey = "main") {
   const states = await supabaseRows(url, key, statePath(stateKey));
   const state = states[0];

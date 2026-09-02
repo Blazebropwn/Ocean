@@ -1,6 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { loadKryptotronSnapshot, setDcaAmount, setDcaEnabled, setKryptotronEntriesPaused } from "../src/kryptotron.js";
+import { initializeKryptotronInstance, loadKryptotronSnapshot, setDcaAmount, setDcaEnabled, setKryptotronEntriesPaused } from "../src/kryptotron.js";
+
+test("new Kryptotron instances receive an isolated paused state", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async (_input, init) => {
+    const payload = JSON.parse(String(init?.body)) as { key: string; data: Record<string, unknown> };
+    assert.equal(payload.key, "kry_0123456789abcdef0123456789abcdef");
+    assert.equal(payload.data.environment, "testnet");
+    assert.equal(payload.data.entries_paused, true);
+    return new Response(null, { status: 201 });
+  };
+  assert.equal(
+    await initializeKryptotronInstance("https://example.supabase.co", "key", "kry_0123456789abcdef0123456789abcdef", "testnet"),
+    "kry_0123456789abcdef0123456789abcdef",
+  );
+});
 
 test("maps Kryptotron state and latest trade into the Ocean contract", async (t) => {
   const originalFetch = globalThis.fetch;

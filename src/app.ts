@@ -8,7 +8,7 @@ import type { Config } from "./config.js";
 import { openDatabase, publicUser, type KryptotronInstanceRecord, type UserRecord, type OceanDatabase } from "./db.js";
 import { binanceConnectionSchema, changePasswordSchema, dcaAmountSchema, dcaControlSchema, invitationCreateSchema, kryptotronControlSchema, loginSchema, recoveryConfirmSchema, recoveryRequestSchema, registerSchema, streakControlSchema } from "./schemas.js";
 import { DUMMY_PASSWORD_HASH, hashPassword, hashToken, newInvitationId, newSessionToken, newUserId, newVerificationToken, SESSION_TTL_SECONDS, verifyPassword } from "./security.js";
-import { loadKryptotronSnapshot, setDcaAmount, setDcaEnabled, setKryptotronEntriesPaused, setStreakEnabled } from "./kryptotron.js";
+import { initializeKryptotronInstance, loadKryptotronSnapshot, setDcaAmount, setDcaEnabled, setKryptotronEntriesPaused, setStreakEnabled } from "./kryptotron.js";
 import { verifyBinanceCredentials } from "./binance.js";
 import { credentialsKey, encryptCredential } from "./credentials.js";
 
@@ -351,6 +351,15 @@ export function buildApp(config: Config, database?: OceanDatabase) {
 
     try {
       const verification = await verifyBinanceCredentials(parsed.data.apiKey, parsed.data.apiSecret, parsed.data.environment);
+      if (!config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) {
+        return reply.code(503).send({ error: "Úložiště Kryptotronu zatím není dostupné." });
+      }
+      const remoteStateKey = instance.id;
+      try {
+        await initializeKryptotronInstance(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, remoteStateKey, parsed.data.environment);
+      } catch {
+        return reply.code(503).send({ error: "Oddělenou instanci teď nelze připravit. Zkuste to prosím později." });
+      }
       const context = `${user.id}:${instance.id}`;
       const encryptedApiKey = encryptCredential(parsed.data.apiKey, encryptionKey, `${context}:api-key`);
       const encryptedSecret = encryptCredential(parsed.data.apiSecret, encryptionKey, `${context}:api-secret`);
@@ -365,8 +374,8 @@ export function buildApp(config: Config, database?: OceanDatabase) {
             api_secret_ciphertext = excluded.api_secret_ciphertext, api_secret_iv = excluded.api_secret_iv, api_secret_tag = excluded.api_secret_tag,
             verified_at = datetime('now'), updated_at = datetime('now')
         `).run(instance.id, encryptedApiKey.ciphertext, encryptedApiKey.iv, encryptedApiKey.tag, encryptedSecret.ciphertext, encryptedSecret.iv, encryptedSecret.tag);
-        db.prepare("UPDATE kryptotron_instances SET status = 'provisioning', environment = ?, updated_at = datetime('now') WHERE id = ?")
-          .run(parsed.data.environment, instance.id);
+        db.prepare("UPDATE kryptotron_instances SET remote_state_key = ?, status = 'provisioning', environment = ?, updated_at = datetime('now') WHERE id = ?")
+          .run(remoteStateKey, parsed.data.environment, instance.id);
         const meta = requestMeta(request);
         db.prepare("INSERT INTO security_events (user_id, event_type, ip_address, user_agent) VALUES (?, 'BINANCE_CONNECTED', ?, ?)")
           .run(user.id, meta.ip, meta.agent);

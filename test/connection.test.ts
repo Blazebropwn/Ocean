@@ -17,13 +17,23 @@ test("credentials are authenticated and bound to their Ocean context", () => {
 test("invited member can verify and securely stage a personal Binance connection", async (t) => {
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });
-  globalThis.fetch = async (input) => {
-    assert.match(String(input), /^https:\/\/testnet\.binance\.vision\/api\/v3\/account\?/);
-    return new Response(JSON.stringify({ canTrade: true, balances: [{ asset: "USDC", free: "25", locked: "0" }] }), { status: 200 });
+  globalThis.fetch = async (input, init) => {
+    if (String(input).startsWith("https://testnet.binance.vision/api/v3/account?")) {
+      return new Response(JSON.stringify({ canTrade: true, balances: [{ asset: "USDC", free: "25", locked: "0" }] }), { status: 200 });
+    }
+    assert.equal(String(input), "https://example.supabase.co/rest/v1/bot_state?on_conflict=key");
+    assert.equal(init?.method, "POST");
+    const provisioned = JSON.parse(String(init?.body)) as { key: string; data: Record<string, unknown> };
+    assert.match(provisioned.key, /^kry_[a-f0-9]{32}$/);
+    assert.equal(provisioned.data.runtime_status, "provisioning");
+    assert.equal(provisioned.data.environment, "testnet");
+    assert.equal(provisioned.data.entries_paused, true);
+    return new Response(null, { status: 201 });
   };
   const config: Config = {
     port: 0, host: "127.0.0.1", databasePath: ":memory:", appOrigin: "http://localhost:3000", isProduction: false,
     credentialsEncryptionKey: randomBytes(32).toString("base64"),
+    kryptotronSupabaseUrl: "https://example.supabase.co", kryptotronSupabaseKey: "service-key",
   };
   const db = openDatabase(":memory:");
   const app = buildApp(config, db);
@@ -50,6 +60,8 @@ test("invited member can verify and securely stage a personal Binance connection
   assert.ok(stored.api_key_ciphertext);
   assert.ok(!Object.values(stored).includes("A".repeat(32)));
   assert.ok(!Object.values(stored).includes("S".repeat(32)));
+  const instance = db.prepare("SELECT id, remote_state_key FROM kryptotron_instances WHERE user_id = (SELECT id FROM users WHERE username = 'diver')").get() as { id: string; remote_state_key: string };
+  assert.equal(instance.remote_state_key, instance.id);
   const state = await app.inject({ method: "GET", url: "/api/kryptotron/connection", headers: { cookie: memberCookie! } });
   assert.deepEqual(state.json().connection, { status: "provisioning", environment: "testnet", configured: true, legacy: false });
   await app.close();
