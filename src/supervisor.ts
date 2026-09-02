@@ -20,7 +20,7 @@ type RunnableInstance = {
 };
 
 type SupervisorLogger = Pick<FastifyBaseLogger, "info" | "warn" | "error">;
-type ManagedChild = { process: ChildProcess; startedAt: number; lastHeartbeatAt: number; ready: boolean };
+type ManagedChild = { process: ChildProcess; startedAt: number; lastHeartbeatAt: number; ready: boolean; stopping: boolean };
 const POLL_MS = 10_000;
 const MAX_RESTART_DELAY_MS = 5 * 60_000;
 const STARTUP_TIMEOUT_MS = 7 * 60_000;
@@ -33,6 +33,12 @@ export function restartDelayMs(failures: number) {
 export function workerHeartbeatExpired(worker: Pick<ManagedChild, "ready" | "startedAt" | "lastHeartbeatAt">, now = Date.now()) {
   const deadline = worker.ready ? worker.lastHeartbeatAt + HEARTBEAT_TIMEOUT_MS : worker.startedAt + STARTUP_TIMEOUT_MS;
   return now > deadline;
+}
+
+export function isRunnablePersonalInstance(instance: Pick<RunnableInstance, "id" | "environment"> & { status: string; remote_state_key: string | null }) {
+  return instance.environment === "testnet"
+    && instance.remote_state_key === instance.id
+    && ["provisioning", "connected", "error"].includes(instance.status);
 }
 
 export function workerEnvironment(base: NodeJS.ProcessEnv, instance: Pick<RunnableInstance, "id" | "environment">, apiKey: string, apiSecret: string, config: Config, accessToken?: string): NodeJS.ProcessEnv {
@@ -83,24 +89,29 @@ export function startKryptotronSupervisor(config: Config, db: OceanDatabase, log
   const scan = () => {
     if (stopped) return;
     const now = Date.now();
-    for (const [instanceId, child] of children) {
-      if (workerHeartbeatExpired(child, now)) {
-        logger.warn({ instanceId }, "Osobní Kryptotron přestal odpovídat a bude restartován");
-        child.process.kill("SIGTERM");
-      }
-    }
     const instances = db.prepare(`
-      SELECT i.id, i.user_id, i.environment,
+      SELECT i.id, i.user_id, i.environment, i.status, i.remote_state_key,
         c.api_key_ciphertext, c.api_key_iv, c.api_key_tag,
         c.api_secret_ciphertext, c.api_secret_iv, c.api_secret_tag
       FROM kryptotron_instances i
       JOIN kryptotron_credentials c ON c.instance_id = i.id
-      WHERE i.status IN ('provisioning', 'connected', 'error')
-        AND i.remote_state_key = i.id
-        AND i.environment = 'testnet'
-    `).all() as RunnableInstance[];
+    `).all() as Array<RunnableInstance & { status: string; remote_state_key: string | null }>;
+    const runnableInstances = instances.filter(isRunnablePersonalInstance);
+    const runnableIds = new Set(runnableInstances.map((instance) => instance.id));
 
-    for (const instance of instances) {
+    for (const [instanceId, child] of children) {
+      if (!runnableIds.has(instanceId) && !child.stopping) {
+        child.stopping = true;
+        logger.info({ instanceId }, "Osobní Kryptotron už není aktivní a bude ukončen");
+        child.process.kill("SIGTERM");
+      } else if (!child.stopping && workerHeartbeatExpired(child, now)) {
+        child.stopping = true;
+        logger.warn({ instanceId }, "Osobní Kryptotron přestal odpovídat a bude restartován");
+        child.process.kill("SIGTERM");
+      }
+    }
+
+    for (const instance of runnableInstances) {
       if (children.has(instance.id)) continue;
       const failure = failures.get(instance.id);
       if (failure && failure.retryAt > Date.now()) continue;
@@ -116,7 +127,7 @@ export function startKryptotronSupervisor(config: Config, db: OceanDatabase, log
           env: workerEnvironment(process.env, instance, apiKey, apiSecret, config, workerAccessToken(encryptionKey, instance.id)),
           stdio: ["ignore", "pipe", "pipe"],
         });
-        const managed = { process: child, startedAt: Date.now(), lastHeartbeatAt: Date.now(), ready: false };
+        const managed = { process: child, startedAt: Date.now(), lastHeartbeatAt: Date.now(), ready: false, stopping: false };
         children.set(instance.id, managed);
         db.prepare("UPDATE kryptotron_instances SET status = 'provisioning', updated_at = datetime('now') WHERE id = ?").run(instance.id);
         logger.info({ instanceId: instance.id, pid: child.pid }, "Osobní Kryptotron se spouští");

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { Config } from "../src/config.js";
-import { restartDelayMs, workerEnvironment, workerHeartbeatExpired } from "../src/supervisor.js";
+import { isRunnablePersonalInstance, restartDelayMs, workerEnvironment, workerHeartbeatExpired } from "../src/supervisor.js";
 
 test("personal worker environment is isolated and forced to Testnet", () => {
   const config = {
@@ -46,4 +46,13 @@ test("ready worker expires on a missing heartbeat", () => {
   assert.equal(workerHeartbeatExpired({ ready: true, startedAt: 0, lastHeartbeatAt: 1_000 }, 181_000), false);
   assert.equal(workerHeartbeatExpired({ ready: true, startedAt: 0, lastHeartbeatAt: 1_000 }, 181_001), true);
   assert.equal(workerHeartbeatExpired({ ready: false, startedAt: 1_000, lastHeartbeatAt: 1_000 }, 421_000), false);
+});
+
+test("only isolated Testnet instances are started automatically", () => {
+  const personal = { id: "kry_0123456789abcdef0123456789abcdef", remote_state_key: "kry_0123456789abcdef0123456789abcdef" };
+  assert.equal(isRunnablePersonalInstance({ ...personal, environment: "testnet", status: "provisioning" }), true);
+  assert.equal(isRunnablePersonalInstance({ ...personal, environment: "testnet", status: "connected" }), true);
+  assert.equal(isRunnablePersonalInstance({ ...personal, environment: "testnet", status: "suspended" }), false);
+  assert.equal(isRunnablePersonalInstance({ ...personal, environment: "mainnet", status: "connected" }), false);
+  assert.equal(isRunnablePersonalInstance({ ...personal, remote_state_key: "main", environment: "testnet", status: "connected" }), false);
 });

@@ -42,6 +42,8 @@ Supabase používá `bot_state.key` jako identifikátor instance a `bot_trades.i
 
 Osobní Testnet workery nedostávají globální Supabase serverový klíč. Komunikují přes interní state broker Oceanu pomocí tokenu kryptograficky svázaného s jediným ID instance. Původní samostatný Railway worker může dál používat přímé Supabase připojení kvůli zpětné kompatibilitě.
 
+Po ověření Testnet klíčů supervisor nejpozději během deseti sekund spustí osobní worker. Sleduje jeho heartbeat, při výpadku jej restartuje s omezeným exponenciálním odstupem a po vyřazení instance proces ukončí. Automatické spouštění je omezené na izolované Testnet instance; původní vlastnický Mainnet worker zůstává samostatný.
+
 Nové Binance připojení Ocean ověří přímo proti zvolenému Testnet/Mainnet API. Mainnet klíč přijme pouze s povoleným čtením a spotovým obchodováním a se zakázanými výběry. Údaje se ukládají samostatně zašifrované pomocí AES-256-GCM a po ověření čekají ve stavu `provisioning` na vytvoření workeru. Před prvním připojením nastavte v `.env` stabilní klíč, který je nutné bezpečně zálohovat:
 
 ```bash
