@@ -770,18 +770,29 @@ def run():
     streak_state = state.setdefault("streak", {})
     streak_state.setdefault("enabled", STREAK_ENABLED)
     streak_state.update(r_usdc=STREAK_R_USDC, paper_mode=STREAK_PAPER_MODE, symbols=DCA_SYMBOLS)
-    try:
-        state = reconcile_pending_order(client, state)
-        state = reconcile_pending_protection(client, state)
-        balance = get_balance(client, QUOTE_ASSET, raise_on_error=True)
-    except Exception as exc:
-        ip_hint = f"\nRailway IP: <code>{current_ip}</code>" if current_ip else ""
-        tg_alert(
-            state, "startup-auth",
-            f"🚨 <b>Kryptotron se nepřipojil k Binance</b>\n{str(exc)[:180]}{ip_hint}",
-            180,
-        )
-        raise SystemExit(1)
+    while True:
+        try:
+            state = reconcile_pending_order(client, state)
+            state = reconcile_pending_protection(client, state)
+            balance = get_balance(client, QUOTE_ASSET, raise_on_error=True)
+            break
+        except Exception as exc:
+            retry_at = now_utc() + timedelta(minutes=5)
+            state.update(
+                runtime_status="degraded",
+                last_heartbeat_at=now_utc().isoformat(),
+                next_check_at=retry_at.isoformat(),
+                last_error=str(exc)[:240],
+            )
+            save_state(state)
+            ip_hint = f"\nRailway IP: <code>{current_ip}</code>" if current_ip else ""
+            tg_alert(
+                state, "startup-auth",
+                f"🚨 <b>Kryptotron se nepřipojil k Binance</b>\n{str(exc)[:180]}{ip_hint}",
+                180,
+            )
+            log.warning("Binance připojení není dostupné; další pokus za 5 minut")
+            time.sleep(300)
     state.update(account_balance=balance, quote_asset=QUOTE_ASSET)
     save_state(state)
     add_event(state, "SYSTEM", f"Kryptotron připraven · {mode.split()[-1]}")

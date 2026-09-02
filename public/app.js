@@ -270,10 +270,6 @@ async function initializeKryptotron() {
     $("#kryptotron").classList.add("connection-active");
     const provisioning = connection.status === "provisioning";
     form.classList.toggle("hidden", provisioning);
-    $("#connection-title").textContent = provisioning ? "Připojení je připravené" : "Připojit Binance";
-    $("#connection-description").textContent = provisioning
-      ? "Klíče jsou bezpečně uložené. Kryptotron čeká na vytvoření vlastní instance."
-      : "Váš účet zůstává na Binance. Ocean dostane pouze přístup ke čtení a obchodování.";
   } catch (error) {
     $("#kryptotron-status").lastChild.textContent = " Nepřipojeno";
   }

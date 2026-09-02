@@ -630,13 +630,13 @@ input:focus {
 .kryptotron-card.connection-active { display: block; }
 .kryptotron-card.connection-active > .kryptotron-overview,
 .kryptotron-card.connection-active > .kryptotron-detail { display: none; }
-.connection-panel { height: 100%; display: grid; grid-template-columns: minmax(280px,.8fr) minmax(360px,1fr); }
+.connection-panel { height: 100%; display: grid; place-items: center; }
 .connection-copy { display: flex; flex-direction: column; justify-content: center; padding: clamp(36px,6vw,90px); border-right: 1px solid var(--line); background: linear-gradient(145deg,#f4fbfb,#fff); }
 .connection-copy .app-icon { margin-bottom: 42px; }
 .connection-copy > small { color: var(--accent); font-size: 9px; font-weight: 700; letter-spacing: .18em; }
 .connection-copy h2 { margin: 10px 0 14px; font-size: clamp(34px,4vw,58px); letter-spacing: -.055em; }
 .connection-copy p { max-width: 430px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
-.connection-form { width: min(440px,calc(100% - 56px)); margin: auto; }
+.connection-form { width: min(440px,calc(100% - 56px)); margin: auto; padding: 30px; border: 1px solid var(--line); border-radius: 16px; background: #fff; }
 .environment-switch { display: grid; grid-template-columns: 1fr 1fr; padding: 4px; margin-bottom: 22px; border-radius: 10px; background: var(--soft); }
 .environment-switch label { margin: 0; }
 .environment-switch input { position: absolute; opacity: 0; pointer-events: none; }
@@ -969,6 +969,7 @@ input:focus {
   background: #eef0fa;
 }
 .vault-preview {
+  grid-column: 1 / -1;
   background: linear-gradient(145deg, #fafbfe, #f0f2f8);
 }
 .vault-preview:before,
@@ -1044,12 +1045,12 @@ input:focus {
   height: calc(100% - 106px);
 }
 .arcade-view { display: block; }
-.arcade-library { height: 100%; display: grid; grid-template-columns: minmax(280px, .62fr) minmax(430px, 1.38fr); }
+.arcade-library { height: 100%; display: block; }
 .arcade-intro { display: flex; flex-direction: column; justify-content: center; padding: clamp(34px, 5vw, 76px); border-right: 1px solid var(--line); }
 .arcade-intro small, .game-top small, .game-score small { color: var(--muted); font-size: 9px; letter-spacing: .14em; }
 .arcade-intro h2 { margin: 13px 0 9px; font-size: clamp(38px, 4.5vw, 64px); line-height: 1; letter-spacing: -.06em; }
 .arcade-intro p { margin: 0; color: var(--muted); font-size: 13px; }
-.game-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; align-content: center; padding: clamp(24px, 4vw, 60px); background: linear-gradient(145deg, #f8fbfc, #eef5f6); }
+.game-list { height: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-content: center; padding: clamp(24px, 4vw, 60px); background: linear-gradient(145deg, #f8fbfc, #eef5f6); }
 .game-card { min-width: 0; height: 280px; display: flex; flex-direction: column; align-items: flex-start; padding: 20px; border: 1px solid #d8e5e8; border-radius: 15px; color: var(--text); background: rgba(255,255,255,.82); text-align: left; cursor: pointer; transition: transform .18s ease, box-shadow .18s ease; }
 .game-card:hover { transform: translateY(-4px); box-shadow: 0 18px 36px rgba(27,52,64,.09); }
 .game-card > span { color: var(--muted); font-size: 9px; }

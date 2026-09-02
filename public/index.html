@@ -78,15 +78,9 @@
       </section>
       <section class="dashboard hidden" id="dashboard">
         <aside class="side-nav">
-          <div class="side-title">APLIKACE</div>
           <a class="side-link active" href="#dashboard" data-view="overview"
             ><span>⌂</span><b>Přehled</b></a
-          ><a class="side-link" href="#kryptotron" data-view="overview"
-            ><span>◉</span><b>Kryptotron</b></a
-          >
-          <div class="side-spacer"></div>
-          <div class="side-title">OCEAN</div>
-          <a class="side-link" href="#arcade" data-view="arcade"
+          ><a class="side-link" href="#arcade" data-view="arcade"
             ><span>▣</span><b>Arcade</b></a
           ><a class="side-link" href="#vault" data-view="vault"
             ><span>◇</span><b>Vault</b></a
@@ -107,12 +101,6 @@
           <div class="dashboard-grid app-view" id="overview-view">
             <section class="kryptotron-card" id="kryptotron">
               <div class="connection-panel hidden" id="connection-panel">
-                <div class="connection-copy">
-                  <span class="app-icon">K</span>
-                  <small>KRYPTOTRON</small>
-                  <h2 id="connection-title">Připojit Binance</h2>
-                  <p id="connection-description">Váš účet zůstává na Binance. Ocean dostane pouze přístup ke čtení a obchodování.</p>
-                </div>
                 <form class="connection-form" id="connection-form" autocomplete="off">
                   <div class="environment-switch" role="group" aria-label="Prostředí">
                     <label><input type="radio" name="environment" value="testnet" checked /><span>Testnet</span></label>
@@ -265,7 +253,6 @@
             id="arcade-view"
           >
             <div class="arcade-library" id="arcade-library">
-              <div class="arcade-intro"><small>OCEAN ARCADE</small><h2>Vyber si ponor.</h2><p>Tři krátké hry. Jeden vstup.</p></div>
               <div class="game-list">
                 <button class="game-card sonar" type="button" data-game="sonar"><span>01</span><div><h3>Sonar</h3><p>Zastav pulz v cílovém kruhu.</p></div><b>◎</b></button>
                 <button class="game-card dive" type="button" data-game="dive"><span>02</span><div><h3>Dive</h3><p>Měň směr a propluj hlubinou.</p></div><b>⌁</b></button>
@@ -278,12 +265,6 @@
             class="ocean-module vault-view app-view hidden"
             id="vault-view"
           >
-            <div class="module-copy">
-              <span class="module-symbol">◇</span><small>OCEAN / 03</small>
-              <h2>Vault</h2>
-              <p>Soukromý prostor pro vaše aktiva.</p>
-              <span class="module-state">Ve vývoji</span>
-            </div>
             <div class="module-preview vault-preview" aria-hidden="true">
               <div class="vault-core"><i></i><span>SEALED</span></div>
             </div>
