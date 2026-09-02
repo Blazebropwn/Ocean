@@ -797,6 +797,7 @@ def run():
     save_state(state)
     add_event(state, "SYSTEM", f"Kryptotron připraven · {mode.split()[-1]}")
     save_state(state)
+    log.info(f"Kryptotron připraven · {mode.split()[-1]}")
     process_telegram(state)
 
     while True:
