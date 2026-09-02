@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="cs">
+  <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pozvánky · Ocean</title><link rel="stylesheet" href="/styles.css"></head>
+  <body>
+    <header class="nav"><a class="brand" href="/">Ocean<span>.</span></a><a class="result-link" href="/">Zpět do Oceanu</a></header>
+    <main class="invite-page">
+      <section class="invite-shell">
+        <div class="invite-head"><div><small>SOUKROMÝ PŘÍSTUP</small><h1>Pozvánky</h1></div><span>OWNER</span></div>
+        <form class="invite-create" id="invite-form"><label>E-mail člena <small>nepovinné</small><input name="email" type="email" placeholder="pritel@example.com"></label><button class="primary" type="submit">Vytvořit pozvánku</button></form>
+        <div class="invite-result hidden" id="invite-result"><input id="invite-url" readonly><button id="copy-invite" type="button">Kopírovat</button></div>
+        <p class="message" id="invite-message" role="alert"></p>
+        <div class="invite-list-head"><strong>Poslední pozvánky</strong><small>Platnost 7 dní · jednorázové</small></div>
+        <div class="invite-list" id="invite-list"><p>Načítám…</p></div>
+      </section>
+    </main>
+    <script src="/invites.js" defer></script>
+  </body>
+</html>

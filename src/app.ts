@@ -6,8 +6,8 @@ import staticFiles from "@fastify/static";
 import { join } from "node:path";
 import type { Config } from "./config.js";
 import { openDatabase, publicUser, type UserRecord, type OceanDatabase } from "./db.js";
-import { changePasswordSchema, dcaAmountSchema, dcaControlSchema, kryptotronControlSchema, loginSchema, recoveryConfirmSchema, recoveryRequestSchema, registerSchema, streakControlSchema } from "./schemas.js";
-import { DUMMY_PASSWORD_HASH, hashPassword, hashToken, newSessionToken, newUserId, newVerificationToken, SESSION_TTL_SECONDS, verifyPassword } from "./security.js";
+import { changePasswordSchema, dcaAmountSchema, dcaControlSchema, invitationCreateSchema, kryptotronControlSchema, loginSchema, recoveryConfirmSchema, recoveryRequestSchema, registerSchema, streakControlSchema } from "./schemas.js";
+import { DUMMY_PASSWORD_HASH, hashPassword, hashToken, newInvitationId, newSessionToken, newUserId, newVerificationToken, SESSION_TTL_SECONDS, verifyPassword } from "./security.js";
 import { loadKryptotronSnapshot, setDcaAmount, setDcaEnabled, setKryptotronEntriesPaused, setStreakEnabled } from "./kryptotron.js";
 
 const COOKIE_NAME = "zero_session";
@@ -96,15 +96,34 @@ export function buildApp(config: Config, database?: OceanDatabase) {
     const parsed = registerSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? "Neplatné údaje." });
 
-    const { email, username, password } = parsed.data;
+    const { email, username, password, inviteToken } = parsed.data;
     const exists = db.prepare("SELECT 1 FROM users WHERE email = ? OR username = ?").get(email, username);
     if (exists) return reply.code(409).send({ error: "Účet s tímto e-mailem nebo uživatelským jménem již existuje." });
 
     const userId = newUserId();
     const passwordHash = await hashPassword(password);
     try {
-      db.prepare("INSERT INTO users (id, email, username, password_hash) VALUES (?, ?, ?, ?)").run(userId, email, username, passwordHash);
+      const register = db.transaction(() => {
+        const count = (db.prepare("SELECT COUNT(*) AS count FROM users").get() as { count: number }).count;
+        let role: "owner" | "member" = "owner";
+        let invitationId: string | null = null;
+        if (count > 0) {
+          if (!inviteToken) throw new Error("INVITATION_REQUIRED");
+          const invitation = db.prepare(`SELECT id, email FROM invitations WHERE token_hash = ? AND used_at IS NULL AND revoked_at IS NULL AND expires_at > datetime('now')`)
+            .get(hashToken(inviteToken)) as { id: string; email: string | null } | undefined;
+          if (!invitation || (invitation.email && invitation.email.toLowerCase() !== email)) throw new Error("INVITATION_REQUIRED");
+          role = "member";
+          invitationId = invitation.id;
+        }
+        db.prepare("INSERT INTO users (id, email, username, password_hash, role) VALUES (?, ?, ?, ?, ?)").run(userId, email, username, passwordHash, role);
+        if (invitationId) {
+          const consumed = db.prepare("UPDATE invitations SET used_by = ?, used_at = datetime('now') WHERE id = ? AND used_at IS NULL AND revoked_at IS NULL").run(userId, invitationId);
+          if (consumed.changes !== 1) throw new Error("INVITATION_REQUIRED");
+        }
+      });
+      register();
     } catch (error: any) {
+      if (error?.message === "INVITATION_REQUIRED") return reply.code(403).send({ error: "Platná pozvánka je vyžadována." });
       if (error?.code === "SQLITE_CONSTRAINT_UNIQUE") return reply.code(409).send({ error: "Účet s tímto e-mailem nebo uživatelským jménem již existuje." });
       throw error;
     }
@@ -238,6 +257,51 @@ export function buildApp(config: Config, database?: OceanDatabase) {
     }
     db.prepare("UPDATE sessions SET last_seen_at = datetime('now') WHERE id_hash = ?").run(hashToken(token!));
     return { user: publicUser(user) };
+  });
+
+  app.get("/api/invitations", async (request, reply) => {
+    const user = currentUser(db, request);
+    if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
+    if (user.role !== "owner") return reply.code(403).send({ error: "Tuto sekci může spravovat pouze vlastník." });
+    const invitations = db.prepare(`
+      SELECT id, email, expires_at AS expiresAt, used_at AS usedAt, revoked_at AS revokedAt, created_at AS createdAt,
+      CASE WHEN revoked_at IS NOT NULL THEN 'revoked' WHEN used_at IS NOT NULL THEN 'used' WHEN expires_at <= datetime('now') THEN 'expired' ELSE 'active' END AS status
+      FROM invitations WHERE created_by = ? ORDER BY created_at DESC LIMIT 50
+    `).all(user.id);
+    return { invitations };
+  });
+
+  app.post("/api/invitations", { config: { rateLimit: { max: 10, timeWindow: "1 hour" } } }, async (request, reply) => {
+    const user = currentUser(db, request);
+    if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
+    if (user.role !== "owner") return reply.code(403).send({ error: "Pozvánky může vytvářet pouze vlastník." });
+    if (!user.email_verified_at) return reply.code(403).send({ error: "Nejprve ověřte svůj e-mail." });
+    const parsed = invitationCreateSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? "Neplatné údaje." });
+    const token = newVerificationToken();
+    const id = newInvitationId();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const inviteUrl = `${config.appOrigin}/?invite=${encodeURIComponent(token)}`;
+    db.prepare("INSERT INTO invitations (id, token_hash, email, created_by, expires_at) VALUES (?, ?, ?, ?, ?)")
+      .run(id, hashToken(token), parsed.data.email, user.id, expiresAt);
+    if (parsed.data.email) {
+      db.prepare("INSERT INTO mail_outbox (recipient, subject, body) VALUES (?, ?, ?)")
+        .run(parsed.data.email, "Pozvánka do OCEAN", `Byli jste pozváni do OCEAN. Účet vytvoříte zde:\n\n${inviteUrl}\n\nPozvánka je jednorázová a platí 7 dní.`);
+    }
+    const meta = requestMeta(request);
+    db.prepare("INSERT INTO security_events (user_id, event_type, ip_address, user_agent) VALUES (?, 'INVITATION_CREATED', ?, ?)").run(user.id, meta.ip, meta.agent);
+    return reply.code(201).send({ invitation: { id, email: parsed.data.email, expiresAt, inviteUrl } });
+  });
+
+  app.delete("/api/invitations/:id", { config: { rateLimit: { max: 20, timeWindow: "1 hour" } } }, async (request, reply) => {
+    const user = currentUser(db, request);
+    if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
+    if (user.role !== "owner") return reply.code(403).send({ error: "Pozvánky může spravovat pouze vlastník." });
+    const id = (request.params as { id?: unknown }).id;
+    if (typeof id !== "string" || !/^inv_[a-f0-9]{32}$/.test(id)) return reply.code(400).send({ error: "Neplatná pozvánka." });
+    const revoked = db.prepare("UPDATE invitations SET revoked_at = datetime('now') WHERE id = ? AND created_by = ? AND used_at IS NULL AND revoked_at IS NULL").run(id, user.id);
+    if (revoked.changes !== 1) return reply.code(404).send({ error: "Aktivní pozvánka nebyla nalezena." });
+    return reply.code(204).send();
   });
 
   app.get("/api/kryptotron", async (request, reply) => {

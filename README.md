@@ -55,3 +55,8 @@ npm run build
 - mutace kontrolují `Origin` proti `APP_ORIGIN`.
 
 Před produkčním nasazením je potřeba připojit skutečný e-mailový provider, recovery, správu sessions/zařízení, mazání účtu a správu tajemství. Tyto funkce jsou záměrně další iterace v0.1, ne makety.
+# Ocean Invite Alpha
+
+Ocean je uzavřený systém. První účet získá roli `owner`; všechny další účty vyžadují jednorázovou pozvánku vytvořenou vlastníkem. Pozvánka platí sedm dní, lze ji omezit na konkrétní e-mail a před použitím ji lze zrušit. V databázi se ukládá pouze hash tokenu.
+
+Po přihlášení otevře vlastník správu přes profil → **Pozvánky**. Pro odkazy použitelné mimo lokální počítač musí `APP_ORIGIN` obsahovat veřejnou adresu Oceanu.

@@ -1,5 +1,7 @@
 const $ = (selector) => document.querySelector(selector);
 const message = $("#message");
+const registrationInviteToken = new URLSearchParams(location.search).get("invite");
+if (registrationInviteToken) history.replaceState(null, "", `${location.pathname}${location.hash}`);
 let kryptotronRefresh;
 let entriesPaused = false;
 let dcaEnabled = false;
@@ -37,6 +39,7 @@ function showUser(user) {
   $("#email").textContent = user.email;
   $("#email-status").textContent = user.emailVerified ? "✓ OVĚŘENO" : "ČEKÁ NA OVĚŘENÍ";
   $("#email-status").className = user.emailVerified ? "hidden verified" : "hidden pending";
+  $("#invite-admin-link").classList.toggle("hidden", user.role !== "owner");
   $("#verify-banner").classList.toggle("hidden", user.emailVerified);
   const initialView = location.hash === "#arcade" ? "arcade" : location.hash === "#vault" ? "vault" : "overview";
   const initialLink = document.querySelector(`.side-link[href="${location.hash || "#dashboard"}"]`);
@@ -382,6 +385,9 @@ for (const [id, path] of [["#register-form", "/api/auth/register"], ["#login-for
     setLoading(form, true);
     try {
       const body = Object.fromEntries(new FormData(form));
+      if (id === "#register-form") {
+        if (registrationInviteToken) body.inviteToken = registrationInviteToken;
+      }
       const result = await request(path, { method: "POST", body: JSON.stringify(body) });
       showUser(result.user);
     } catch (error) {

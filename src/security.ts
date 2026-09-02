@@ -8,6 +8,10 @@ export function newUserId() {
   return `usr_${randomUUID().replaceAll("-", "")}`;
 }
 
+export function newInvitationId() {
+  return `inv_${randomUUID().replaceAll("-", "")}`;
+}
+
 export function newSessionToken() {
   return randomBytes(32).toString("base64url");
 }

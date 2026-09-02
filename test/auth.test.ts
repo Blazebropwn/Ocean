@@ -4,8 +4,25 @@ import { buildApp } from "../src/app.js";
 import { openDatabase } from "../src/db.js";
 import type { Config } from "../src/config.js";
 import { DUMMY_PASSWORD_HASH, verifyPassword } from "../src/security.js";
+import Database from "better-sqlite3";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const config: Config = { port: 0, host: "127.0.0.1", databasePath: ":memory:", appOrigin: "http://localhost:3000", isProduction: false };
+
+test("legacy database promotes its first account to owner", () => {
+  const directory = mkdtempSync(join(tmpdir(), "ocean-invite-"));
+  const path = join(directory, "legacy.db");
+  const legacy = new Database(path);
+  legacy.exec(`CREATE TABLE users (public_id INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, email TEXT NOT NULL UNIQUE, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, email_verified_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now'))); INSERT INTO users (id,email,username,password_hash) VALUES ('usr_legacy','owner@example.com','legacy_owner','hash')`);
+  legacy.close();
+  const migrated = openDatabase(path);
+  const user = migrated.prepare("SELECT role FROM users WHERE id = 'usr_legacy'").get() as { role: string };
+  assert.equal(user.role, "owner");
+  migrated.close();
+  rmSync(directory, { recursive: true, force: true });
+});
 
 test("register creates an opaque identity and authenticated session", async () => {
   const app = buildApp(config, openDatabase(":memory:"));
@@ -15,7 +32,53 @@ test("register creates an opaque identity and authenticated session", async () =
   assert.match(body.user.id, /^usr_[a-f0-9]{32}$/);
   assert.equal(body.user.displayId, "OCEAN-000001");
   assert.equal(body.user.email, "ada@example.com");
+  assert.equal(body.user.role, "owner");
   assert.ok(response.headers["set-cookie"]?.toString().includes("HttpOnly"));
+  await app.close();
+});
+
+test("additional accounts require a single-use owner invitation", async () => {
+  const db = openDatabase(":memory:");
+  const app = buildApp(config, db);
+  const owner = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email: "owner@example.com", username: "owner", password: "owner password" } });
+  const ownerCookie = owner.headers["set-cookie"]?.toString().split(";")[0];
+  db.prepare("UPDATE users SET email_verified_at = datetime('now') WHERE username = 'owner'").run();
+
+  const blocked = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email: "friend@example.com", username: "friend", password: "friend password" } });
+  assert.equal(blocked.statusCode, 403);
+
+  const created = await app.inject({ method: "POST", url: "/api/invitations", headers: { cookie: ownerCookie! }, payload: { email: "friend@example.com" } });
+  assert.equal(created.statusCode, 201);
+  const inviteToken = new URL(created.json().invitation.inviteUrl).searchParams.get("invite");
+  const member = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email: "friend@example.com", username: "friend", password: "friend password", inviteToken } });
+  assert.equal(member.statusCode, 201);
+  assert.equal(member.json().user.role, "member");
+
+  const reused = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email: "other@example.com", username: "other", password: "other password", inviteToken } });
+  assert.equal(reused.statusCode, 403);
+  await app.close();
+});
+
+test("members cannot create invitations and owner can revoke an unused one", async () => {
+  const db = openDatabase(":memory:");
+  const app = buildApp(config, db);
+  const owner = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email: "captain@example.com", username: "captain", password: "captain password" } });
+  const ownerCookie = owner.headers["set-cookie"]?.toString().split(";")[0];
+  db.prepare("UPDATE users SET email_verified_at = datetime('now') WHERE username = 'captain'").run();
+  const invite = await app.inject({ method: "POST", url: "/api/invitations", headers: { cookie: ownerCookie! }, payload: { email: "" } });
+  const inviteId = invite.json().invitation.id;
+  const inviteToken = new URL(invite.json().invitation.inviteUrl).searchParams.get("invite");
+  const member = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email: "crew@example.com", username: "crew", password: "member password", inviteToken } });
+  const memberCookie = member.headers["set-cookie"]?.toString().split(";")[0];
+  const denied = await app.inject({ method: "POST", url: "/api/invitations", headers: { cookie: memberCookie! }, payload: { email: "" } });
+  assert.equal(denied.statusCode, 403);
+
+  const second = await app.inject({ method: "POST", url: "/api/invitations", headers: { cookie: ownerCookie! }, payload: { email: "second@example.com" } });
+  const revoked = await app.inject({ method: "DELETE", url: `/api/invitations/${second.json().invitation.id}`, headers: { cookie: ownerCookie! } });
+  assert.equal(revoked.statusCode, 204);
+  const invitations = await app.inject({ method: "GET", url: "/api/invitations", headers: { cookie: ownerCookie! } });
+  assert.equal(invitations.json().invitations.find((item: any) => item.id === second.json().invitation.id).status, "revoked");
+  assert.ok(inviteId.startsWith("inv_"));
   await app.close();
 });
 

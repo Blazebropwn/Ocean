@@ -8,6 +8,7 @@ export type UserRecord = {
   email: string;
   username: string;
   password_hash: string;
+  role: "owner" | "member";
   email_verified_at: string | null;
   created_at: string;
 };
@@ -18,6 +19,7 @@ export type PublicUser = {
   email: string;
   username: string;
   emailVerified: boolean;
+  role: "owner" | "member";
   createdAt: string;
 };
 
@@ -28,6 +30,7 @@ export function publicUser(user: UserRecord): PublicUser {
     email: user.email,
     username: user.username,
     emailVerified: Boolean(user.email_verified_at),
+    role: user.role,
     createdAt: user.created_at,
   };
 }
@@ -44,6 +47,7 @@ export function openDatabase(path: string) {
       email TEXT NOT NULL COLLATE NOCASE UNIQUE,
       username TEXT NOT NULL COLLATE NOCASE UNIQUE,
       password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'member')),
       email_verified_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -94,7 +98,26 @@ export function openDatabase(path: string) {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS security_events_user_id ON security_events(user_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS invitations (
+      id TEXT PRIMARY KEY,
+      token_hash TEXT NOT NULL UNIQUE,
+      email TEXT COLLATE NOCASE,
+      created_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      expires_at TEXT NOT NULL,
+      used_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+      used_at TEXT,
+      revoked_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS invitations_created_by ON invitations(created_by, created_at DESC);
+    CREATE INDEX IF NOT EXISTS invitations_token_hash ON invitations(token_hash);
   `);
+  const userColumns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
+  if (!userColumns.some((column) => column.name === "role")) {
+    db.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'member'))");
+  }
+  db.prepare(`UPDATE users SET role = 'owner' WHERE public_id = (SELECT MIN(public_id) FROM users) AND NOT EXISTS (SELECT 1 FROM users WHERE role = 'owner')`).run();
   return db;
 }
 
