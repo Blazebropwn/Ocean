@@ -12,7 +12,7 @@ export type KryptotronSnapshot = {
   entriesPaused: boolean;
   events: Array<{ type: string; message: string; at: string }>;
   balance: { amount: number | null; asset: string };
-  dca: { enabled: boolean; amount: number; symbols: string[]; completedWeek: string | null; totalInvested: number; purchaseCount: number; progress: Array<{ symbol: string; asset: string; quantity: number; target: number; percentage: number }>; lastRun: Array<{ symbol: string; status: string; amount: number | null; reason: string | null }> };
+  dca: { enabled: boolean; amount: number; symbols: string[]; completedWeek: string | null; totalInvested: number; purchaseCount: number; testStatus: string | null; progress: Array<{ symbol: string; asset: string; quantity: number; target: number; percentage: number }>; lastRun: Array<{ symbol: string; status: string; amount: number | null; reason: string | null }> };
   streak: { enabled: boolean; paperMode: boolean; rUsdc: number; status: string; streak: number; trades: number; wins: number; losses: number; netPnl: number; sessionDate: string | null; lockReason: string | null };
   positions: Array<{
     symbol: string;
@@ -231,6 +231,9 @@ export async function loadKryptotronSnapshot(url: string, key: string, stateKey 
       completedWeek: stringOrNull(rawDca.completed_week),
       totalInvested: dcaPurchases.reduce((sum, purchase) => sum + (finiteNumberOrNull(purchase.amount) ?? 0), 0),
       purchaseCount: dcaPurchases.length,
+      testStatus: rawDca.test_request && typeof rawDca.test_request === "object"
+        ? stringOrNull((rawDca.test_request as Record<string, unknown>).status)
+        : null,
       progress: dcaSymbols.map((symbol) => {
         const target = dcaTargets[symbol] ?? 1;
         const quantity = dcaPurchases.reduce((sum, purchase) => purchase.symbol === symbol ? sum + (finiteNumberOrNull(purchase.quantity) ?? 0) : sum, 0);

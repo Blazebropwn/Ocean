@@ -214,7 +214,11 @@ async function loadKryptotron() {
       : `${new Intl.NumberFormat("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(kryptotron.balance.amount)} ${kryptotron.balance.asset}`;
     $("#bot-position").textContent = open ? `${open.symbol} · v pozici` : "Bez otevřené pozice";
     dcaEnabled = kryptotron.dca.enabled;
-    $("#dca-test").classList.toggle("hidden", kryptotron.environment !== "testnet");
+    const dcaTest = $("#dca-test");
+    const dcaTestPending = kryptotron.dca.testStatus === "pending" || kryptotron.dca.testStatus === "processing";
+    dcaTest.classList.toggle("hidden", kryptotron.environment !== "testnet");
+    dcaTest.disabled = dcaTestPending;
+    dcaTest.textContent = dcaTestPending ? "Zpracovávám…" : kryptotron.dca.testStatus === "completed" ? "Otestovat znovu" : "Otestovat nákup";
     $("#dca-status").textContent = dcaEnabled ? (kryptotron.dca.completedWeek ? "Tento týden provedeno" : "Čeká na neděli") : "Pozastaveno";
     $("#dca-control").textContent = dcaEnabled ? "Vypnout" : "Zapnout";
     $("#dca-control").classList.toggle("enabled", dcaEnabled);
@@ -330,7 +334,7 @@ function renderEvents(events) {
     const item = document.createElement("li");
     const time = document.createElement("time");
     const text = document.createElement("span");
-    time.textContent = event.at ? new Intl.DateTimeFormat("cs-CZ", { hour: "2-digit", minute: "2-digit" }).format(new Date(event.at)) : "—";
+    time.textContent = event.at ? new Intl.DateTimeFormat("cs-CZ", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Prague" }).format(new Date(event.at)) : "—";
     text.textContent = event.message;
     item.append(time, text);
     list.append(item);
@@ -418,7 +422,7 @@ $("#streak-control").addEventListener("click", async () => {
 });
 
 function formatDate(value) {
-  return value ? new Intl.DateTimeFormat("cs-CZ", { dateStyle: "short", timeStyle: "short" }).format(new Date(value)) : "—";
+  return value ? new Intl.DateTimeFormat("cs-CZ", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Prague" }).format(new Date(value)) : "—";
 }
 
 function formatPrice(value, asset) {

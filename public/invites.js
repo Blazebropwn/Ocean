@@ -29,7 +29,7 @@ async function loadInvitations() {
     const detail = document.createElement("small");
     const state = document.createElement("span");
     email.textContent = invitation.email || "Pozvánka bez omezení e-mailu";
-    detail.textContent = `Platí do ${new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium", timeStyle: "short" }).format(new Date(invitation.expiresAt))}`;
+    detail.textContent = `Platí do ${new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Prague" }).format(new Date(invitation.expiresAt))}`;
     state.textContent = inviteStatus(invitation.status);
     state.className = `invite-status ${invitation.status}`;
     info.append(email, detail);

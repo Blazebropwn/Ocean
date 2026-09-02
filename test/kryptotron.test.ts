@@ -42,6 +42,7 @@ test("maps Kryptotron state and latest trade into the Ocean contract", async (t)
   assert.equal(snapshot.dca.enabled, true);
   assert.equal(snapshot.dca.totalInvested, 10);
   assert.equal(snapshot.dca.purchaseCount, 2);
+  assert.equal(snapshot.dca.testStatus, null);
   assert.deepEqual(snapshot.dca.progress[0], { symbol: "BTCUSDC", asset: "BTC", quantity: 0.0001, target: 1, percentage: 0.01 });
   assert.equal(snapshot.positions[0]?.protectionActive, true);
   assert.equal(snapshot.positions[0]?.protectionStatus, "ACTIVE");
