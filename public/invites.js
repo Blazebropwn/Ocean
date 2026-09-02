@@ -47,14 +47,15 @@ async function loadInvitations() {
 
 $("#invite-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const button = event.currentTarget.querySelector("button");
+  const form = event.currentTarget;
+  const button = form.querySelector("button");
   button.disabled = true;
   $("#invite-message").textContent = "";
   try {
-    const { invitation } = await inviteRequest("/api/invitations", { method: "POST", body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) });
+    const { invitation } = await inviteRequest("/api/invitations", { method: "POST", body: JSON.stringify(Object.fromEntries(new FormData(form))) });
     $("#invite-url").value = invitation.inviteUrl;
     $("#invite-result").classList.remove("hidden");
-    event.currentTarget.reset();
+    form.reset();
     await loadInvitations();
   } catch (error) {
     $("#invite-message").textContent = error.message;
@@ -64,8 +65,16 @@ $("#invite-form").addEventListener("submit", async (event) => {
 });
 
 $("#copy-invite").addEventListener("click", async () => {
-  await navigator.clipboard.writeText($("#invite-url").value);
+  const input = $("#invite-url");
+  try {
+    await navigator.clipboard.writeText(input.value);
+  } catch {
+    input.select();
+    document.execCommand("copy");
+    input.setSelectionRange(0, 0);
+  }
   $("#copy-invite").textContent = "Zkopírováno";
+  $("#invite-message").textContent = "";
 });
 
 inviteRequest("/api/me").then(({ user }) => {

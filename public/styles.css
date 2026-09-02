@@ -128,37 +128,11 @@ main {
 }
 .auth-screen {
   height: 100%;
-  display: grid;
-  grid-template-columns: 1fr minmax(360px, 440px);
+  display: flex;
   align-items: center;
-  gap: 10vw;
-  width: min(1120px, calc(100% - 48px));
+  justify-content: center;
+  width: min(440px, calc(100% - 48px));
   margin: auto;
-}
-.auth-intro {
-  max-width: 520px;
-}
-.product-mark {
-  width: 52px;
-  height: 52px;
-  display: grid;
-  place-items: center;
-  margin-bottom: 34px;
-  border-radius: 15px;
-  color: #fff;
-  background: var(--accent);
-  font-size: 21px;
-  font-weight: 700;
-}
-.auth-intro h1 {
-  margin: 0;
-  font-size: clamp(48px, 5vw, 72px);
-  line-height: 1.02;
-  letter-spacing: -0.065em;
-}
-.auth-intro p {
-  margin: 22px 0 0;
-  color: var(--muted);
 }
 .auth-card,
 .standalone-form {
@@ -167,6 +141,9 @@ main {
   border-radius: 18px;
   background: #fff;
   box-shadow: var(--shadow);
+}
+.auth-card {
+  width: 100%;
 }
 .tabs {
   display: flex;
@@ -727,12 +704,7 @@ input:focus {
     overflow: auto;
   }
   .auth-screen {
-    grid-template-columns: 1fr;
     width: min(440px, calc(100% - 32px));
-    gap: 28px;
-  }
-  .auth-intro h1 {
-    font-size: 42px;
   }
   .dashboard {
     grid-template-columns: 64px 1fr;
