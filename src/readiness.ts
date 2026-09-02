@@ -18,5 +18,6 @@ export function readinessIssues(config: Config, db: OceanDatabase) {
   if (config.isProduction && (!config.resendApiKey || !config.emailFrom)) {
     issues.push("Produkční e-mail není nastaven.");
   }
+  if (config.telegramBotToken && !config.telegramBotUsername) issues.push("Telegram bot nemá veřejné uživatelské jméno.");
   return issues;
 }

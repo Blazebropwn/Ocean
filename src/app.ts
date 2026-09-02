@@ -7,7 +7,7 @@ import { join } from "node:path";
 import type { Config } from "./config.js";
 import { openDatabase, publicUser, type KryptotronInstanceRecord, type UserRecord, type OceanDatabase } from "./db.js";
 import { binanceConnectionSchema, changePasswordSchema, dcaAmountSchema, dcaControlSchema, invitationCreateSchema, kryptotronControlSchema, loginSchema, recoveryConfirmSchema, recoveryRequestSchema, registerSchema, streakControlSchema } from "./schemas.js";
-import { DUMMY_PASSWORD_HASH, hashPassword, hashToken, newInvitationId, newSessionToken, newUserId, newVerificationToken, SESSION_TTL_SECONDS, verifyPassword } from "./security.js";
+import { DUMMY_PASSWORD_HASH, hashPassword, hashToken, newInvitationId, newSessionToken, newTelegramPairingCode, newUserId, newVerificationToken, SESSION_TTL_SECONDS, verifyPassword } from "./security.js";
 import { initializeKryptotronInstance, loadKryptotronSnapshot, loadKryptotronState, logKryptotronTrade, requestTestDca, saveKryptotronState, setDcaAmount, setDcaEnabled, setKryptotronEntriesPaused, setStreakEnabled } from "./kryptotron.js";
 import { verifyBinanceCredentials } from "./binance.js";
 import { credentialsKey, encryptCredential } from "./credentials.js";
@@ -361,6 +361,36 @@ export function buildApp(config: Config, database?: OceanDatabase) {
     if (typeof id !== "string" || !/^inv_[a-f0-9]{32}$/.test(id)) return reply.code(400).send({ error: "Neplatná pozvánka." });
     const revoked = db.prepare("UPDATE invitations SET revoked_at = datetime('now') WHERE id = ? AND created_by = ? AND used_at IS NULL AND revoked_at IS NULL").run(id, user.id);
     if (revoked.changes !== 1) return reply.code(404).send({ error: "Aktivní pozvánka nebyla nalezena." });
+    return reply.code(204).send();
+  });
+
+  app.get("/api/telegram", async (request, reply) => {
+    const user = currentUser(db, request);
+    if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
+    const connection = db.prepare("SELECT telegram_username, connected_at FROM telegram_connections WHERE user_id = ?").get(user.id) as { telegram_username: string | null; connected_at: string } | undefined;
+    return { telegram: { connected: Boolean(connection), username: connection?.telegram_username ?? null, connectedAt: connection?.connected_at ?? null, botUsername: config.telegramBotUsername ?? null, available: Boolean(config.telegramBotToken && config.telegramBotUsername) } };
+  });
+
+  app.post("/api/telegram/pairing", { config: { rateLimit: { max: 5, timeWindow: "1 hour" } } }, async (request, reply) => {
+    const user = currentUser(db, request);
+    if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
+    if (!config.telegramBotToken || !config.telegramBotUsername) return reply.code(503).send({ error: "Telegram zatím není nastavený." });
+    const code = newTelegramPairingCode();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    db.transaction(() => {
+      db.prepare("DELETE FROM telegram_pairings WHERE user_id = ?").run(user.id);
+      db.prepare("INSERT INTO telegram_pairings (token_hash, user_id, expires_at) VALUES (?, ?, ?)").run(hashToken(code), user.id, expiresAt);
+    })();
+    return reply.code(201).send({ pairing: { code, expiresAt, botUsername: config.telegramBotUsername } });
+  });
+
+  app.delete("/api/telegram", async (request, reply) => {
+    const user = currentUser(db, request);
+    if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
+    db.transaction(() => {
+      db.prepare("DELETE FROM telegram_pairings WHERE user_id = ?").run(user.id);
+      db.prepare("DELETE FROM telegram_connections WHERE user_id = ?").run(user.id);
+    })();
     return reply.code(204).send();
   });
 

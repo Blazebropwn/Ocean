@@ -71,6 +71,15 @@ RESEND_API_KEY=...
 EMAIL_FROM=Ocean <ocean@vase-domena.cz>
 ```
 
+Pro osobní Telegram propojení použijte samostatného bota, který současně neběží v Railway workeru:
+
+```text
+OCEAN_TELEGRAM_BOT_TOKEN=...
+OCEAN_TELEGRAM_BOT_USERNAME=vas_ocean_bot
+```
+
+Uživatel otevře Telegram z menu účtu a použije desetiminutový jednorázový kód. Centrální bot podporuje `/status` a bezpečné `/pause`; obnovení obchodování zůstává pouze v přihlášeném dashboardu.
+
 Pokud Ocean běží za reverzní proxy, vložte její přesnou adresu nebo CIDR do `TRUST_PROXY`. Nenechávejte aplikaci důvěřovat libovolnému proxy hopu.
 
 ## Bezpečnostní základy

@@ -153,6 +153,26 @@ export function openDatabase(path: string) {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS telegram_connections (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      chat_id TEXT NOT NULL UNIQUE,
+      telegram_username TEXT,
+      connected_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS telegram_pairings (
+      token_hash TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS telegram_bot_state (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      update_offset INTEGER NOT NULL DEFAULT 0
+    );
+    INSERT OR IGNORE INTO telegram_bot_state (id, update_offset) VALUES (1, 0);
   `);
   const userColumns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
   if (!userColumns.some((column) => column.name === "role")) {

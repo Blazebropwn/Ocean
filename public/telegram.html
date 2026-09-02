@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="cs">
+  <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Telegram · Ocean</title><link rel="stylesheet" href="/styles.css"></head>
+  <body>
+    <header class="nav"><a class="brand" href="/">Ocean<span>.</span></a><a class="result-link" href="/">Zpět</a></header>
+    <main class="invite-page">
+      <section class="invite-shell telegram-shell">
+        <div class="invite-head"><div><small>UPOZORNĚNÍ</small><h1>Telegram</h1></div><span id="telegram-state">—</span></div>
+        <div id="telegram-disconnected">
+          <button class="primary" id="create-telegram-code" type="button">Propojit Telegram</button>
+          <div class="telegram-code hidden" id="telegram-code"><strong id="pairing-code"></strong><a id="telegram-open" target="_blank" rel="noopener">Otevřít bota</a><small>Botovi pošlete <b id="pairing-command"></b>. Kód platí 10 minut.</small></div>
+        </div>
+        <div class="hidden" id="telegram-connected"><strong id="telegram-account">Propojeno</strong><small>Příkazy: /status a /pause</small><button class="danger-link" id="disconnect-telegram" type="button">Odpojit</button></div>
+        <p class="message" id="telegram-message" role="alert"></p>
+      </section>
+    </main>
+    <script src="/telegram.js" defer></script>
+  </body>
+</html>

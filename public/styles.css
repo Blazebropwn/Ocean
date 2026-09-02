@@ -1077,3 +1077,10 @@ input:focus {
 .game-bottom { display: flex; justify-content: space-between; padding-top: 14px; color: var(--muted); font-size: 10px; }.game-bottom strong { color: var(--text); }
 @media (max-width: 900px) { .arcade-library { grid-template-columns: 1fr; }.arcade-intro { border-right: 0; border-bottom: 1px solid var(--line); }.game-card { height: 210px; } }
 @media (max-width: 650px) { .game-list { grid-template-columns: 1fr; }.game-card { height: 130px; }.arcade-view { overflow: auto; }.game-top { grid-template-columns: 1fr 1fr; }.game-top > div:nth-child(2) { text-align: left; }.game-score { grid-row: 1; grid-column: 2; }.game-top > button { grid-row: 2; margin-top: 8px; } }
+.telegram-shell { max-width: 620px; }
+.telegram-code { margin-top: 18px; display: grid; gap: 12px; padding: 18px; border: 1px solid var(--line); border-radius: 12px; }
+.telegram-code > strong { font-size: 32px; letter-spacing: .18em; }
+.telegram-code > a { color: var(--accent); font-weight: 700; }
+.telegram-code > small, #telegram-connected small { display: block; color: var(--muted); }
+#telegram-connected { display: grid; gap: 14px; }
+.danger-link { justify-self: start; border: 0; background: transparent; color: #c94d5d; padding: 0; cursor: pointer; }

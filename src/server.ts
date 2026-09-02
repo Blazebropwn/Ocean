@@ -4,19 +4,23 @@ import { loadConfig } from "./config.js";
 import { openDatabase } from "./db.js";
 import { startKryptotronSupervisor } from "./supervisor.js";
 import { startMailer } from "./mailer.js";
+import { startTelegramBot } from "./telegram.js";
 
 const config = loadConfig();
 const db = openDatabase(config.databasePath);
 const app = buildApp(config, db);
 const mailer = startMailer(config, db, app.log);
 let supervisor: ReturnType<typeof startKryptotronSupervisor> | undefined;
+let telegram: ReturnType<typeof startTelegramBot> | undefined;
 
 try {
   await app.listen({ port: config.port, host: config.host });
   supervisor = startKryptotronSupervisor(config, db, app.log);
+  telegram = startTelegramBot(config, db, app.log);
 } catch (error) {
   supervisor?.stop();
   mailer.stop();
+  telegram?.stop();
   app.log.error(error);
   process.exit(1);
 }
@@ -25,6 +29,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, async () => {
     supervisor?.stop();
     mailer.stop();
+    telegram?.stop();
     await app.close();
     process.exit(0);
   });

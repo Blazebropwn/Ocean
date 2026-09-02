@@ -14,6 +14,8 @@ export type Config = {
   trustedProxies?: string[];
   resendApiKey?: string;
   emailFrom?: string;
+  telegramBotToken?: string;
+  telegramBotUsername?: string;
 };
 
 export function loadConfig(env = process.env): Config {
@@ -31,5 +33,7 @@ export function loadConfig(env = process.env): Config {
     trustedProxies: env.TRUST_PROXY?.split(",").map((value) => value.trim()).filter(Boolean),
     resendApiKey: env.RESEND_API_KEY,
     emailFrom: env.EMAIL_FROM,
+    telegramBotToken: env.OCEAN_TELEGRAM_BOT_TOKEN,
+    telegramBotUsername: env.OCEAN_TELEGRAM_BOT_USERNAME,
   };
 }
