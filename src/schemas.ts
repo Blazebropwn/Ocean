@@ -45,3 +45,10 @@ export const dcaAmountSchema = z.object({
 export const streakControlSchema = z.object({
   enabled: z.boolean(),
 });
+
+export const binanceConnectionSchema = z.object({
+  apiKey: z.string().trim().min(16).max(256),
+  apiSecret: z.string().trim().min(16).max(256),
+  environment: z.enum(["testnet", "mainnet"]),
+  withdrawalsDisabledConfirmed: z.literal(true),
+});

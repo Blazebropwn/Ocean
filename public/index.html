@@ -111,6 +111,25 @@
           </div>
           <div class="dashboard-grid app-view" id="overview-view">
             <section class="kryptotron-card" id="kryptotron">
+              <div class="connection-panel hidden" id="connection-panel">
+                <div class="connection-copy">
+                  <span class="app-icon">K</span>
+                  <small>KRYPTOTRON</small>
+                  <h2 id="connection-title">Připojit Binance</h2>
+                  <p id="connection-description">Váš účet zůstává na Binance. Ocean dostane pouze přístup ke čtení a obchodování.</p>
+                </div>
+                <form class="connection-form" id="connection-form" autocomplete="off">
+                  <div class="environment-switch" role="group" aria-label="Prostředí">
+                    <label><input type="radio" name="environment" value="testnet" checked /><span>Testnet</span></label>
+                    <label><input type="radio" name="environment" value="mainnet" /><span>Mainnet</span></label>
+                  </div>
+                  <label>API key<input name="apiKey" type="password" autocomplete="off" required minlength="16" /></label>
+                  <label>Secret key<input name="apiSecret" type="password" autocomplete="off" required minlength="16" /></label>
+                  <label class="safety-check"><input name="withdrawalsDisabledConfirmed" type="checkbox" required /><span>Výběry přes API jsou na Binance zakázané.</span></label>
+                  <button class="primary" type="submit">Ověřit a uložit</button>
+                  <p class="message" id="connection-message" role="alert"></p>
+                </form>
+              </div>
               <div class="kryptotron-overview">
                 <div class="app-heading">
                   <span class="app-icon">K</span>

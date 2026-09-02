@@ -6,9 +6,11 @@ import staticFiles from "@fastify/static";
 import { join } from "node:path";
 import type { Config } from "./config.js";
 import { openDatabase, publicUser, type KryptotronInstanceRecord, type UserRecord, type OceanDatabase } from "./db.js";
-import { changePasswordSchema, dcaAmountSchema, dcaControlSchema, invitationCreateSchema, kryptotronControlSchema, loginSchema, recoveryConfirmSchema, recoveryRequestSchema, registerSchema, streakControlSchema } from "./schemas.js";
+import { binanceConnectionSchema, changePasswordSchema, dcaAmountSchema, dcaControlSchema, invitationCreateSchema, kryptotronControlSchema, loginSchema, recoveryConfirmSchema, recoveryRequestSchema, registerSchema, streakControlSchema } from "./schemas.js";
 import { DUMMY_PASSWORD_HASH, hashPassword, hashToken, newInvitationId, newSessionToken, newUserId, newVerificationToken, SESSION_TTL_SECONDS, verifyPassword } from "./security.js";
 import { loadKryptotronSnapshot, setDcaAmount, setDcaEnabled, setKryptotronEntriesPaused, setStreakEnabled } from "./kryptotron.js";
+import { verifyBinanceCredentials } from "./binance.js";
+import { credentialsKey, encryptCredential } from "./credentials.js";
 
 const COOKIE_NAME = "zero_session";
 
@@ -313,6 +315,68 @@ export function buildApp(config: Config, database?: OceanDatabase) {
     const revoked = db.prepare("UPDATE invitations SET revoked_at = datetime('now') WHERE id = ? AND created_by = ? AND used_at IS NULL AND revoked_at IS NULL").run(id, user.id);
     if (revoked.changes !== 1) return reply.code(404).send({ error: "Aktivní pozvánka nebyla nalezena." });
     return reply.code(204).send();
+  });
+
+  app.get("/api/kryptotron/connection", async (request, reply) => {
+    const user = currentUser(db, request);
+    if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
+    const instance = kryptotronInstance(db, user.id);
+    if (!instance) return reply.code(404).send({ error: "Profil Kryptotrona nebyl nalezen." });
+    return {
+      connection: {
+        status: instance.status,
+        environment: instance.environment,
+        configured: instance.status !== "unconfigured" && instance.status !== "error",
+        legacy: instance.remote_state_key === "main",
+      },
+    };
+  });
+
+  app.post("/api/kryptotron/connection", { config: { rateLimit: { max: 5, timeWindow: "1 hour" } } }, async (request, reply) => {
+    const user = currentUser(db, request);
+    if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
+    if (!user.email_verified_at) return reply.code(403).send({ error: "Nejprve ověřte svůj e-mail." });
+    const instance = kryptotronInstance(db, user.id);
+    if (!instance) return reply.code(404).send({ error: "Profil Kryptotrona nebyl nalezen." });
+    if (instance.status === "connected" || instance.status === "provisioning") return reply.code(409).send({ error: "Kryptotron už je připojený nebo čeká na spuštění." });
+    const parsed = binanceConnectionSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "Zkontrolujte Binance údaje a potvrzení bezpečnosti." });
+
+    let encryptionKey: Buffer;
+    try {
+      encryptionKey = credentialsKey(config.credentialsEncryptionKey);
+    } catch {
+      return reply.code(503).send({ error: "Bezpečné ukládání klíčů zatím není nastavené." });
+    }
+
+    try {
+      const verification = await verifyBinanceCredentials(parsed.data.apiKey, parsed.data.apiSecret, parsed.data.environment);
+      const context = `${user.id}:${instance.id}`;
+      const encryptedApiKey = encryptCredential(parsed.data.apiKey, encryptionKey, `${context}:api-key`);
+      const encryptedSecret = encryptCredential(parsed.data.apiSecret, encryptionKey, `${context}:api-secret`);
+      const save = db.transaction(() => {
+        db.prepare(`
+          INSERT INTO kryptotron_credentials (
+            instance_id, api_key_ciphertext, api_key_iv, api_key_tag,
+            api_secret_ciphertext, api_secret_iv, api_secret_tag, verified_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          ON CONFLICT(instance_id) DO UPDATE SET
+            api_key_ciphertext = excluded.api_key_ciphertext, api_key_iv = excluded.api_key_iv, api_key_tag = excluded.api_key_tag,
+            api_secret_ciphertext = excluded.api_secret_ciphertext, api_secret_iv = excluded.api_secret_iv, api_secret_tag = excluded.api_secret_tag,
+            verified_at = datetime('now'), updated_at = datetime('now')
+        `).run(instance.id, encryptedApiKey.ciphertext, encryptedApiKey.iv, encryptedApiKey.tag, encryptedSecret.ciphertext, encryptedSecret.iv, encryptedSecret.tag);
+        db.prepare("UPDATE kryptotron_instances SET status = 'provisioning', environment = ?, updated_at = datetime('now') WHERE id = ?")
+          .run(parsed.data.environment, instance.id);
+        const meta = requestMeta(request);
+        db.prepare("INSERT INTO security_events (user_id, event_type, ip_address, user_agent) VALUES (?, 'BINANCE_CONNECTED', ?, ?)")
+          .run(user.id, meta.ip, meta.agent);
+      });
+      save();
+      return reply.code(201).send({ connection: { status: "provisioning", environment: parsed.data.environment, configured: true }, verification });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Binance připojení se nepodařilo ověřit.";
+      return reply.code(400).send({ error: message });
+    }
   });
 
   app.get("/api/kryptotron", async (request, reply) => {

@@ -135,6 +135,20 @@ export function openDatabase(path: string) {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS kryptotron_instances_user_id ON kryptotron_instances(user_id);
+
+    CREATE TABLE IF NOT EXISTS kryptotron_credentials (
+      instance_id TEXT PRIMARY KEY REFERENCES kryptotron_instances(id) ON DELETE CASCADE,
+      api_key_ciphertext TEXT NOT NULL,
+      api_key_iv TEXT NOT NULL,
+      api_key_tag TEXT NOT NULL,
+      api_secret_ciphertext TEXT NOT NULL,
+      api_secret_iv TEXT NOT NULL,
+      api_secret_tag TEXT NOT NULL,
+      key_version INTEGER NOT NULL DEFAULT 1,
+      verified_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
   const userColumns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
   if (!userColumns.some((column) => column.name === "role")) {

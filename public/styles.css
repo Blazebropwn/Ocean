@@ -650,6 +650,24 @@ input:focus {
   grid-template-columns: minmax(340px, 0.8fr) minmax(500px, 1.2fr);
   min-height: 0;
 }
+.kryptotron-card.connection-active { display: block; }
+.kryptotron-card.connection-active > .kryptotron-overview,
+.kryptotron-card.connection-active > .kryptotron-detail { display: none; }
+.connection-panel { height: 100%; display: grid; grid-template-columns: minmax(280px,.8fr) minmax(360px,1fr); }
+.connection-copy { display: flex; flex-direction: column; justify-content: center; padding: clamp(36px,6vw,90px); border-right: 1px solid var(--line); background: linear-gradient(145deg,#f4fbfb,#fff); }
+.connection-copy .app-icon { margin-bottom: 42px; }
+.connection-copy > small { color: var(--accent); font-size: 9px; font-weight: 700; letter-spacing: .18em; }
+.connection-copy h2 { margin: 10px 0 14px; font-size: clamp(34px,4vw,58px); letter-spacing: -.055em; }
+.connection-copy p { max-width: 430px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
+.connection-form { width: min(440px,calc(100% - 56px)); margin: auto; }
+.environment-switch { display: grid; grid-template-columns: 1fr 1fr; padding: 4px; margin-bottom: 22px; border-radius: 10px; background: var(--soft); }
+.environment-switch label { margin: 0; }
+.environment-switch input { position: absolute; opacity: 0; pointer-events: none; }
+.environment-switch span { display: block; padding: 10px; border-radius: 7px; color: var(--muted); font-size: 11px; text-align: center; cursor: pointer; }
+.environment-switch input:checked + span { color: var(--accent); background: #fff; box-shadow: 0 2px 10px #18363d12; font-weight: 700; }
+.safety-check { display: flex; align-items: center; gap: 10px; margin: 18px 0; color: var(--ink); font-size: 11px; font-weight: 500; }
+.safety-check input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.connection-form .primary { margin-top: 0; }
 .kryptotron-overview {
   display: flex;
   min-width: 0;
@@ -740,6 +758,10 @@ input:focus {
   .kryptotron-card {
     grid-template-columns: 1fr;
   }
+  .connection-panel { grid-template-columns: 1fr; }
+  .connection-copy { padding: 34px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .connection-copy .app-icon { margin-bottom: 22px; }
+  .connection-form { padding: 34px 0; }
   .kryptotron-overview {
     min-height: 460px;
     border-right: 0;

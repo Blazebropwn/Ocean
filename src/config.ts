@@ -8,6 +8,7 @@ export type Config = {
   isProduction: boolean;
   kryptotronSupabaseUrl?: string;
   kryptotronSupabaseKey?: string;
+  credentialsEncryptionKey?: string;
 };
 
 export function loadConfig(env = process.env): Config {
@@ -19,5 +20,6 @@ export function loadConfig(env = process.env): Config {
     isProduction: env.NODE_ENV === "production",
     kryptotronSupabaseUrl: env.KRYPTOTRON_SUPABASE_URL,
     kryptotronSupabaseKey: env.KRYPTOTRON_SUPABASE_KEY,
+    credentialsEncryptionKey: env.OCEAN_CREDENTIALS_KEY,
   };
 }

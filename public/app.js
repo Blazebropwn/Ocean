@@ -44,9 +44,9 @@ function showUser(user) {
   const initialView = location.hash === "#arcade" ? "arcade" : location.hash === "#vault" ? "vault" : "overview";
   const initialLink = document.querySelector(`.side-link[href="${location.hash || "#dashboard"}"]`);
   showAppView(initialView, initialLink);
-  loadKryptotron();
+  initializeKryptotron();
   clearInterval(kryptotronRefresh);
-  kryptotronRefresh = setInterval(loadKryptotron, 60_000);
+  kryptotronRefresh = setInterval(initializeKryptotron, 60_000);
 }
 
 function showAppView(view, activeLink = null) {
@@ -254,6 +254,49 @@ async function loadKryptotron() {
     $("#bot-position").textContent = error.message;
   }
 }
+
+async function initializeKryptotron() {
+  try {
+    const { connection } = await request("/api/kryptotron/connection");
+    const panel = $("#connection-panel");
+    const form = $("#connection-form");
+    if (connection.status === "connected") {
+      panel.classList.add("hidden");
+      $("#kryptotron").classList.remove("connection-active");
+      await loadKryptotron();
+      return;
+    }
+    panel.classList.remove("hidden");
+    $("#kryptotron").classList.add("connection-active");
+    const provisioning = connection.status === "provisioning";
+    form.classList.toggle("hidden", provisioning);
+    $("#connection-title").textContent = provisioning ? "Připojení je připravené" : "Připojit Binance";
+    $("#connection-description").textContent = provisioning
+      ? "Klíče jsou bezpečně uložené. Kryptotron čeká na vytvoření vlastní instance."
+      : "Váš účet zůstává na Binance. Ocean dostane pouze přístup ke čtení a obchodování.";
+  } catch (error) {
+    $("#kryptotron-status").lastChild.textContent = " Nepřipojeno";
+  }
+}
+
+$("#connection-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const feedback = $("#connection-message");
+  feedback.textContent = "";
+  setLoading(form, true);
+  try {
+    const body = Object.fromEntries(new FormData(form));
+    body.withdrawalsDisabledConfirmed = body.withdrawalsDisabledConfirmed === "on";
+    await request("/api/kryptotron/connection", { method: "POST", body: JSON.stringify(body) });
+    form.reset();
+    await initializeKryptotron();
+  } catch (error) {
+    feedback.textContent = error.message;
+  } finally {
+    setLoading(form, false);
+  }
+});
 
 function renderDcaProgress(progress) {
   const container = $("#dca-progress");
