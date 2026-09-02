@@ -19,12 +19,15 @@ test("personal worker environment is isolated and forced to Testnet", () => {
       SESSION_SECRET: "ocean-session-secret",
     },
     { id: "kry_0123456789abcdef0123456789abcdef", environment: "testnet" },
-    "member-key", "member-secret", config,
+    "member-key", "member-secret", config, "scoped-token",
   );
   assert.equal(environment.BINANCE_API_KEY, "member-key");
   assert.equal(environment.BINANCE_API_SECRET, "member-secret");
   assert.equal(environment.KRYPTOTRON_INSTANCE_ID, "kry_0123456789abcdef0123456789abcdef");
   assert.equal(environment.TESTNET, "true");
+  assert.equal(environment.SUPABASE_KEY, "");
+  assert.equal(environment.OCEAN_STATE_TOKEN, "scoped-token");
+  assert.equal(environment.OCEAN_STATE_URL, "http://127.0.0.1:0/internal/kryptotron");
   assert.equal(environment.TELEGRAM_TOKEN, "");
   assert.equal(environment.DCA_ENABLED, "false");
   assert.equal(environment.STREAK_ENABLED, "false");

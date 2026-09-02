@@ -45,9 +45,13 @@ class PersistenceIsolationTests(unittest.TestCase):
     def setUp(self):
         self.client = Client()
         db._sb = self.client
+        db._broker_url = ""
+        db._broker_headers = {}
 
     def tearDown(self):
         db._sb = None
+        db._broker_url = ""
+        db._broker_headers = {}
 
     @patch.object(db, "INSTANCE_ID", "usr_alpha")
     def test_state_is_loaded_and_saved_only_for_configured_instance(self):
@@ -61,6 +65,20 @@ class PersistenceIsolationTests(unittest.TestCase):
         db.log_trade("BTCUSDC", 10, 11, 1, 1, "WIN")
         inserts = [call[2] for call in self.client.calls if call[:2] == ("bot_trades", "insert")]
         self.assertEqual(inserts[0]["instance_id"], "usr_alpha")
+
+    @patch.object(db.requests, "get")
+    def test_broker_load_uses_scoped_headers(self, get):
+        response = get.return_value
+        response.status_code = 200
+        response.json.return_value = {"state": {"owner": "scoped"}}
+        db._broker_url = "http://127.0.0.1/internal/kryptotron"
+        db._broker_headers = {"Authorization": "Bearer token", "X-Ocean-Instance": "usr_alpha"}
+        self.assertEqual(db.load_state(), {"owner": "scoped"})
+        get.assert_called_once_with(
+            "http://127.0.0.1/internal/kryptotron/state",
+            headers=db._broker_headers,
+            timeout=8,
+        )
 
 
 if __name__ == "__main__":

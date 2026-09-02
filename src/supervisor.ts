@@ -5,6 +5,7 @@ import type { FastifyBaseLogger } from "fastify";
 import type { Config } from "./config.js";
 import { credentialsKey, decryptCredential } from "./credentials.js";
 import type { OceanDatabase } from "./db.js";
+import { workerAccessToken } from "./worker-auth.js";
 
 type RunnableInstance = {
   id: string;
@@ -34,7 +35,7 @@ export function workerHeartbeatExpired(worker: Pick<ManagedChild, "ready" | "sta
   return now > deadline;
 }
 
-export function workerEnvironment(base: NodeJS.ProcessEnv, instance: Pick<RunnableInstance, "id" | "environment">, apiKey: string, apiSecret: string, config: Config): NodeJS.ProcessEnv {
+export function workerEnvironment(base: NodeJS.ProcessEnv, instance: Pick<RunnableInstance, "id" | "environment">, apiKey: string, apiSecret: string, config: Config, accessToken?: string): NodeJS.ProcessEnv {
   const inherited = Object.fromEntries(
     ["PATH", "LANG", "LC_ALL", "TZ", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"]
       .flatMap((name) => base[name] === undefined ? [] : [[name, base[name]]]),
@@ -45,8 +46,10 @@ export function workerEnvironment(base: NodeJS.ProcessEnv, instance: Pick<Runnab
     BINANCE_API_SECRET: apiSecret,
     TESTNET: String(instance.environment === "testnet"),
     KRYPTOTRON_INSTANCE_ID: instance.id,
-    SUPABASE_URL: config.kryptotronSupabaseUrl ?? "",
-    SUPABASE_KEY: config.kryptotronSupabaseKey ?? "",
+    SUPABASE_URL: accessToken ? "" : config.kryptotronSupabaseUrl ?? "",
+    SUPABASE_KEY: accessToken ? "" : config.kryptotronSupabaseKey ?? "",
+    OCEAN_STATE_URL: accessToken ? `http://127.0.0.1:${config.port}/internal/kryptotron` : "",
+    OCEAN_STATE_TOKEN: accessToken ?? "",
     TELEGRAM_TOKEN: "",
     TELEGRAM_CHAT_ID: "",
     DCA_ENABLED: "false",
@@ -110,7 +113,7 @@ export function startKryptotronSupervisor(config: Config, db: OceanDatabase, log
         const script = resolve(process.cwd(), "services", "kryptotron", "bot.py");
         const child = spawn(config.kryptotronPython ?? "python", [script], {
           cwd: workingDirectory,
-          env: workerEnvironment(process.env, instance, apiKey, apiSecret, config),
+          env: workerEnvironment(process.env, instance, apiKey, apiSecret, config, workerAccessToken(encryptionKey, instance.id)),
           stdio: ["ignore", "pipe", "pipe"],
         });
         const managed = { process: child, startedAt: Date.now(), lastHeartbeatAt: Date.now(), ready: false };

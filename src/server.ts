@@ -8,13 +8,14 @@ import { startMailer } from "./mailer.js";
 const config = loadConfig();
 const db = openDatabase(config.databasePath);
 const app = buildApp(config, db);
-const supervisor = startKryptotronSupervisor(config, db, app.log);
 const mailer = startMailer(config, db, app.log);
+let supervisor: ReturnType<typeof startKryptotronSupervisor> | undefined;
 
 try {
   await app.listen({ port: config.port, host: config.host });
+  supervisor = startKryptotronSupervisor(config, db, app.log);
 } catch (error) {
-  supervisor.stop();
+  supervisor?.stop();
   mailer.stop();
   app.log.error(error);
   process.exit(1);
@@ -22,7 +23,7 @@ try {
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, async () => {
-    supervisor.stop();
+    supervisor?.stop();
     mailer.stop();
     await app.close();
     process.exit(0);

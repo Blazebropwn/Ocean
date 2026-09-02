@@ -43,6 +43,32 @@ function statePath(stateKey: string, select = "data") {
   return `bot_state?key=eq.${encodeURIComponent(stateKey)}&select=${select}&limit=1`;
 }
 
+export async function loadKryptotronState(url: string, key: string, stateKey: string) {
+  const rows = await supabaseRows(url, key, statePath(stateKey));
+  const data = rows[0]?.data;
+  return data && typeof data === "object" ? data as Record<string, unknown> : null;
+}
+
+export async function saveKryptotronState(url: string, key: string, stateKey: string, data: Record<string, unknown>) {
+  const response = await fetch(`${url}/rest/v1/bot_state?key=eq.${encodeURIComponent(stateKey)}`, {
+    method: "PATCH",
+    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+    body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!response.ok) throw new Error(`Supabase odpověděl ${response.status}`);
+}
+
+export async function logKryptotronTrade(url: string, key: string, stateKey: string, trade: Record<string, unknown>) {
+  const response = await fetch(`${url}/rest/v1/bot_trades`, {
+    method: "POST",
+    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+    body: JSON.stringify({ ...trade, instance_id: stateKey }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!response.ok) throw new Error(`Supabase odpověděl ${response.status}`);
+}
+
 export async function initializeKryptotronInstance(url: string, key: string, stateKey: string, environment: "testnet" | "mainnet") {
   if (!/^kry_[a-f0-9]{32}$/.test(stateKey)) throw new Error("Neplatný identifikátor instance");
   const now = new Date().toISOString();

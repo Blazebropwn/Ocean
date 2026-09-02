@@ -40,6 +40,8 @@ Každý Ocean účet má vlastní záznam v `kryptotron_instances`. Původní Su
 
 Supabase používá `bot_state.key` jako identifikátor instance a `bot_trades.instance_id` pro oddělenou historii. Worker čte `KRYPTOTRON_INSTANCE_ID` a bez jeho nastavení zachová kompatibilní hodnotu `main`. Ocean vždy filtruje stav i poslední obchod podle instance přiřazené přihlášenému účtu.
 
+Osobní Testnet workery nedostávají globální Supabase serverový klíč. Komunikují přes interní state broker Oceanu pomocí tokenu kryptograficky svázaného s jediným ID instance. Původní samostatný Railway worker může dál používat přímé Supabase připojení kvůli zpětné kompatibilitě.
+
 Nové Binance připojení Ocean ověří přímo proti zvolenému Testnet/Mainnet API. Mainnet klíč přijme pouze s povoleným čtením a spotovým obchodováním a se zakázanými výběry. Údaje se ukládají samostatně zašifrované pomocí AES-256-GCM a po ověření čekají ve stavu `provisioning` na vytvoření workeru. Před prvním připojením nastavte v `.env` stabilní klíč, který je nutné bezpečně zálohovat:
 
 ```bash
