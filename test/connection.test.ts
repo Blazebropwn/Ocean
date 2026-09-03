@@ -40,6 +40,8 @@ test("invited member can verify and securely stage a personal Binance connection
   const owner = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email: "owner@example.com", username: "owner", password: "owner password" } });
   const ownerCookie = owner.headers["set-cookie"]?.toString().split(";")[0];
   db.prepare("UPDATE users SET email_verified_at = datetime('now') WHERE username = 'owner'").run();
+  const legacyDisconnect = await app.inject({ method: "DELETE", url: "/api/kryptotron/connection", headers: { cookie: ownerCookie! } });
+  assert.equal(legacyDisconnect.statusCode, 409);
   const invite = await app.inject({ method: "POST", url: "/api/invitations", headers: { cookie: ownerCookie! }, payload: { email: "diver@example.com" } });
   const inviteToken = new URL(invite.json().invitation.inviteUrl).searchParams.get("invite");
   const member = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email: "diver@example.com", username: "diver", password: "member password", inviteToken } });
@@ -64,5 +66,13 @@ test("invited member can verify and securely stage a personal Binance connection
   assert.equal(instance.remote_state_key, instance.id);
   const state = await app.inject({ method: "GET", url: "/api/kryptotron/connection", headers: { cookie: memberCookie! } });
   assert.deepEqual(state.json().connection, { status: "provisioning", environment: "testnet", configured: true, legacy: false });
+
+  const disconnected = await app.inject({ method: "DELETE", url: "/api/kryptotron/connection", headers: { cookie: memberCookie! } });
+  assert.equal(disconnected.statusCode, 204);
+  assert.equal(db.prepare("SELECT 1 FROM kryptotron_credentials WHERE instance_id = ?").get(instance.id), undefined);
+  const reset = db.prepare("SELECT status, environment, remote_state_key FROM kryptotron_instances WHERE id = ?").get(instance.id);
+  assert.deepEqual(reset, { status: "unconfigured", environment: "testnet", remote_state_key: null });
+  const disconnectedState = await app.inject({ method: "GET", url: "/api/kryptotron/connection", headers: { cookie: memberCookie! } });
+  assert.deepEqual(disconnectedState.json().connection, { status: "unconfigured", environment: "testnet", configured: false, legacy: false });
   await app.close();
 });

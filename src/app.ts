@@ -465,6 +465,27 @@ export function buildApp(config: Config, database?: OceanDatabase) {
     }
   });
 
+  app.delete("/api/kryptotron/connection", { config: { rateLimit: { max: 5, timeWindow: "1 hour" } } }, async (request, reply) => {
+    const user = currentUser(db, request);
+    if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
+    const instance = kryptotronInstance(db, user.id);
+    if (!instance) return reply.code(404).send({ error: "Profil Kryptotrona nebyl nalezen." });
+    if (instance.remote_state_key === "main") {
+      return reply.code(409).send({ error: "Hlavní Kryptotron nelze odpojit tímto způsobem." });
+    }
+
+    const meta = requestMeta(request);
+    db.transaction(() => {
+      db.prepare("DELETE FROM kryptotron_credentials WHERE instance_id = ?").run(instance.id);
+      db.prepare(`UPDATE kryptotron_instances
+        SET remote_state_key = NULL, status = 'unconfigured', environment = 'testnet', updated_at = datetime('now')
+        WHERE id = ? AND user_id = ?`).run(instance.id, user.id);
+      db.prepare("INSERT INTO security_events (user_id, event_type, ip_address, user_agent) VALUES (?, 'BINANCE_DISCONNECTED', ?, ?)")
+        .run(user.id, meta.ip, meta.agent);
+    })();
+    return reply.code(204).send();
+  });
+
   app.get("/api/kryptotron", async (request, reply) => {
     const user = currentUser(db, request);
     if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });

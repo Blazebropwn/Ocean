@@ -265,12 +265,15 @@ async function initializeKryptotron() {
     const { connection } = await request("/api/kryptotron/connection");
     const panel = $("#connection-panel");
     const form = $("#connection-form");
+    const disconnect = $("#disconnect-binance");
     if (connection.status === "connected") {
       panel.classList.add("hidden");
+      disconnect.classList.toggle("hidden", connection.legacy);
       $("#kryptotron").classList.remove("connection-active");
       await loadKryptotron();
       return;
     }
+    disconnect.classList.add("hidden");
     panel.classList.remove("hidden");
     $("#kryptotron").classList.add("connection-active");
     const provisioning = connection.status === "provisioning";
@@ -282,6 +285,10 @@ async function initializeKryptotron() {
       $("#provisioning-detail").textContent = mainnet
         ? "Automatické spouštění mainnet workerů zatím Ocean nepodporuje. Ozvěte se prosím správci účtu."
         : "Testnet worker se po ověření spustí automaticky.";
+    } else if (connection.status === "error") {
+      $("#connection-message").textContent = "Připojení se nepodařilo spustit. Vložte platné klíče znovu.";
+    } else {
+      $("#connection-message").textContent = "";
     }
   } catch (error) {
     $("#kryptotron-status").lastChild.textContent = " Nepřipojeno";
@@ -304,6 +311,23 @@ $("#connection-form").addEventListener("submit", async (event) => {
     feedback.textContent = error.message;
   } finally {
     setLoading(form, false);
+  }
+});
+
+$("#disconnect-binance").addEventListener("click", async (event) => {
+  if (!window.confirm("Odpojit Binance a bezpečně odstranit uložené API klíče?")) return;
+  const button = event.currentTarget;
+  button.disabled = true;
+  button.textContent = "Odpojuji…";
+  try {
+    await request("/api/kryptotron/connection", { method: "DELETE" });
+    entriesPaused = true;
+    await initializeKryptotron();
+  } catch (error) {
+    $("#connection-message").textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = "Odpojit Binance";
   }
 });
 

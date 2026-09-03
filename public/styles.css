@@ -650,6 +650,8 @@ input:focus {
 .safety-check { display: flex; align-items: center; gap: 10px; margin: 18px 0; color: var(--ink); font-size: 11px; font-weight: 500; }
 .safety-check input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
 .connection-form .primary { margin-top: 0; }
+.connection-disconnect { margin-left: 8px; border: 0; color: var(--danger); background: transparent; font-size: 9px; cursor: pointer; }
+.connection-disconnect:disabled { opacity: .55; cursor: wait; }
 .kryptotron-overview {
   display: flex;
   min-width: 0;

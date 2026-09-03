@@ -52,6 +52,8 @@ openssl rand -base64 32
 
 Výsledek vložte jako `OCEAN_CREDENTIALS_KEY`. Jeho ztráta znemožní rozšifrovat uložená Binance připojení; jeho změna vyžaduje řízenou rotaci klíčů.
 
+Člen může své Testnet Binance připojení odpojit přímo v Přehledu. Ocean odstraní šifrované API údaje, zneplatní přístup osobního workeru a vrátí instanci do stavu `unconfigured`. Nové připojení pak slouží jako bezpečná výměna klíčů. Zpětně kompatibilní vlastnická instance `main` je před tímto postupem chráněná.
+
 Po registraci otevřete na profilu **Otevřít mailbox** a použijte poslední ověřovací odkaz. Jde o lokální vývojovou náhradu skutečného e-mailového providera; endpoint mailboxu v produkčním režimu vrací 404.
 
 ```bash
