@@ -1,0 +1,13 @@
+.git
+.env
+.railway
+.venv
+venv
+node_modules
+dist
+data
+logs
+**/__pycache__
+**/.pytest_cache
+*.log
+state.json
