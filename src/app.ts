@@ -230,6 +230,9 @@ export function buildApp(config: Config, database?: OceanDatabase) {
   app.post("/api/auth/recovery/request", { config: { rateLimit: { max: 5, timeWindow: "1 hour" } } }, async (request, reply) => {
     const parsed = recoveryRequestSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Zadejte platný e-mail." });
+    if (config.manualApprovalEnabled) {
+      return { message: "Požádejte vlastníka Oceanu o jednorázový odkaz pro obnovu hesla.", manual: true };
+    }
     const user = db.prepare("SELECT * FROM users WHERE email = ?").get(parsed.data.email) as UserRecord | undefined;
     if (user) {
       const token = newVerificationToken();
@@ -400,6 +403,27 @@ export function buildApp(config: Config, database?: OceanDatabase) {
     }
     const approved = db.prepare("SELECT * FROM users WHERE id = ?").get(member.id) as UserRecord;
     return { member: publicUser(approved, approvalMode(config)) };
+  });
+
+  app.post("/api/members/:id/password-reset", { config: { rateLimit: { max: 10, timeWindow: "1 hour" } } }, async (request, reply) => {
+    const owner = currentUser(db, request);
+    if (!owner) return reply.code(401).send({ error: "Nejste přihlášeni." });
+    if (owner.role !== "owner") return reply.code(403).send({ error: "Obnovu hesla může zahájit pouze vlastník." });
+    const id = (request.params as { id?: unknown }).id;
+    if (typeof id !== "string" || !/^usr_[a-f0-9]{32}$/.test(id)) return reply.code(400).send({ error: "Neplatný účet." });
+    const member = db.prepare("SELECT id FROM users WHERE id = ? AND role = 'member'").get(id) as { id: string } | undefined;
+    if (!member) return reply.code(404).send({ error: "Člen nebyl nalezen." });
+
+    const token = newVerificationToken();
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    const resetUrl = `${config.appOrigin}/reset-password.html?token=${encodeURIComponent(token)}`;
+    const meta = requestMeta(request);
+    db.transaction(() => {
+      db.prepare("DELETE FROM password_reset_tokens WHERE user_id = ?").run(member.id);
+      db.prepare("INSERT INTO password_reset_tokens (token_hash, user_id, expires_at) VALUES (?, ?, ?)").run(hashToken(token), member.id, expiresAt);
+      db.prepare("INSERT INTO security_events (user_id, event_type, ip_address, user_agent) VALUES (?, 'ADMIN_PASSWORD_RESET_ISSUED', ?, ?)").run(member.id, meta.ip, meta.agent);
+    })();
+    return reply.code(201).send({ reset: { resetUrl, expiresAt } });
   });
 
   app.get("/api/telegram", async (request, reply) => {

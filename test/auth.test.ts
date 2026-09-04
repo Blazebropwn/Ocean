@@ -118,6 +118,31 @@ test("owner approval unlocks an invited member in manual approval mode", async (
   const me = await app.inject({ method: "GET", url: "/api/me", headers: { cookie: memberCookie! } });
   assert.equal(me.json().user.accessApproved, true);
   assert.equal((db.prepare("SELECT COUNT(*) AS count FROM security_events WHERE event_type = 'MEMBER_APPROVED'").get() as { count: number }).count, 1);
+
+  const memberResetDenied = await app.inject({ method: "POST", url: `/api/members/${member.json().user.id}/password-reset`, headers: { cookie: memberCookie! }, payload: {} });
+  assert.equal(memberResetDenied.statusCode, 403);
+  const issued = await app.inject({ method: "POST", url: `/api/members/${member.json().user.id}/password-reset`, headers: { cookie: ownerCookie! }, payload: {} });
+  assert.equal(issued.statusCode, 201);
+  const resetToken = new URL(issued.json().reset.resetUrl).searchParams.get("token");
+  const changed = await app.inject({ method: "POST", url: "/api/auth/recovery/confirm", payload: { token: resetToken, password: "new friend password" } });
+  assert.equal(changed.statusCode, 200);
+  const oldSession = await app.inject({ method: "GET", url: "/api/me", headers: { cookie: memberCookie! } });
+  assert.equal(oldSession.statusCode, 401);
+  const newLogin = await app.inject({ method: "POST", url: "/api/auth/login", payload: { username: "friend", password: "new friend password" } });
+  assert.equal(newLogin.statusCode, 200);
+  const reused = await app.inject({ method: "POST", url: "/api/auth/recovery/confirm", payload: { token: resetToken, password: "another friend password" } });
+  assert.equal(reused.statusCode, 400);
+  assert.equal((db.prepare("SELECT COUNT(*) AS count FROM security_events WHERE event_type = 'ADMIN_PASSWORD_RESET_ISSUED'").get() as { count: number }).count, 1);
+  await app.close();
+});
+
+test("manual approval recovery directs users to the owner without sending mail", async () => {
+  const db = openDatabase(":memory:");
+  const app = buildApp({ ...config, manualApprovalEnabled: true }, db);
+  const response = await app.inject({ method: "POST", url: "/api/auth/recovery/request", payload: { email: "anyone@example.com" } });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().manual, true);
+  assert.equal((db.prepare("SELECT COUNT(*) AS count FROM mail_outbox").get() as { count: number }).count, 0);
   await app.close();
 });
 

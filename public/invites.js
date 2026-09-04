@@ -84,6 +84,25 @@ async function loadMembers() {
       });
       row.append(approve);
     }
+    const resetPassword = document.createElement("button");
+    resetPassword.type = "button";
+    resetPassword.className = "reset-member-password";
+    resetPassword.textContent = "Obnovit heslo";
+    resetPassword.addEventListener("click", async () => {
+      if (!window.confirm(`Vytvořit nový odkaz pro @${member.username}? Předchozí odkaz přestane platit.`)) return;
+      resetPassword.disabled = true;
+      try {
+        const { reset } = await inviteRequest(`/api/members/${member.id}/password-reset`, { method: "POST", body: "{}" });
+        $("#member-reset-url").value = reset.resetUrl;
+        $("#member-reset-result").classList.remove("hidden");
+        $("#invite-message").textContent = `Odkaz pro @${member.username} platí 30 minut.`;
+      } catch (error) {
+        $("#invite-message").textContent = error.message;
+      } finally {
+        resetPassword.disabled = false;
+      }
+    });
+    row.append(resetPassword);
     list.append(row);
   }
 }
@@ -118,6 +137,18 @@ $("#copy-invite").addEventListener("click", async () => {
   }
   $("#copy-invite").textContent = "Zkopírováno";
   $("#invite-message").textContent = "";
+});
+
+$("#copy-member-reset").addEventListener("click", async () => {
+  const input = $("#member-reset-url");
+  try {
+    await navigator.clipboard.writeText(input.value);
+  } catch {
+    input.select();
+    document.execCommand("copy");
+    input.setSelectionRange(0, 0);
+  }
+  $("#copy-member-reset").textContent = "Zkopírováno";
 });
 
 inviteRequest("/api/me").then(({ user }) => {

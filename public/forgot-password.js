@@ -9,7 +9,9 @@ form.addEventListener("submit", async (event) => {
     const body = await response.json();
     if (!response.ok) throw new Error(body.error);
     message.className = "message success";
-    message.textContent = `${body.message} Při místním vývoji jej najdete ve vývojové schránce.`;
-    const link = document.createElement("a"); link.className = "form-link"; link.href = "/mailbox.html"; link.textContent = "Otevřít schránku →"; form.append(link);
+    message.textContent = body.message;
+    if (!body.manual) {
+      const link = document.createElement("a"); link.className = "form-link"; link.href = "/mailbox.html"; link.textContent = "Otevřít schránku →"; form.append(link);
+    }
   } catch (error) { message.textContent = error.message; button.disabled = false; }
 });
