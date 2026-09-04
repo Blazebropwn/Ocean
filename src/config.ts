@@ -16,6 +16,7 @@ export type Config = {
   emailFrom?: string;
   telegramBotToken?: string;
   telegramBotUsername?: string;
+  manualApprovalEnabled?: boolean;
 };
 
 export function loadConfig(env = process.env): Config {
@@ -35,5 +36,6 @@ export function loadConfig(env = process.env): Config {
     emailFrom: env.EMAIL_FROM,
     telegramBotToken: env.OCEAN_TELEGRAM_BOT_TOKEN,
     telegramBotUsername: env.OCEAN_TELEGRAM_BOT_USERNAME,
+    manualApprovalEnabled: env.OCEAN_MANUAL_APPROVAL_ENABLED === "true",
   };
 }

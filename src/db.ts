@@ -10,6 +10,8 @@ export type UserRecord = {
   password_hash: string;
   role: "owner" | "member";
   email_verified_at: string | null;
+  approved_at: string | null;
+  approved_by: string | null;
   created_at: string;
 };
 
@@ -19,6 +21,9 @@ export type PublicUser = {
   email: string;
   username: string;
   emailVerified: boolean;
+  approved: boolean;
+  accessApproved: boolean;
+  approvalMode: "owner" | "email";
   role: "owner" | "member";
   createdAt: string;
 };
@@ -33,13 +38,16 @@ export type KryptotronInstanceRecord = {
   updated_at: string;
 };
 
-export function publicUser(user: UserRecord): PublicUser {
+export function publicUser(user: UserRecord, approvalMode: "owner" | "email" = "email"): PublicUser {
   return {
     id: user.id,
     displayId: `OCEAN-${String(user.public_id).padStart(6, "0")}`,
     email: user.email,
     username: user.username,
     emailVerified: Boolean(user.email_verified_at),
+    approved: Boolean(user.approved_at),
+    accessApproved: approvalMode === "owner" ? Boolean(user.approved_at) : Boolean(user.email_verified_at),
+    approvalMode,
     role: user.role,
     createdAt: user.created_at,
   };
@@ -63,6 +71,8 @@ export function openDatabase(path: string) {
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'member')),
       email_verified_at TEXT,
+      approved_at TEXT,
+      approved_by TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -178,11 +188,19 @@ export function openDatabase(path: string) {
   if (!userColumns.some((column) => column.name === "role")) {
     db.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'member'))");
   }
+  if (!userColumns.some((column) => column.name === "approved_at")) db.exec("ALTER TABLE users ADD COLUMN approved_at TEXT");
+  if (!userColumns.some((column) => column.name === "approved_by")) db.exec("ALTER TABLE users ADD COLUMN approved_by TEXT");
   const mailColumns = db.prepare("PRAGMA table_info(mail_outbox)").all() as Array<{ name: string }>;
   if (!mailColumns.some((column) => column.name === "sent_at")) db.exec("ALTER TABLE mail_outbox ADD COLUMN sent_at TEXT");
   if (!mailColumns.some((column) => column.name === "attempts")) db.exec("ALTER TABLE mail_outbox ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0");
   if (!mailColumns.some((column) => column.name === "last_error")) db.exec("ALTER TABLE mail_outbox ADD COLUMN last_error TEXT");
   db.prepare(`UPDATE users SET role = 'owner' WHERE public_id = (SELECT MIN(public_id) FROM users) AND NOT EXISTS (SELECT 1 FROM users WHERE role = 'owner')`).run();
+  db.prepare(`
+    UPDATE users
+    SET approved_at = COALESCE(approved_at, created_at),
+        approved_by = COALESCE(approved_by, id)
+    WHERE role = 'owner'
+  `).run();
   db.prepare(`
     INSERT INTO kryptotron_instances (id, user_id, remote_state_key, status, environment)
     SELECT 'kry_' || lower(hex(randomblob(16))), id, 'main', 'connected', 'mainnet'

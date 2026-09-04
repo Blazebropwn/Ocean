@@ -15,7 +15,7 @@ export function readinessIssues(config: Config, db: OceanDatabase) {
   if (config.kryptotronSupervisorEnabled && (!config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey)) {
     issues.push("Supervisor nemá úložiště stavů.");
   }
-  if (config.isProduction && (!config.resendApiKey || !config.emailFrom)) {
+  if (config.isProduction && !config.manualApprovalEnabled && (!config.resendApiKey || !config.emailFrom)) {
     issues.push("Produkční e-mail není nastaven.");
   }
   if (config.telegramBotToken && !config.telegramBotUsername) issues.push("Telegram bot nemá veřejné uživatelské jméno.");

@@ -45,6 +45,49 @@ async function loadInvitations() {
   }
 }
 
+async function loadMembers() {
+  const { members } = await inviteRequest("/api/members");
+  const list = $("#member-list");
+  list.replaceChildren();
+  if (!members.length) {
+    const empty = document.createElement("p");
+    empty.textContent = "Zatím žádní členové.";
+    list.append(empty);
+    return;
+  }
+  for (const member of members) {
+    const row = document.createElement("article");
+    const info = document.createElement("div");
+    const name = document.createElement("strong");
+    const detail = document.createElement("small");
+    const state = document.createElement("span");
+    name.textContent = `@${member.username}`;
+    detail.textContent = member.email;
+    state.textContent = member.approved ? "Schválen" : "Čeká";
+    state.className = `invite-status ${member.approved ? "active" : "pending"}`;
+    info.append(name, detail);
+    row.append(info, state);
+    if (!member.approved) {
+      const approve = document.createElement("button");
+      approve.type = "button";
+      approve.className = "approve-member";
+      approve.textContent = "Schválit";
+      approve.addEventListener("click", async () => {
+        approve.disabled = true;
+        try {
+          await inviteRequest(`/api/members/${member.id}/approval`, { method: "POST", body: "{}" });
+          await loadMembers();
+        } catch (error) {
+          $("#invite-message").textContent = error.message;
+          approve.disabled = false;
+        }
+      });
+      row.append(approve);
+    }
+    list.append(row);
+  }
+}
+
 $("#invite-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -56,7 +99,7 @@ $("#invite-form").addEventListener("submit", async (event) => {
     $("#invite-url").value = invitation.inviteUrl;
     $("#invite-result").classList.remove("hidden");
     form.reset();
-    await loadInvitations();
+    await Promise.all([loadInvitations(), loadMembers()]);
   } catch (error) {
     $("#invite-message").textContent = error.message;
   } finally {
@@ -79,5 +122,5 @@ $("#copy-invite").addEventListener("click", async () => {
 
 inviteRequest("/api/me").then(({ user }) => {
   if (user.role !== "owner") throw new Error("Tuto sekci může otevřít pouze vlastník.");
-  return loadInvitations();
+  return Promise.all([loadInvitations(), loadMembers()]);
 }).catch((error) => { $("#invite-message").textContent = error.message; });

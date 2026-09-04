@@ -3,6 +3,7 @@ const message = $("#message");
 const registrationInviteToken = new URLSearchParams(location.search).get("invite");
 if (registrationInviteToken) history.replaceState(null, "", `${location.pathname}${location.hash}`);
 let kryptotronRefresh;
+let approvalRefresh;
 let entriesPaused = false;
 let dcaEnabled = false;
 let streakEnabled = false;
@@ -27,7 +28,9 @@ async function request(path, options = {}) {
 }
 
 function showUser(user) {
+  const accessApproved = user.accessApproved ?? user.emailVerified;
   document.body.classList.add("dashboard-active");
+  document.body.classList.toggle("access-pending", !accessApproved);
   $("#welcome").classList.add("hidden");
   $("#dashboard").classList.remove("hidden");
   $("#nav-account").classList.remove("hidden");
@@ -41,12 +44,22 @@ function showUser(user) {
   $("#email-status").textContent = user.emailVerified ? "✓ OVĚŘENO" : "ČEKÁ NA OVĚŘENÍ";
   $("#email-status").className = user.emailVerified ? "hidden verified" : "hidden pending";
   $("#invite-admin-link").classList.toggle("hidden", user.role !== "owner");
-  $("#verify-banner").classList.toggle("hidden", user.emailVerified);
+  $("#verify-banner").classList.toggle("hidden", accessApproved);
+  $("#verify-banner-text").textContent = user.approvalMode === "owner" ? "Účet čeká na schválení vlastníkem." : "Ověřte svůj e-mail.";
+  $("#verify-mailbox-link").classList.toggle("hidden", user.approvalMode === "owner");
+  $("#resend-verification").classList.toggle("hidden", user.approvalMode === "owner");
   const initialView = location.hash === "#arcade" ? "arcade" : location.hash === "#vault" ? "vault" : "overview";
   const initialLink = document.querySelector(`.side-link[href="${location.hash || "#dashboard"}"]`);
   showAppView(initialView, initialLink);
-  initializeKryptotron();
   clearInterval(kryptotronRefresh);
+  clearInterval(approvalRefresh);
+  if (!accessApproved) {
+    approvalRefresh = setInterval(() => request("/api/me").then(({ user: refreshedUser }) => {
+      if (refreshedUser.accessApproved) showUser(refreshedUser);
+    }).catch(() => {}), 10_000);
+    return;
+  }
+  initializeKryptotron();
   kryptotronRefresh = setInterval(initializeKryptotron, 60_000);
 }
 

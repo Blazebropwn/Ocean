@@ -76,6 +76,14 @@ function connectedKryptotronInstance(db: OceanDatabase, userId: string) {
   return instance?.status === "connected" && instance.remote_state_key ? instance : undefined;
 }
 
+function approvalMode(config: Config): "owner" | "email" {
+  return config.manualApprovalEnabled ? "owner" : "email";
+}
+
+function hasApprovedAccess(user: UserRecord, config: Config) {
+  return config.manualApprovalEnabled ? Boolean(user.approved_at) : Boolean(user.email_verified_at);
+}
+
 function issueVerification(db: OceanDatabase, user: UserRecord, config: Config) {
   const token = newVerificationToken();
   const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
@@ -173,7 +181,9 @@ export function buildApp(config: Config, database?: OceanDatabase) {
           role = "member";
           invitationId = invitation.id;
         }
-        db.prepare("INSERT INTO users (id, email, username, password_hash, role) VALUES (?, ?, ?, ?, ?)").run(userId, email, username, passwordHash, role);
+        db.prepare(`INSERT INTO users (id, email, username, password_hash, role, approved_at, approved_by)
+          VALUES (?, ?, ?, ?, ?, CASE WHEN ? = 'owner' THEN datetime('now') ELSE NULL END, CASE WHEN ? = 'owner' THEN ? ELSE NULL END)`)
+          .run(userId, email, username, passwordHash, role, role, role, userId);
         db.prepare("INSERT INTO kryptotron_instances (id, user_id, remote_state_key, status, environment) VALUES (?, ?, ?, ?, ?)")
           .run(`kry_${userId.slice(4)}`, userId, role === "owner" ? "main" : null, role === "owner" ? "connected" : "unconfigured", role === "owner" ? "mainnet" : "testnet");
         if (invitationId) {
@@ -192,8 +202,8 @@ export function buildApp(config: Config, database?: OceanDatabase) {
     const token = createSession(db, userId, request);
     setSessionCookie(reply, token, config);
     const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as UserRecord;
-    issueVerification(db, user, config);
-    return reply.code(201).send({ user: publicUser(user) });
+    if (!config.manualApprovalEnabled) issueVerification(db, user, config);
+    return reply.code(201).send({ user: publicUser(user, approvalMode(config)) });
   });
 
   app.post("/api/auth/login", { config: { rateLimit: { max: 8, timeWindow: "15 minutes" } } }, async (request, reply) => {
@@ -207,7 +217,7 @@ export function buildApp(config: Config, database?: OceanDatabase) {
     const meta = requestMeta(request);
     db.prepare("INSERT INTO security_events (user_id, event_type, ip_address, user_agent) VALUES (?, 'SIGNED_IN', ?, ?)").run(user.id, meta.ip, meta.agent);
     setSessionCookie(reply, token, config);
-    return { user: publicUser(user) };
+    return { user: publicUser(user, approvalMode(config)) };
   });
 
   app.post("/api/auth/logout", async (request, reply) => {
@@ -278,6 +288,7 @@ export function buildApp(config: Config, database?: OceanDatabase) {
   app.post("/api/auth/verification/resend", { config: { rateLimit: { max: 3, timeWindow: "1 hour" } } }, async (request, reply) => {
     const user = currentUser(db, request);
     if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
+    if (config.manualApprovalEnabled) return reply.code(409).send({ error: "Přístup k účtu schvaluje vlastník Oceanu." });
     if (user.email_verified_at) return { message: "E-mail už je ověřený." };
     issueVerification(db, user, config);
     return { message: "Nový ověřovací e-mail byl odeslán." };
@@ -316,7 +327,7 @@ export function buildApp(config: Config, database?: OceanDatabase) {
       return reply.code(401).send({ error: "Relace vypršela." });
     }
     db.prepare("UPDATE sessions SET last_seen_at = datetime('now') WHERE id_hash = ?").run(hashToken(token!));
-    return { user: publicUser(user) };
+    return { user: publicUser(user, approvalMode(config)) };
   });
 
   app.get("/api/invitations", async (request, reply) => {
@@ -335,7 +346,7 @@ export function buildApp(config: Config, database?: OceanDatabase) {
     const user = currentUser(db, request);
     if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
     if (user.role !== "owner") return reply.code(403).send({ error: "Pozvánky může vytvářet pouze vlastník." });
-    if (!user.email_verified_at) return reply.code(403).send({ error: "Nejprve ověřte svůj e-mail." });
+    if (!hasApprovedAccess(user, config)) return reply.code(403).send({ error: "Účet ještě nebyl schválen." });
     const parsed = invitationCreateSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? "Neplatné údaje." });
     const token = newVerificationToken();
@@ -344,7 +355,7 @@ export function buildApp(config: Config, database?: OceanDatabase) {
     const inviteUrl = `${config.appOrigin}/?invite=${encodeURIComponent(token)}`;
     db.prepare("INSERT INTO invitations (id, token_hash, email, created_by, expires_at) VALUES (?, ?, ?, ?, ?)")
       .run(id, hashToken(token), parsed.data.email, user.id, expiresAt);
-    if (parsed.data.email) {
+    if (parsed.data.email && !config.manualApprovalEnabled) {
       db.prepare("INSERT INTO mail_outbox (recipient, subject, body) VALUES (?, ?, ?)")
         .run(parsed.data.email, "Pozvánka do OCEAN", `Byli jste pozváni do OCEAN. Účet vytvoříte zde:\n\n${inviteUrl}\n\nPozvánka je jednorázová a platí 7 dní.`);
     }
@@ -364,6 +375,33 @@ export function buildApp(config: Config, database?: OceanDatabase) {
     return reply.code(204).send();
   });
 
+  app.get("/api/members", async (request, reply) => {
+    const owner = currentUser(db, request);
+    if (!owner) return reply.code(401).send({ error: "Nejste přihlášeni." });
+    if (owner.role !== "owner") return reply.code(403).send({ error: "Členy může spravovat pouze vlastník." });
+    const members = db.prepare("SELECT * FROM users WHERE role = 'member' ORDER BY created_at DESC").all() as UserRecord[];
+    return { members: members.map((member) => publicUser(member, approvalMode(config))) };
+  });
+
+  app.post("/api/members/:id/approval", { config: { rateLimit: { max: 20, timeWindow: "1 hour" } } }, async (request, reply) => {
+    const owner = currentUser(db, request);
+    if (!owner) return reply.code(401).send({ error: "Nejste přihlášeni." });
+    if (owner.role !== "owner") return reply.code(403).send({ error: "Členy může schvalovat pouze vlastník." });
+    const id = (request.params as { id?: unknown }).id;
+    if (typeof id !== "string" || !/^usr_[a-f0-9]{32}$/.test(id)) return reply.code(400).send({ error: "Neplatný účet." });
+    const member = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'member'").get(id) as UserRecord | undefined;
+    if (!member) return reply.code(404).send({ error: "Člen nebyl nalezen." });
+    if (!member.approved_at) {
+      const meta = requestMeta(request);
+      db.transaction(() => {
+        db.prepare("UPDATE users SET approved_at = datetime('now'), approved_by = ?, updated_at = datetime('now') WHERE id = ? AND approved_at IS NULL").run(owner.id, member.id);
+        db.prepare("INSERT INTO security_events (user_id, event_type, ip_address, user_agent) VALUES (?, 'MEMBER_APPROVED', ?, ?)").run(member.id, meta.ip, meta.agent);
+      })();
+    }
+    const approved = db.prepare("SELECT * FROM users WHERE id = ?").get(member.id) as UserRecord;
+    return { member: publicUser(approved, approvalMode(config)) };
+  });
+
   app.get("/api/telegram", async (request, reply) => {
     const user = currentUser(db, request);
     if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
@@ -374,6 +412,7 @@ export function buildApp(config: Config, database?: OceanDatabase) {
   app.post("/api/telegram/pairing", { config: { rateLimit: { max: 5, timeWindow: "1 hour" } } }, async (request, reply) => {
     const user = currentUser(db, request);
     if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
+    if (config.manualApprovalEnabled && !user.approved_at) return reply.code(403).send({ error: "Účet ještě nebyl schválen." });
     if (!config.telegramBotToken || !config.telegramBotUsername) return reply.code(503).send({ error: "Telegram zatím není nastavený." });
     const code = newTelegramPairingCode();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
@@ -412,7 +451,7 @@ export function buildApp(config: Config, database?: OceanDatabase) {
   app.post("/api/kryptotron/connection", { config: { rateLimit: { max: 5, timeWindow: "1 hour" } } }, async (request, reply) => {
     const user = currentUser(db, request);
     if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
-    if (!user.email_verified_at) return reply.code(403).send({ error: "Nejprve ověřte svůj e-mail." });
+    if (!hasApprovedAccess(user, config)) return reply.code(403).send({ error: "Účet ještě nebyl schválen." });
     const instance = kryptotronInstance(db, user.id);
     if (!instance) return reply.code(404).send({ error: "Profil Kryptotrona nebyl nalezen." });
     if (instance.status === "connected" || instance.status === "provisioning") return reply.code(409).send({ error: "Kryptotron už je připojený nebo čeká na spuštění." });

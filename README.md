@@ -10,7 +10,7 @@ Ocean/
 └── data/                   lokální databáze Oceanu
 ```
 
-Aktuální vertikální řez v0.1 obsahuje registraci, přihlášení pomocí username, odhlášení, změnu a obnovu hesla, chráněný profil, serverové sessions, ověření e-mailu a auditní události. E-mail ani username nejsou identita; účet má neměnné interní `usr_…` ID.
+Aktuální vertikální řez v0.1 obsahuje registraci, přihlášení pomocí username, odhlášení, změnu a obnovu hesla, chráněný profil, serverové sessions, vlastnické schvalování členů a auditní události. E-mail ani username nejsou identita; účet má neměnné interní `usr_…` ID.
 
 ## Spuštění
 
@@ -54,7 +54,7 @@ Výsledek vložte jako `OCEAN_CREDENTIALS_KEY`. Jeho ztráta znemožní rozšifr
 
 Člen může své Testnet Binance připojení odpojit přímo v Přehledu. Ocean odstraní šifrované API údaje, zneplatní přístup osobního workeru a vrátí instanci do stavu `unconfigured`. Nové připojení pak slouží jako bezpečná výměna klíčů. Zpětně kompatibilní vlastnická instance `main` je před tímto postupem chráněná.
 
-Po registraci otevřete na profilu **Otevřít mailbox** a použijte poslední ověřovací odkaz. Jde o lokální vývojovou náhradu skutečného e-mailového providera; endpoint mailboxu v produkčním režimu vrací 404.
+Při `OCEAN_MANUAL_APPROVAL_ENABLED=true` je první vlastnický účet schválen automaticky. Každý další pozvaný člen čeká na ruční schválení v profilu vlastníka pod **Pozvánky** a do té doby nemůže připojit Binance ani Telegram. E-mailové ověření zůstává dostupné pro instalace, které ruční režim nepoužívají.
 
 ```bash
 npm test
@@ -76,6 +76,14 @@ V produkci nastavte e-mailový outbox:
 RESEND_API_KEY=...
 EMAIL_FROM=Ocean <ocean@vase-domena.cz>
 ```
+
+V soukromém Oceanu lze místo něj použít ruční schvalování:
+
+```text
+OCEAN_MANUAL_APPROVAL_ENABLED=true
+```
+
+V tomto režimu se registrační ani pozvánkové e-maily neposílají; vlastník sdílí jednorázový odkaz a nového člena následně schválí. Obnova zapomenutého hesla nadále vyžaduje funkční e-mailový outbox.
 
 Pro osobní Telegram propojení použijte samostatného bota, který současně neběží v Railway workeru:
 
@@ -103,6 +111,6 @@ Před Mainnetem zůstává povinné dokončit rotaci tajemství, automatizované
 Supabase tabulky Kryptotronu `bot_state` a `bot_trades` mají zapnuté RLS bez veřejných policy a server k nim přistupuje pouze serverovým klíčem. Ve společném projektu CrackleCore existují také tabulky jiných aplikací; jejich policy upravujte odděleně, protože plošné zapnutí RLS může danou aplikaci zastavit.
 # Ocean Invite Alpha
 
-Ocean je uzavřený systém. První účet získá roli `owner`; všechny další účty vyžadují jednorázovou pozvánku vytvořenou vlastníkem. Pozvánka platí sedm dní, lze ji omezit na konkrétní e-mail a před použitím ji lze zrušit. V databázi se ukládá pouze hash tokenu.
+Ocean je uzavřený systém. První účet získá roli `owner`; všechny další účty vyžadují jednorázovou pozvánku vytvořenou vlastníkem. Pozvánka platí sedm dní, lze ji omezit na konkrétní e-mail a před použitím ji lze zrušit. V databázi se ukládá pouze hash tokenu. V režimu ručního schválení zůstane nový účet uzamčený, dokud jej vlastník nepotvrdí.
 
 Po přihlášení otevře vlastník správu přes profil → **Pozvánky**. Pro odkazy použitelné mimo lokální počítač musí `APP_ORIGIN` obsahovat veřejnou adresu Oceanu.

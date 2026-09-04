@@ -89,6 +89,38 @@ test("members cannot create invitations and owner can revoke an unused one", asy
   await app.close();
 });
 
+test("owner approval unlocks an invited member in manual approval mode", async () => {
+  const db = openDatabase(":memory:");
+  const app = buildApp({ ...config, manualApprovalEnabled: true }, db);
+  const owner = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email: "owner@example.com", username: "owner", password: "owner password" } });
+  const ownerCookie = owner.headers["set-cookie"]?.toString().split(";")[0];
+  assert.equal(owner.json().user.accessApproved, true);
+
+  const invitation = await app.inject({ method: "POST", url: "/api/invitations", headers: { cookie: ownerCookie! }, payload: { email: "friend@example.com" } });
+  assert.equal(invitation.statusCode, 201);
+  const inviteToken = new URL(invitation.json().invitation.inviteUrl).searchParams.get("invite");
+  const member = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email: "friend@example.com", username: "friend", password: "friend password", inviteToken } });
+  const memberCookie = member.headers["set-cookie"]?.toString().split(";")[0];
+  assert.equal(member.json().user.accessApproved, false);
+  assert.equal((db.prepare("SELECT COUNT(*) AS count FROM mail_outbox").get() as { count: number }).count, 0);
+
+  const blocked = await app.inject({ method: "POST", url: "/api/kryptotron/connection", headers: { cookie: memberCookie! }, payload: {} });
+  assert.equal(blocked.statusCode, 403);
+  const selfApproval = await app.inject({ method: "POST", url: `/api/members/${member.json().user.id}/approval`, headers: { cookie: memberCookie! }, payload: {} });
+  assert.equal(selfApproval.statusCode, 403);
+
+  const listed = await app.inject({ method: "GET", url: "/api/members", headers: { cookie: ownerCookie! } });
+  assert.equal(listed.json().members[0].approved, false);
+  const approval = await app.inject({ method: "POST", url: `/api/members/${member.json().user.id}/approval`, headers: { cookie: ownerCookie! }, payload: {} });
+  assert.equal(approval.statusCode, 200);
+  assert.equal(approval.json().member.approved, true);
+
+  const me = await app.inject({ method: "GET", url: "/api/me", headers: { cookie: memberCookie! } });
+  assert.equal(me.json().user.accessApproved, true);
+  assert.equal((db.prepare("SELECT COUNT(*) AS count FROM security_events WHERE event_type = 'MEMBER_APPROVED'").get() as { count: number }).count, 1);
+  await app.close();
+});
+
 test("login with username does not reveal whether an account exists", async () => {
   const app = buildApp(config, openDatabase(":memory:"));
   const response = await app.inject({ method: "POST", url: "/api/auth/login", payload: { username: "nobody", password: "anything" } });

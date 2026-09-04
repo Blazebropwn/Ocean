@@ -16,3 +16,10 @@ test("production readiness detects missing mail delivery", () => {
   assert.ok(issues.some((issue) => issue.includes("e-mail")));
   db.close();
 });
+
+test("manual approval mode does not require transactional email", () => {
+  const db = openDatabase(":memory:");
+  const issues = readinessIssues({ port: 0, host: "127.0.0.1", databasePath: ":memory:", appOrigin: "https://ocean.example", isProduction: true, manualApprovalEnabled: true }, db);
+  assert.deepEqual(issues, []);
+  db.close();
+});
