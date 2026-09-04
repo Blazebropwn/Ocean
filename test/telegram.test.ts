@@ -16,7 +16,7 @@ test("Telegram pairing code is hashed, single-use and binds one chat", async () 
   const pairing = await app.inject({ method: "POST", url: "/api/telegram/pairing", headers: { cookie: cookie! }, payload: {} });
   assert.equal(pairing.statusCode, 201);
   const code = pairing.json().pairing.code as string;
-  assert.match(code, /^[A-F0-9]{8}$/);
+  assert.match(code, /^[A-F0-9]{32}$/);
   const stored = db.prepare("SELECT token_hash FROM telegram_pairings").get() as { token_hash: string };
   assert.notEqual(stored.token_hash, code);
 

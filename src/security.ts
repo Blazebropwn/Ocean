@@ -21,7 +21,7 @@ export function newVerificationToken() {
 }
 
 export function newTelegramPairingCode() {
-  return randomBytes(4).toString("hex").toUpperCase();
+  return randomBytes(16).toString("hex").toUpperCase();
 }
 
 export function hashToken(token: string) {

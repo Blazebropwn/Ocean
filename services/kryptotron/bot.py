@@ -41,6 +41,7 @@ from events import add_event
 from dca import run_weekly_dca
 from streak import can_trade as streak_can_trade, close_trade as streak_close_trade, ensure_session as ensure_streak_session, open_trade as streak_open_trade
 from streak_strategy import paper_close_result, size_paper_setup, trend_pullback_signal
+from binance_safety import require_safe_api_permissions
 from telegram_control import (
     apply_action as apply_telegram_action,
     confirmation as telegram_confirmation,
@@ -667,7 +668,11 @@ def maybe_run_weekly_dca(client, state, pair_filters):
     if not weekly_summary_due(state):
         return
     refresh_entries_control(state)
+    if state.get("entries_paused"):
+        return
     if not state.get("dca", {}).get("enabled", False):
+        return
+    if not enforce_safe_api_permissions(client, state):
         return
     min_notionals = {symbol: pair_filters[symbol][2] for symbol in DCA_SYMBOLS}
     dca_amount = float(state.get("dca", {}).get("amount", DCA_AMOUNT_USDC))
@@ -759,6 +764,24 @@ def sleep_until_next_4h_candle(client, state, pair_filters, cycle_errors):
         time.sleep(min(60, remaining))
 
 
+def enforce_safe_api_permissions(client, state):
+    try:
+        require_safe_api_permissions(client, TESTNET)
+        return True
+    except Exception as exc:
+        state["entries_paused"] = True
+        state["last_error"] = str(exc)[:240]
+        save_state(state)
+        log.error(f"Nebezpečné nebo neověřitelné Binance API oprávnění: {exc}")
+        tg_alert(
+            state,
+            "unsafe-api-permissions",
+            f"🚨 <b>Nové obchody byly zastaveny</b>\n{str(exc)[:220]}",
+            180,
+        )
+        return False
+
+
 def run():
     if not API_KEY or not API_SECRET:
         log.error("Chybí BINANCE_API_KEY nebo BINANCE_API_SECRET!")
@@ -790,6 +813,7 @@ def run():
     client = Client(API_KEY, API_SECRET, testnet=TESTNET)
 
     try:
+        enforce_safe_api_permissions(client, state)
         pair_filters = {}
         protection_filters = {}
         for sym in sorted(set(symbols + DCA_SYMBOLS)):
@@ -851,6 +875,7 @@ def run():
         save_state(state)
         log.info("OCEAN_HEARTBEAT")
         try:
+            enforce_safe_api_permissions(client, state)
             state     = reset_periods(state)
             pair_data = {}
 

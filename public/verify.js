@@ -2,6 +2,7 @@ const title = document.querySelector("#verify-title");
 const message = document.querySelector("#verify-message");
 const link = document.querySelector("#continue");
 const token = new URLSearchParams(location.search).get("token");
+if (token) history.replaceState(null, "", location.pathname);
 
 fetch("/api/auth/verification/confirm", {
   method: "POST",

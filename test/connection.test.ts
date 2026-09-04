@@ -48,6 +48,12 @@ test("invited member can verify and securely stage a personal Binance connection
   const memberCookie = member.headers["set-cookie"]?.toString().split(";")[0];
   db.prepare("UPDATE users SET email_verified_at = datetime('now') WHERE username = 'diver'").run();
 
+  const mainnetBlocked = await app.inject({
+    method: "POST", url: "/api/kryptotron/connection", headers: { cookie: memberCookie! },
+    payload: { apiKey: "A".repeat(32), apiSecret: "S".repeat(32), environment: "mainnet", withdrawalsDisabledConfirmed: true },
+  });
+  assert.equal(mainnetBlocked.statusCode, 403);
+
   const connected = await app.inject({
     method: "POST", url: "/api/kryptotron/connection", headers: { cookie: memberCookie! },
     payload: { apiKey: "A".repeat(32), apiSecret: "S".repeat(32), environment: "testnet", withdrawalsDisabledConfirmed: true },

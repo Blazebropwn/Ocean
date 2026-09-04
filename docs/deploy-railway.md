@@ -30,11 +30,14 @@ OCEAN_CREDENTIALS_KEY=...
 OCEAN_TELEGRAM_BOT_TOKEN=...
 OCEAN_TELEGRAM_BOT_USERNAME=...
 OCEAN_MANUAL_APPROVAL_ENABLED=true
+TRUST_PROXY=100.0.0.0/8
 RESEND_API_KEY=...
 EMAIL_FROM=Ocean <ocean@vase-domena.cz>
 ```
 
 `KRYPTOTRON_SUPABASE_KEY`, `OCEAN_CREDENTIALS_KEY`, Telegram token ani Binance klíče nesmí být součástí repozitáře nebo veřejných proměnných frontendu. Hodnotu `OCEAN_CREDENTIALS_KEY` po vytvoření neměňte bez řízené rotace a samostatné zálohy.
+
+`TRUST_PROXY` je omezené na privátní proxy rozsah Railway. Nepoužívejte hodnotu `true`, která by důvěřovala libovolnému odesílateli hlaviček.
 
 ## 3. První kontrola
 

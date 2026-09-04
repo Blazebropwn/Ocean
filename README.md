@@ -44,7 +44,7 @@ Osobní Testnet workery nedostávají globální Supabase serverový klíč. Kom
 
 Po ověření Testnet klíčů supervisor nejpozději během deseti sekund spustí osobní worker. Sleduje jeho heartbeat, při výpadku jej restartuje s omezeným exponenciálním odstupem a po vyřazení instance proces ukončí. Automatické spouštění je omezené na izolované Testnet instance; původní vlastnický Mainnet worker zůstává samostatný.
 
-Nové Binance připojení Ocean ověří přímo proti zvolenému Testnet/Mainnet API. Mainnet klíč přijme pouze s povoleným čtením a spotovým obchodováním a se zakázanými výběry. Údaje se ukládají samostatně zašifrované pomocí AES-256-GCM a po ověření čekají ve stavu `provisioning` na vytvoření workeru. Před prvním připojením nastavte v `.env` stabilní klíč, který je nutné bezpečně zálohovat:
+Nové osobní Binance připojení Ocean přijímá pouze z Testnetu. Údaje se ukládají samostatně zašifrované pomocí AES-256-GCM a po ověření čekají ve stavu `provisioning` na vytvoření workeru. Původní vlastnický Mainnet worker zůstává samostatný; při startu a před každým obchodním cyklem znovu kontroluje čtení, spotové obchodování a zakázané výběry. Před prvním připojením nastavte v `.env` stabilní klíč, který je nutné bezpečně zálohovat:
 
 ```bash
 openssl rand -base64 32
@@ -92,7 +92,7 @@ OCEAN_TELEGRAM_BOT_TOKEN=...
 OCEAN_TELEGRAM_BOT_USERNAME=vas_ocean_bot
 ```
 
-Uživatel otevře Telegram z menu účtu a použije desetiminutový jednorázový kód. Centrální bot podporuje `/status` a bezpečné `/pause`; obnovení obchodování zůstává pouze v přihlášeném dashboardu.
+Uživatel otevře Telegram z menu účtu a použije desetiminutový jednorázový 128bitový kód. Centrální bot podporuje `/status` a bezpečné `/pause`; obnovení obchodování zůstává pouze v přihlášeném dashboardu.
 
 Pokud Ocean běží za reverzní proxy, vložte její přesnou adresu nebo CIDR do `TRUST_PROXY`. Nenechávejte aplikaci důvěřovat libovolnému proxy hopu.
 

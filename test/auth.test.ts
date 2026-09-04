@@ -236,6 +236,23 @@ test("password recovery resets the password, consumes the token and revokes sess
   await app.close();
 });
 
+test("password recovery token can be consumed by only one concurrent request", async () => {
+  const db = openDatabase(":memory:");
+  const app = buildApp(config, db);
+  await app.inject({ method: "POST", url: "/api/auth/register", payload: { email: "race@example.com", username: "race_user", password: "the original secure password" } });
+  await app.inject({ method: "POST", url: "/api/auth/recovery/request", payload: { email: "race@example.com" } });
+  const mail = db.prepare("SELECT body FROM mail_outbox WHERE subject = 'Obnova hesla OCEAN' ORDER BY id DESC LIMIT 1").get() as { body: string };
+  const token = new URL(mail.body.match(/https?:\/\/\S+/)![0]).searchParams.get("token");
+
+  const responses = await Promise.all([
+    app.inject({ method: "POST", url: "/api/auth/recovery/confirm", payload: { token, password: "first concurrent password" } }),
+    app.inject({ method: "POST", url: "/api/auth/recovery/confirm", payload: { token, password: "second concurrent password" } }),
+  ]);
+  assert.deepEqual(responses.map((response) => response.statusCode).sort(), [200, 400]);
+  assert.equal((db.prepare("SELECT COUNT(*) AS count FROM security_events WHERE event_type = 'PASSWORD_RESET'").get() as { count: number }).count, 1);
+  await app.close();
+});
+
 test("recovery request does not reveal whether an account exists", async () => {
   const app = buildApp(config, openDatabase(":memory:"));
   const response = await app.inject({ method: "POST", url: "/api/auth/recovery/request", payload: { email: "missing@example.com" } });

@@ -24,7 +24,7 @@ export async function processTelegramMessage(db: OceanDatabase, config: Config, 
   const parsed = command(message.text);
 
   if (parsed.name === "/link" || (parsed.name === "/start" && parsed.argument)) {
-    if (!/^[A-F0-9]{8}$/.test(parsed.argument)) return send(chatId, "Neplatný nebo chybějící párovací kód.");
+    if (!/^[A-F0-9]{32}$/.test(parsed.argument)) return send(chatId, "Neplatný nebo chybějící párovací kód.");
     const pairing = db.prepare("SELECT user_id FROM telegram_pairings WHERE token_hash = ? AND expires_at > datetime('now')")
       .get(hashToken(parsed.argument)) as { user_id: string } | undefined;
     if (!pairing) return send(chatId, "Párovací kód není platný nebo už vypršel.");

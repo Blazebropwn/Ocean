@@ -1,6 +1,7 @@
 const form = document.querySelector("#reset-form");
 const message = document.querySelector("#reset-message");
 const token = new URLSearchParams(location.search).get("token");
+if (token) history.replaceState(null, "", location.pathname);
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const values = Object.fromEntries(new FormData(form));

@@ -262,19 +262,30 @@ export function buildApp(config: Config, database?: OceanDatabase) {
   app.post("/api/auth/recovery/confirm", { config: { rateLimit: { max: 8, timeWindow: "15 minutes" } } }, async (request, reply) => {
     const parsed = recoveryConfirmSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? "Odkaz nebo heslo nejsou platné." });
+    const tokenHash = hashToken(parsed.data.token);
     const record = db.prepare(`SELECT user_id FROM password_reset_tokens WHERE token_hash = ? AND expires_at > datetime('now')`)
-      .get(hashToken(parsed.data.token)) as { user_id: string } | undefined;
+      .get(tokenHash) as { user_id: string } | undefined;
     if (!record) return reply.code(400).send({ error: "Odkaz je neplatný nebo vypršel." });
 
     const passwordHash = await hashPassword(parsed.data.password);
     const meta = requestMeta(request);
     const reset = db.transaction(() => {
+      const consumed = db.prepare(`DELETE FROM password_reset_tokens
+        WHERE token_hash = ? AND user_id = ? AND expires_at > datetime('now')`).run(tokenHash, record.user_id);
+      if (consumed.changes !== 1) throw new Error("RESET_TOKEN_ALREADY_USED");
       db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?").run(passwordHash, record.user_id);
       db.prepare("DELETE FROM password_reset_tokens WHERE user_id = ?").run(record.user_id);
       db.prepare("DELETE FROM sessions WHERE user_id = ?").run(record.user_id);
       db.prepare("INSERT INTO security_events (user_id, event_type, ip_address, user_agent) VALUES (?, 'PASSWORD_RESET', ?, ?)").run(record.user_id, meta.ip, meta.agent);
     });
-    reset();
+    try {
+      reset();
+    } catch (error) {
+      if (error instanceof Error && error.message === "RESET_TOKEN_ALREADY_USED") {
+        return reply.code(400).send({ error: "Odkaz je neplatný nebo už byl použit." });
+      }
+      throw error;
+    }
     reply.clearCookie(COOKIE_NAME, { path: "/" });
     return { message: "Heslo bylo změněno. Přihlaste se znovu." };
   });
@@ -492,6 +503,9 @@ export function buildApp(config: Config, database?: OceanDatabase) {
     if (instance.status === "connected" || instance.status === "provisioning") return reply.code(409).send({ error: "Kryptotron už je připojený nebo čeká na spuštění." });
     const parsed = binanceConnectionSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Zkontrolujte Binance údaje a potvrzení bezpečnosti." });
+    if (parsed.data.environment !== "testnet") {
+      return reply.code(403).send({ error: "Osobní Kryptotron je zatím dostupný pouze na Binance Testnetu." });
+    }
 
     let encryptionKey: Buffer;
     try {
