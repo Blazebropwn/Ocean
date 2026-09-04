@@ -1,6 +1,7 @@
 const $ = (selector) => document.querySelector(selector);
 async function api(path, options = {}) {
-  const response = await fetch(path, { headers: { "Content-Type": "application/json" }, ...options });
+  const headers = options.body === undefined ? {} : { "Content-Type": "application/json" };
+  const response = await fetch(path, { ...options, headers: { ...headers, ...options.headers } });
   if (response.status === 204) return null;
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.error || "Něco se nepovedlo.");
