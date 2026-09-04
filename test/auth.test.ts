@@ -146,6 +146,17 @@ test("manual approval recovery directs users to the owner without sending mail",
   await app.close();
 });
 
+test("manual approval mode keeps non-enumerating email recovery for the sole owner", async () => {
+  const db = openDatabase(":memory:");
+  const app = buildApp({ ...config, manualApprovalEnabled: true, resendApiKey: "test-key", emailFrom: "Ocean <owner@example.com>" }, db);
+  await app.inject({ method: "POST", url: "/api/auth/register", payload: { email: "owner@example.com", username: "owner", password: "owner password" } });
+  const ownerRequest = await app.inject({ method: "POST", url: "/api/auth/recovery/request", payload: { email: "owner@example.com" } });
+  const missingRequest = await app.inject({ method: "POST", url: "/api/auth/recovery/request", payload: { email: "missing@example.com" } });
+  assert.equal(ownerRequest.json().message, missingRequest.json().message);
+  assert.equal((db.prepare("SELECT COUNT(*) AS count FROM mail_outbox WHERE subject = 'Obnova hesla OCEAN'").get() as { count: number }).count, 1);
+  await app.close();
+});
+
 test("login with username does not reveal whether an account exists", async () => {
   const app = buildApp(config, openDatabase(":memory:"));
   const response = await app.inject({ method: "POST", url: "/api/auth/login", payload: { username: "nobody", password: "anything" } });

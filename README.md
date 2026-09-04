@@ -83,7 +83,7 @@ V soukromém Oceanu lze místo něj použít ruční schvalování:
 OCEAN_MANUAL_APPROVAL_ENABLED=true
 ```
 
-V tomto režimu se registrační ani pozvánkové e-maily neposílají; vlastník sdílí jednorázový odkaz a nového člena následně schválí. Zapomenuté heslo člena řeší vlastník v seznamu členů vytvořením jednorázového odkazu s platností 30 minut. Odkaz neobsahuje heslo, v databázi se ukládá pouze jeho hash a po změně hesla se ukončí všechny staré relace člena.
+V tomto režimu se registrační ani pozvánkové e-maily neposílají; vlastník sdílí jednorázový odkaz a nového člena následně schválí. Zapomenuté heslo člena řeší vlastník v seznamu členů vytvořením jednorázového odkazu s platností 30 minut. Odkaz neobsahuje heslo, v databázi se ukládá pouze jeho hash a po změně hesla se ukončí všechny staré relace člena. Jediný vlastnický účet si zachovává nouzovou e-mailovou obnovu, pokud je e-mailový provider nastavený.
 
 Pro osobní Telegram propojení použijte samostatného bota, který současně neběží v Railway workeru:
 

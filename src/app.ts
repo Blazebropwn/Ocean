@@ -231,7 +231,18 @@ export function buildApp(config: Config, database?: OceanDatabase) {
     const parsed = recoveryRequestSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Zadejte platný e-mail." });
     if (config.manualApprovalEnabled) {
-      return { message: "Požádejte vlastníka Oceanu o jednorázový odkaz pro obnovu hesla.", manual: true };
+      const owner = db.prepare("SELECT * FROM users WHERE email = ? AND role = 'owner'").get(parsed.data.email) as UserRecord | undefined;
+      if (owner && config.resendApiKey && config.emailFrom) {
+        const token = newVerificationToken();
+        const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+        const link = `${config.appOrigin}/reset-password.html?token=${encodeURIComponent(token)}`;
+        db.transaction(() => {
+          db.prepare("DELETE FROM password_reset_tokens WHERE user_id = ?").run(owner.id);
+          db.prepare("INSERT INTO password_reset_tokens (token_hash, user_id, expires_at) VALUES (?, ?, ?)").run(hashToken(token), owner.id, expires);
+          db.prepare("INSERT INTO mail_outbox (recipient, subject, body) VALUES (?, ?, ?)").run(owner.email, "Obnova hesla OCEAN", `Pro nastavení nového hesla použijte tento odkaz:\n\n${link}\n\nOdkaz platí 1 hodinu.`);
+        })();
+      }
+      return { message: "Členům vytvoří odkaz vlastník. Pro vlastnický účet odešleme odkaz, pokud e-mail odpovídá.", manual: true };
     }
     const user = db.prepare("SELECT * FROM users WHERE email = ?").get(parsed.data.email) as UserRecord | undefined;
     if (user) {
