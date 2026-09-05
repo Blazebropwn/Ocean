@@ -525,6 +525,7 @@ document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click",
   $("#login-form").classList.toggle("hidden", tab.dataset.tab !== "login");
   message.textContent = "";
 }));
+if (registrationInviteToken) document.querySelector('.tab[data-tab="register"]').click();
 
 for (const [id, path] of [["#register-form", "/api/auth/register"], ["#login-form", "/api/auth/login"]]) {
   $(id).addEventListener("submit", async (event) => {

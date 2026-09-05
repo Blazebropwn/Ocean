@@ -205,15 +205,6 @@ main { height: calc(100dvh - 68px); }
   box-shadow: 0 0 18px var(--cyan);
 }
 .auth-card { width: 100%; padding: 32px; z-index: 1; }
-.auth-card::after {
-  content: "OCEAN ACCESS";
-  display: block;
-  margin-top: 22px;
-  color: var(--muted);
-  font: 700 9px/1 ui-monospace, monospace;
-  letter-spacing: 0.2em;
-  text-align: center;
-}
 .tabs {
   display: flex;
   gap: 4px;

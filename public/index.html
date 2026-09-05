@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Ocean</title>
-    <meta name="theme-color" content="#041218"><link rel="stylesheet" href="/command-deck.css?v=7">
+    <meta name="theme-color" content="#041218"><link rel="stylesheet" href="/command-deck.css?v=8">
   </head>
   <body>
     <header class="nav">
@@ -27,13 +27,13 @@
       <section class="auth-screen" id="welcome">
         <div class="auth-card">
           <div class="tabs">
-            <button class="tab active" type="button" data-tab="register">
-              Vytvořit účet</button
-            ><button class="tab" type="button" data-tab="login">
-              Přihlásit se
+            <button class="tab active" type="button" data-tab="login">
+              Přihlásit se</button
+            ><button class="tab" type="button" data-tab="register">
+              Vytvořit účet
             </button>
           </div>
-          <form id="register-form" autocomplete="off">
+          <form id="register-form" class="hidden" autocomplete="off">
             <label
               >E-mail<input
                 name="email"
@@ -57,7 +57,7 @@
                 required /></label
             ><button class="primary" type="submit">Vytvořit účet</button>
           </form>
-          <form id="login-form" class="hidden" autocomplete="off">
+          <form id="login-form" autocomplete="off">
             <label
               >Uživatelské jméno<input
                 name="username"
@@ -267,6 +267,6 @@
         ><b class="hidden" id="email-status"></b>
       </section>
     </main>
-    <script src="/app.js?v=9" defer></script>
+    <script src="/app.js?v=10" defer></script>
   </body>
 </html>
