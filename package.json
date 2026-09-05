@@ -9,9 +9,9 @@
     "start": "node dist/src/server.js",
     "test": "node --import tsx --test test/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "backup": "tsx src/backup.ts",
-    "restore": "tsx src/restore.ts",
-    "restore:drill": "tsx src/restore-drill.ts",
+    "backup": "node dist/src/backup.js",
+    "restore": "node dist/src/restore.js",
+    "restore:drill": "node dist/src/restore-drill.js",
     "verify": "npm run build && npm test && python3 -m pytest -q services/kryptotron/tests"
   },
   "dependencies": {
