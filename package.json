@@ -10,6 +10,8 @@
     "test": "node --import tsx --test test/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "backup": "tsx src/backup.ts",
+    "restore": "tsx src/restore.ts",
+    "restore:drill": "tsx src/restore-drill.ts",
     "verify": "npm run build && npm test && python3 -m pytest -q services/kryptotron/tests"
   },
   "dependencies": {

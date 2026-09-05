@@ -53,3 +53,17 @@ Potom vytvořte novou testovací pozvánku a celý onboarding proveďte pouze na
 ## 4. Zálohy
 
 Railway volume zachová data při restartu a deployi, ale nenahrazuje nezávislou zálohu. Pravidelně spouštějte `npm run backup` a kopii z `/data/backups` ukládejte mimo danou Railway službu. Obnovu je nutné vyzkoušet před prvním Mainnet pilotem.
+
+Nedestruktivní kontrola vytvoří čerstvou zálohu, obnoví ji do dočasného adresáře a porovná její strukturu i počty řádků:
+
+```bash
+npm run restore:drill
+```
+
+Při skutečné obnově nejprve zastavte službu. Zálohu obnovte do nového souboru; příkaz záměrně nikdy nepřepisuje existující databázi:
+
+```bash
+npm run restore -- /data/backups/ocean.db.CAS.backup /data/ocean-restored.db
+```
+
+Potom nastavte `DATABASE_PATH=/data/ocean-restored.db`, službu znovu spusťte a ověřte `/api/ready`. Původní databázi ponechte beze změny pro možnost návratu. Obnovené šifrované Binance údaje jsou použitelné pouze se správnou zálohou `OCEAN_CREDENTIALS_KEY`.
