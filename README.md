@@ -27,6 +27,7 @@ npm run typecheck
 npm run build
 npm run backup
 npm run restore:drill
+npm run backup:offsite
 npm run verify
 ```
 
@@ -105,7 +106,9 @@ Pokud Ocean běží za reverzní proxy, vložte její přesnou adresu nebo CIDR 
 
 Produkční Docker/Railway postup je v [docs/deploy-railway.md](docs/deploy-railway.md). Kontejner obsahuje Ocean server i Python runtime pro osobní Testnet workery; stavová data patří na připojený volume `/data`.
 
-`npm run backup` vytvoří konzistentní a zkontrolovanou kopii SQLite databáze v `data/backups`. `npm run restore:drill` vytvoří novou zálohu, obnoví ji do dočasné databáze a ověří integritu, vazby, tabulky i počty řádků bez zásahu do běžícího Oceanu. Soubory databáze, záloh, stavů a logů jsou lokálně omezené na vlastníka procesu. Umístění a retenci lze změnit pomocí `BACKUP_DIRECTORY` a `BACKUP_RETENTION_DAYS`. Šifrovací klíč `OCEAN_CREDENTIALS_KEY` zálohujte odděleně od databáze; bez obou částí nelze Binance připojení obnovit.
+`npm run backup` vytvoří konzistentní a zkontrolovanou kopii SQLite databáze v `data/backups`. `npm run restore:drill` vytvoří novou zálohu, obnoví ji do dočasné databáze a ověří integritu, vazby, tabulky i počty řádků bez zásahu do běžícího Oceanu. Soubory databáze, záloh, stavů a logů jsou lokálně omezené na vlastníka procesu. Umístění a retenci lze změnit pomocí `BACKUP_DIRECTORY` a `BACKUP_RETENTION_DAYS`.
+
+Volitelné vzdálené zálohy se před odesláním šifrují samostatným klíčem AES-256-GCM. Po uploadu Ocean objekt znovu stáhne, ověří kontrolní součet, autentizaci, SQLite integritu, vazby a počty řádků. Nastavení S3-kompatibilního úložiště, automatického plánu a obnovy je v [docs/deploy-railway.md](docs/deploy-railway.md). Klíče `OCEAN_CREDENTIALS_KEY` a `OCEAN_BACKUP_KEY` uchovávejte odděleně od databáze i od sebe; ke kompletní obnově jsou potřeba oba.
 
 Provozní kontrola je dostupná na `/api/ready`. HTTP 200 znamená, že databáze prošla kontrolou integrity a povinné integrace mají konfiguraci; HTTP 503 znamená, že instance nemá přijímat provoz. `/api/health` zůstává jednoduchý liveness endpoint.
 

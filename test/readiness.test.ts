@@ -23,3 +23,17 @@ test("manual approval mode does not require transactional email", () => {
   assert.deepEqual(issues, []);
   db.close();
 });
+
+test("enabled offsite backups require a complete valid configuration", () => {
+  const db = openDatabase(":memory:");
+  const issues = readinessIssues({
+    port: 0,
+    host: "127.0.0.1",
+    databasePath: ":memory:",
+    appOrigin: "http://localhost",
+    isProduction: false,
+    offsiteBackupEnabled: true,
+  }, db);
+  assert.ok(issues.some((issue) => issue.includes("Vzdálené zálohy")));
+  db.close();
+});
