@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Ocean</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <meta name="theme-color" content="#041218"><link rel="stylesheet" href="/command-deck.css?v=6">
   </head>
   <body>
     <header class="nav">
@@ -79,12 +79,9 @@
       </section>
       <section class="dashboard hidden" id="dashboard">
         <aside class="side-nav">
-          <a class="side-link active" href="#dashboard" data-view="overview"
-            ><span>⌂</span><b>Přehled</b></a
-          ><a class="side-link" href="#arcade" data-view="arcade"
-            ><span>▣</span><b>Arcade</b></a
-          ><a class="side-link" href="#vault" data-view="vault"
-            ><span>◇</span><b>Vault</b></a
+          <a class="side-link active" href="#dashboard" data-view="overview"><b>Přehled</b></a
+          ><a class="side-link" href="#arcade" data-view="arcade"><b>Arcade</b></a
+          ><a class="side-link" href="#vault" data-view="vault"><b>Vault</b></a
           >
         </aside>
         <div class="workspace">
@@ -119,12 +116,7 @@
                 </form>
               </div>
               <div class="kryptotron-overview">
-                <div class="app-heading">
-                  <span class="app-icon">K</span>
-                  <div>
-                    <small>Automatizace</small>
-                    <h2>Kryptotron</h2>
-                  </div>
+                <div class="overview-controls">
                   <span class="app-status" id="kryptotron-status"
                     ><i></i> Načítám</span
                   >
@@ -259,14 +251,7 @@
             class="ocean-module arcade-view app-view hidden"
             id="arcade-view"
           >
-            <div class="arcade-library" id="arcade-library">
-              <div class="game-list">
-                <button class="game-card sonar" type="button" data-game="sonar"><span>01</span><div><h3>Sonar</h3><p>Zastav pulz v cílovém kruhu.</p></div><b>◎</b></button>
-                <button class="game-card dive" type="button" data-game="dive"><span>02</span><div><h3>Dive</h3><p>Měň směr a propluj hlubinou.</p></div><b>⌁</b></button>
-                <button class="game-card depth" type="button" data-game="depth"><span>03</span><div><h3>Depth</h3><p>Zastav sestup v bezpečné zóně.</p></div><b>↓</b></button>
-              </div>
-            </div>
-            <div class="arcade-game hidden" id="arcade-game"><div class="game-top"><button id="game-back" type="button">← Arcade</button><div><small id="game-kicker">ARCADE / 01</small><h2 id="game-title">Sonar</h2></div><div class="game-score"><small>Skóre</small><strong id="game-score">0</strong></div></div><div class="game-canvas-wrap"><canvas id="game-canvas" aria-label="Herní plocha"></canvas><button id="game-tap" type="button">Spustit</button></div><div class="game-bottom"><span id="game-hint">Klikni nebo stiskni mezerník.</span><strong>Rekord <span id="game-best">0</span></strong></div></div>
+            <div class="arcade-game" id="arcade-game"><div class="game-top"><div class="game-score"><small>SKÓRE</small><strong id="game-score">0</strong></div></div><div class="game-canvas-wrap"><canvas id="game-canvas" aria-label="Herní plocha Sonaru"></canvas><button id="game-tap" type="button">Spustit</button></div><div class="game-bottom"><span id="game-hint">Pingni ve chvíli, kdy paprsek protne zelený sektor.</span><strong>OSOBNÍ REKORD · <span id="game-best">0</span></strong></div></div>
           </section>
           <section
             class="ocean-module vault-view app-view hidden"
@@ -282,6 +267,6 @@
         ><b class="hidden" id="email-status"></b>
       </section>
     </main>
-    <script src="/app.js?v=4" defer></script>
+    <script src="/app.js?v=9" defer></script>
   </body>
 </html>

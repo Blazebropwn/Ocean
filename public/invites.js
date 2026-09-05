@@ -12,6 +12,12 @@ function inviteStatus(status) {
   return { active: "Aktivní", used: "Použitá", expired: "Vypršela", revoked: "Zrušená" }[status] || status;
 }
 
+function setInviteMessage(text, success = false) {
+  const message = document.querySelector("#invite-message");
+  message.textContent = text;
+  message.classList.toggle("success", Boolean(text) && success);
+}
+
 async function loadInvitations() {
   const { invitations } = await inviteRequest("/api/invitations");
   const list = $("#invite-list");
@@ -37,8 +43,21 @@ async function loadInvitations() {
     if (invitation.status === "active") {
       const revoke = document.createElement("button");
       revoke.type = "button";
+      revoke.className = "revoke-invitation";
       revoke.textContent = "Zrušit";
-      revoke.addEventListener("click", async () => { await inviteRequest(`/api/invitations/${invitation.id}`, { method: "DELETE" }); await loadInvitations(); });
+      revoke.addEventListener("click", async () => {
+        if (!window.confirm("Opravdu zrušit tuto pozvánku?")) return;
+        revoke.disabled = true;
+        setInviteMessage("");
+        try {
+          await inviteRequest(`/api/invitations/${invitation.id}`, { method: "DELETE" });
+          await loadInvitations();
+          setInviteMessage("Pozvánka byla zrušena.", true);
+        } catch (error) {
+          setInviteMessage(error instanceof Error ? error.message : "Pozvánku se nepodařilo zrušit.");
+          revoke.disabled = false;
+        }
+      });
       row.append(revoke);
     }
     list.append(row);
@@ -78,7 +97,7 @@ async function loadMembers() {
           await inviteRequest(`/api/members/${member.id}/approval`, { method: "POST", body: "{}" });
           await loadMembers();
         } catch (error) {
-          $("#invite-message").textContent = error.message;
+          setInviteMessage(error instanceof Error ? error.message : "Něco se nepovedlo.");
           approve.disabled = false;
         }
       });
@@ -95,9 +114,9 @@ async function loadMembers() {
         const { reset } = await inviteRequest(`/api/members/${member.id}/password-reset`, { method: "POST", body: "{}" });
         $("#member-reset-url").value = reset.resetUrl;
         $("#member-reset-result").classList.remove("hidden");
-        $("#invite-message").textContent = `Odkaz pro @${member.username} platí 30 minut.`;
+        setInviteMessage(`Odkaz pro @${member.username} platí 30 minut.`, true);
       } catch (error) {
-        $("#invite-message").textContent = error.message;
+        setInviteMessage(error instanceof Error ? error.message : "Něco se nepovedlo.");
       } finally {
         resetPassword.disabled = false;
       }
@@ -112,7 +131,7 @@ $("#invite-form").addEventListener("submit", async (event) => {
   const form = event.currentTarget;
   const button = form.querySelector("button");
   button.disabled = true;
-  $("#invite-message").textContent = "";
+  setInviteMessage("");
   try {
     const { invitation } = await inviteRequest("/api/invitations", { method: "POST", body: JSON.stringify(Object.fromEntries(new FormData(form))) });
     $("#invite-url").value = invitation.inviteUrl;
@@ -120,7 +139,7 @@ $("#invite-form").addEventListener("submit", async (event) => {
     form.reset();
     await Promise.all([loadInvitations(), loadMembers()]);
   } catch (error) {
-    $("#invite-message").textContent = error.message;
+    setInviteMessage(error instanceof Error ? error.message : "Něco se nepovedlo.");
   } finally {
     button.disabled = false;
   }
@@ -136,7 +155,7 @@ $("#copy-invite").addEventListener("click", async () => {
     input.setSelectionRange(0, 0);
   }
   $("#copy-invite").textContent = "Zkopírováno";
-  $("#invite-message").textContent = "";
+  setInviteMessage("");
 });
 
 $("#copy-member-reset").addEventListener("click", async () => {
@@ -154,4 +173,4 @@ $("#copy-member-reset").addEventListener("click", async () => {
 inviteRequest("/api/me").then(({ user }) => {
   if (user.role !== "owner") throw new Error("Tuto sekci může otevřít pouze vlastník.");
   return Promise.all([loadInvitations(), loadMembers()]);
-}).catch((error) => { $("#invite-message").textContent = error.message; });
+}).catch((error) => { setInviteMessage(error instanceof Error ? error.message : "Něco se nepovedlo."); });
