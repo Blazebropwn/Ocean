@@ -60,7 +60,32 @@ GET https://vase-ocean-domena/api/ready   -> 200
 
 Potom vytvořte novou testovací pozvánku a celý onboarding proveďte pouze na Binance Testnetu. Mainnet osobních účtů zůstává automaticky zakázaný.
 
-## 4. Zálohy
+## 4. Zapnutí supervisoru osobních botů
+
+Supervisor spouští osobní Kryptotrony členů jako samostatné procesy vedle Oceanu. Běží **výhradně testnetové** instance členů — vyžaduje `environment = testnet` a `remote_state_key = id` instance. Vlastnický mainnet bot (`remote_state_key = main`) se nespouští a zůstává na samostatné Railway službě beze změny, takže zapnutí se nedotkne reálného obchodování.
+
+Před zapnutím musí být nastaveno, jinak se supervisor sám vypne a jen to zaloguje:
+
+- `OCEAN_CREDENTIALS_KEY` — stejný klíč, jakým se šifrovaly Binance údaje členů;
+- `KRYPTOTRON_SUPABASE_URL` a `KRYPTOTRON_SUPABASE_KEY`;
+- `KRYPTOTRON_PYTHON=/opt/venv/bin/python` — Python s worker závislostmi je součástí runtime image;
+- připojený zapisovatelný `/data` volume (adresáře `/data/instances/<id>/`).
+
+Alespoň jeden člen musí být schválený a mít připojené testnet klíče; jinak není co spouštět a supervisor zůstává v klidu.
+
+```text
+KRYPTOTRON_SUPERVISOR_ENABLED=true
+```
+
+Po redeployi ověřte:
+
+- v logu zmizí `Kryptotron supervisor je vypnutý`; u připojeného člena naběhne `Osobní Kryptotron se spouští` a poté `Kryptotron připraven`;
+- ve správě členů (Pozvánky → Členové) přejde stav bota člena z `Připravuje se` na `Běží`;
+- `GET /api/ready` → 200.
+
+Vypnutí je okamžité a nedestruktivní: `KRYPTOTRON_SUPERVISOR_ENABLED=false` a redeploy ukončí spawnuté workery přes SIGTERM. Každý běžící člen znamená jeden Python proces navíc na replice, takže při větším počtu členů sledujte paměť. Jedna replika nad jedním SQLite souborem zůstává podmínkou.
+
+## 5. Zálohy
 
 Railway volume zachová data při restartu a deployi, ale nenahrazuje nezávislou zálohu. Pravidelně spouštějte `npm run backup` a kopii z `/data/backups` ukládejte mimo danou Railway službu. Obnovu je nutné vyzkoušet před prvním Mainnet pilotem.
 
