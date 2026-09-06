@@ -731,6 +731,12 @@ input:focus { border-color: var(--cyan); background: rgba(2, 17, 23, 0.9); box-s
 .invite-status { padding: 6px 8px; border-radius: 12px; color: var(--muted); background: rgba(121, 152, 157, 0.08); font-size: 8px; }
 .invite-status.active { color: var(--good); background: rgba(92, 229, 168, 0.08); }
 .invite-status.pending { color: var(--warn); background: rgba(255, 202, 106, 0.08); }
+.member-bot { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
+.bot-status { padding: 4px 8px; border-radius: 10px; color: var(--muted); background: rgba(121, 152, 157, 0.1); font: 800 8px/1 ui-monospace, monospace; letter-spacing: 0.09em; }
+.bot-status.running { color: var(--good); background: rgba(92, 229, 168, 0.1); }
+.bot-status.pending { color: var(--warn); background: rgba(255, 202, 106, 0.1); }
+.bot-status.error { color: var(--danger); background: rgba(255, 125, 139, 0.12); }
+.member-bot small { color: var(--muted); font-size: 9px; letter-spacing: 0.06em; }
 .telegram-shell { width: min(620px, 100%); }
 .telegram-code { margin-top: 16px; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: rgba(2, 17, 23, 0.48); }
 .telegram-code strong { display: block; color: var(--cyan); font: 800 30px/1 ui-monospace, monospace; letter-spacing: 0.08em; }

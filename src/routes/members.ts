@@ -10,7 +10,27 @@ export function registerMemberRoutes(app: FastifyInstance, db: OceanDatabase, co
     if (!owner) return reply.code(401).send({ error: "Nejste přihlášeni." });
     if (owner.role !== "owner") return reply.code(403).send({ error: "Členy může spravovat pouze vlastník." });
     const members = db.prepare("SELECT * FROM users WHERE role = 'member' ORDER BY created_at DESC").all() as UserRecord[];
-    return { members: members.map((member) => publicUser(member, approvalMode(config))) };
+    const instances = db.prepare(`
+      SELECT i.user_id, i.status, i.environment, i.remote_state_key, i.updated_at,
+        CASE WHEN c.instance_id IS NOT NULL THEN 1 ELSE 0 END AS has_credentials
+      FROM kryptotron_instances i
+      LEFT JOIN kryptotron_credentials c ON c.instance_id = i.id
+    `).all() as Array<{ user_id: string; status: string; environment: string; remote_state_key: string | null; updated_at: string; has_credentials: number }>;
+    const instanceByUser = new Map(instances.map((row) => [row.user_id, row]));
+    return {
+      members: members.map((member) => {
+        const instance = instanceByUser.get(member.id);
+        return {
+          ...publicUser(member, approvalMode(config)),
+          instance: instance ? {
+            status: instance.status,
+            environment: instance.environment,
+            configured: instance.has_credentials === 1 && Boolean(instance.remote_state_key),
+            updatedAt: instance.updated_at,
+          } : null,
+        };
+      }),
+    };
   });
 
   app.post("/api/members/:id/approval", { config: { rateLimit: { max: 20, timeWindow: "1 hour" } } }, async (request, reply) => {

@@ -12,6 +12,17 @@ function inviteStatus(status) {
   return { active: "Aktivní", used: "Použitá", expired: "Vypršela", revoked: "Zrušená" }[status] || status;
 }
 
+function botStatus(instance) {
+  if (!instance) return { label: "Bez profilu", className: "idle" };
+  return {
+    unconfigured: { label: "Nepřipojeno", className: "idle" },
+    provisioning: { label: "Připravuje se", className: "pending" },
+    connected: { label: "Běží", className: "running" },
+    suspended: { label: "Pozastaveno", className: "pending" },
+    error: { label: "Chyba", className: "error" },
+  }[instance.status] || { label: instance.status, className: "idle" };
+}
+
 function setInviteMessage(text, success = false) {
   const message = document.querySelector("#invite-message");
   message.textContent = text;
@@ -81,10 +92,22 @@ async function loadMembers() {
     const detail = document.createElement("small");
     const state = document.createElement("span");
     name.textContent = `@${member.username}`;
-    detail.textContent = member.email;
+    detail.textContent = member.email || member.displayId;
     state.textContent = member.approved ? "Schválen" : "Čeká";
     state.className = `invite-status ${member.approved ? "active" : "pending"}`;
-    info.append(name, detail);
+    const bot = document.createElement("div");
+    bot.className = "member-bot";
+    const botChip = document.createElement("span");
+    const status = botStatus(member.instance);
+    botChip.className = `bot-status ${status.className}`;
+    botChip.textContent = status.label;
+    bot.append(botChip);
+    if (member.instance) {
+      const environment = document.createElement("small");
+      environment.textContent = member.instance.environment === "mainnet" ? "Mainnet" : "Testnet";
+      bot.append(environment);
+    }
+    info.append(name, detail, bot);
     row.append(info, state);
     if (!member.approved) {
       const approve = document.createElement("button");
