@@ -93,7 +93,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 .brand span { color: var(--cyan); text-shadow: 0 0 14px rgba(84, 238, 226, 0.8); }
 
-.nav-account { position: relative; }
+.nav-account { display: flex; align-items: center; gap: 10px; position: relative; }
 .profile-button {
   min-height: 42px;
   display: flex;
@@ -739,6 +739,162 @@ input:focus { border-color: var(--cyan); background: rgba(2, 17, 23, 0.9); box-s
 #telegram-connected > strong { display: block; margin-top: 14px; }
 .danger-link { margin-top: 18px; padding: 0; border: 0; color: var(--danger); background: transparent; cursor: pointer; }
 
+/* Kryptotron Octo — compact status companion */
+.side-nav { z-index: 31; }
+.octo-dock {
+  --octo-color: var(--cyan);
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 51;
+}
+.octo-avatar-button {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  position: relative;
+  border: 0;
+  border-radius: 17px;
+  color: var(--octo-color);
+  background: transparent;
+  cursor: pointer;
+  filter: drop-shadow(0 12px 22px rgba(0, 4, 8, 0.48));
+  transition: transform 170ms ease, filter 170ms ease;
+}
+.octo-avatar-button:hover {
+  transform: translateY(-3px) scale(1.025);
+  filter: drop-shadow(0 15px 28px rgba(0, 4, 8, 0.58)) drop-shadow(0 0 10px rgba(84, 238, 226, 0.24));
+}
+.octo-avatar-button:focus-visible { border-radius: 17px; }
+.octo-avatar {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  pointer-events: none;
+  animation: octo-float 3.8s ease-in-out infinite;
+  transition: opacity 140ms ease, transform 180ms ease;
+}
+.octo-avatar.changing { opacity: 0.32; transform: scale(0.94); }
+.octo-avatar-button > i {
+  width: 10px;
+  height: 10px;
+  position: absolute;
+  right: 2px;
+  bottom: 3px;
+  border: 2px solid #061820;
+  border-radius: 50%;
+  background: var(--octo-color);
+  box-shadow: 0 0 13px var(--octo-color);
+}
+.octo-dock[data-state="profit"] { --octo-color: var(--good); }
+.octo-dock[data-state="loss"], .octo-dock[data-state="error"] { --octo-color: var(--danger); }
+.octo-dock[data-state="sleep"] { --octo-color: #8ba8ff; }
+.octo-dock[data-state="scanning"] .octo-avatar { animation: octo-scan 2.2s ease-in-out infinite; }
+.octo-dock[data-state="calculating"] .octo-avatar { animation: octo-focus 1.7s ease-in-out infinite; }
+.octo-dock[data-state="profit"] .octo-avatar { animation: octo-profit 1.8s ease-in-out infinite; }
+.octo-dock[data-state="error"] .octo-avatar { animation: octo-error 0.75s steps(2, end) infinite; }
+.octo-dock[data-state="sleep"] .octo-avatar { animation: octo-sleep 4.6s ease-in-out infinite; }
+.octo-bubble {
+  width: 300px;
+  max-width: calc(100vw - 110px);
+  padding: 16px;
+  position: absolute;
+  right: calc(100% + 10px);
+  top: calc(100% + 8px);
+  overflow: visible;
+  border: 1px solid rgba(84, 238, 226, 0.3);
+  border-radius: 15px 5px 15px 15px;
+  color: var(--ink);
+  background: linear-gradient(145deg, rgba(13, 43, 54, 0.98), rgba(4, 20, 27, 0.99));
+  box-shadow: 0 20px 55px rgba(0, 5, 9, 0.5), inset 0 1px rgba(255, 255, 255, 0.035);
+  backdrop-filter: blur(18px);
+  animation: octo-bubble-in 180ms ease-out both;
+}
+.octo-bubble::before {
+  content: "";
+  width: 42px;
+  height: 2px;
+  position: absolute;
+  left: 16px;
+  top: 0;
+  background: var(--octo-color);
+  box-shadow: 0 0 14px var(--octo-color);
+}
+.octo-bubble::after {
+  content: "";
+  width: 10px;
+  height: 10px;
+  position: absolute;
+  right: -6px;
+  top: 18px;
+  border-right: 1px solid rgba(84, 238, 226, 0.3);
+  border-top: 1px solid rgba(84, 238, 226, 0.3);
+  background: #071d26;
+  transform: rotate(45deg);
+}
+.octo-bubble header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.octo-bubble header > div { display: flex; align-items: baseline; gap: 10px; }
+.octo-bubble header strong { font-size: 13px; }
+.octo-bubble header small {
+  color: var(--octo-color);
+  font: 800 8px/1 ui-monospace, monospace;
+  letter-spacing: 0.13em;
+}
+.octo-bubble header > button {
+  width: 26px;
+  height: 26px;
+  margin: -7px -7px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 18px;
+  cursor: pointer;
+}
+.octo-bubble header > button:hover { color: var(--ink); background: rgba(84, 238, 226, 0.06); }
+.octo-bubble p { margin: 10px 0 0; color: var(--ink-soft); font-size: 13px; line-height: 1.5; }
+.octo-meta {
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  color: var(--octo-color);
+  font: 700 10px/1.4 ui-monospace, monospace;
+}
+.octo-mute {
+  margin: 11px 0 -5px;
+  padding: 5px 0;
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+  font-size: 9px;
+  cursor: pointer;
+}
+.octo-mute:hover { color: var(--ink-soft); }
+
+@keyframes octo-float { 0%, 100% { transform: translateY(0) rotate(-0.5deg); } 50% { transform: translateY(-4px) rotate(0.5deg); } }
+@keyframes octo-scan { 0%, 100% { transform: translateY(0); filter: brightness(1); } 50% { transform: translateY(-3px) scale(1.02); filter: brightness(1.12); } }
+@keyframes octo-focus { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.025); } }
+@keyframes octo-profit { 0%, 100% { transform: translateY(0) rotate(0); } 45% { transform: translateY(-6px) rotate(-1deg); } 65% { transform: translateY(-2px) rotate(1deg); } }
+@keyframes octo-error { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(2px); } }
+@keyframes octo-sleep { 0%, 100% { transform: translateY(1px) scale(1); } 50% { transform: translateY(3px) scale(0.985); } }
+@keyframes octo-bubble-in { from { opacity: 0; transform: translateX(-5px) scale(0.985); } to { opacity: 1; transform: translateX(0) scale(1); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .octo-avatar,
+  .octo-dock[data-state] .octo-avatar { animation: none; }
+  .octo-bubble { animation: none; }
+  .octo-avatar-button { transition: filter 170ms ease; }
+  .octo-avatar-button:hover { transform: none; }
+  .octo-avatar.changing { transform: none; }
+}
+
 /* Readability scale */
 .auth-screen { width: min(520px, calc(100% - 36px)); }
 .auth-card { padding: 38px; }
@@ -810,6 +966,7 @@ input { padding: 15px 16px; font-size: 14px; }
   .detail-bottom { grid-template-columns: 1fr; }
   .bot-control { flex-direction: row; align-items: center; }
   .bot-control span { margin-right: auto; }
+  .octo-bubble { max-width: calc(100vw - 110px); }
 }
 
 @media (max-width: 880px) {
@@ -850,6 +1007,7 @@ input { padding: 15px 16px; font-size: 14px; }
   .invite-create { grid-template-columns: 1fr; }
   .invite-list article { grid-template-columns: 1fr auto; }
   .invite-list article button { grid-column: 2; }
+  .octo-dock { display: none !important; }
 }
 
 @media (max-height: 820px) and (min-width: 881px) {

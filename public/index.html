@@ -4,12 +4,27 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Ocean</title>
-    <meta name="theme-color" content="#041218"><link rel="stylesheet" href="/command-deck.css?v=8">
+    <meta name="theme-color" content="#041218"><link rel="stylesheet" href="/command-deck.css?v=9">
   </head>
   <body>
     <header class="nav">
       <a class="brand" href="/">Ocean<span>.</span></a>
       <div class="nav-account hidden" id="nav-account">
+        <div class="octo-dock hidden" id="octo-assistant" data-state="idle">
+          <section class="octo-bubble" id="octo-bubble" aria-live="polite" hidden>
+            <header>
+              <div><strong>Kryptotron</strong><small id="octo-state-label">ČEKÁM</small></div>
+              <button id="octo-close" type="button" aria-label="Zavřít zprávu">×</button>
+            </header>
+            <p id="octo-message">Klid. Čekám na další signál.</p>
+            <div class="octo-meta hidden" id="octo-meta"></div>
+            <button class="octo-mute" id="octo-mute" type="button">Ztišit automatické zprávy</button>
+          </section>
+          <button class="octo-avatar-button" id="octo-toggle" type="button" aria-expanded="false" aria-label="Kryptotron: čekám na další signál">
+            <img class="octo-avatar" id="octo-avatar" src="/kryptotron-octo/idle.webp" alt="" draggable="false" />
+            <i aria-hidden="true"></i>
+          </button>
+        </div>
         <button class="profile-button" id="profile-button" type="button">
           <span id="nav-avatar">O</span><b id="nav-username">Účet</b><i>⌄</i>
         </button>
@@ -268,6 +283,6 @@
         ><b class="hidden" id="email-status"></b>
       </section>
     </main>
-    <script src="/app.js?v=11" defer></script>
+    <script src="/app.js?v=12" defer></script>
   </body>
 </html>

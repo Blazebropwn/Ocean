@@ -1,6 +1,77 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { initializeKryptotronInstance, loadKryptotronSnapshot, requestTestDca, setDcaAmount, setDcaEnabled, setKryptotronEntriesPaused } from "../src/kryptotron.js";
+import { deriveKryptotronOcto, initializeKryptotronInstance, loadKryptotronSnapshot, requestTestDca, setDcaAmount, setDcaEnabled, setKryptotronEntriesPaused } from "../src/kryptotron.js";
+
+const octoSource = (overrides: Partial<Parameters<typeof deriveKryptotronOcto>[0]> = {}): Parameters<typeof deriveKryptotronOcto>[0] => ({
+  status: "waiting",
+  lastError: null,
+  entriesPaused: false,
+  positions: [],
+  lastTrade: null,
+  nextCheckAt: "2026-09-06T10:00:00Z",
+  lastMarketCheckAt: null,
+  balance: { amount: 73.93, asset: "USDC" },
+  ...overrides,
+});
+
+test("Octo presents errors before lower-priority trading states", () => {
+  const presentation = deriveKryptotronOcto(octoSource({
+    status: "degraded",
+    lastError: "Binance timeout",
+    entriesPaused: true,
+    positions: [{ symbol: "BTCUSDC", inPosition: true, entryPrice: 60_000, quantity: 0.01, highestPrice: 61_000, protectionActive: true, protectionStatus: "ACTIVE", protectionPrice: 54_000, protectionActivationPrice: 61_800, protectionTrailingBips: 150 }],
+  }));
+  assert.equal(presentation.state, "error");
+  assert.equal(presentation.critical, true);
+  assert.equal(presentation.autoOpen, true);
+  assert.doesNotMatch(presentation.message, /Binance timeout/);
+});
+
+test("Octo distinguishes protected positions and recent results", () => {
+  const protectedPosition = deriveKryptotronOcto(octoSource({
+    positions: [{ symbol: "ETHUSDC", inPosition: true, entryPrice: 4_000, quantity: 0.1, highestPrice: 4_100, protectionActive: true, protectionStatus: "ACTIVE", protectionPrice: 3_600, protectionActivationPrice: 4_120, protectionTrailingBips: 150 }],
+  }));
+  assert.equal(protectedPosition.state, "trade_open");
+  assert.equal(protectedPosition.critical, false);
+
+  const exitedAt = "2026-09-06T09:55:00.000Z";
+  const loss = deriveKryptotronOcto(octoSource({
+    lastTrade: { symbol: "BTCUSDC", entryPrice: 60_000, exitPrice: 59_500, quantity: 0.01, pnl: -5, result: "LOSS", reason: null, enteredAt: null, exitedAt },
+  }), Date.parse("2026-09-06T10:00:00.000Z"));
+  assert.equal(loss.state, "loss");
+  assert.equal(loss.meta, "BTCUSDC · -5.00 USDC");
+  assert.equal(loss.eventKey, `trade:${exitedAt}:LOSS`);
+});
+
+test("Octo calculates on a fresh market check and settles back to scanning", () => {
+  const now = Date.parse("2026-09-06T10:00:00.000Z");
+  const active = deriveKryptotronOcto(octoSource({
+    status: "waiting",
+    lastMarketCheckAt: "2026-09-06T09:59:40.000Z",
+  }), now);
+  assert.equal(active.state, "calculating");
+  assert.equal(active.autoOpen, false);
+  assert.equal(active.critical, false);
+
+  const settled = deriveKryptotronOcto(octoSource({
+    status: "running",
+    lastMarketCheckAt: "2026-09-06T09:55:00.000Z",
+  }), now);
+  assert.equal(settled.state, "scanning");
+});
+
+test("Octo does not celebrate stale trades and clears recovered errors", () => {
+  const stale = deriveKryptotronOcto(octoSource({
+    lastTrade: { symbol: "BTCUSDC", entryPrice: 60_000, exitPrice: 61_000, quantity: 0.01, pnl: 10, result: "WIN", reason: null, enteredAt: null, exitedAt: "2026-09-06T09:00:00.000Z" },
+  }), Date.parse("2026-09-06T10:00:00.000Z"));
+  assert.equal(stale.state, "idle");
+  assert.equal(stale.critical, false);
+
+  const recovered = deriveKryptotronOcto(octoSource({ status: "waiting", lastError: null }));
+  assert.equal(recovered.state, "idle");
+  assert.equal(recovered.critical, false);
+  assert.equal(recovered.autoOpen, false);
+});
 
 test("new Kryptotron instances receive an isolated paused state", async (t) => {
   const originalFetch = globalThis.fetch;
@@ -49,6 +120,9 @@ test("maps Kryptotron state and latest trade into the Ocean contract", async (t)
   assert.equal(snapshot.positions[0]?.protectionPrice, 61200);
   assert.equal(snapshot.positions[0]?.protectionActivationPrice, 70040);
   assert.equal(snapshot.positions[0]?.protectionTrailingBips, 150);
+  assert.equal(snapshot.octo.state, "trade_open");
+  assert.equal(snapshot.octo.critical, false);
+  assert.match(snapshot.octo.message, /BTCUSDC/);
   assert.equal(snapshot.limits.tradesWeek, 3);
   assert.equal(snapshot.lastTrade?.reason, "TRAIL_SL");
   assert.ok(urls.some((url) => url.includes("bot_trades?instance_id=eq.main")));

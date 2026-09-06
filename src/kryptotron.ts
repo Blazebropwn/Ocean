@@ -1,5 +1,16 @@
 type SupabaseRow = Record<string, unknown>;
 
+export type KryptotronOctoState = "idle" | "scanning" | "calculating" | "trade_open" | "profit" | "loss" | "error" | "sleep";
+
+export type KryptotronOctoPresentation = {
+  state: KryptotronOctoState;
+  message: string;
+  meta: string | null;
+  eventKey: string;
+  autoOpen: boolean;
+  critical: boolean;
+};
+
 export type KryptotronSnapshot = {
   connected: boolean;
   environment: "testnet" | "mainnet" | null;
@@ -28,7 +39,92 @@ export type KryptotronSnapshot = {
   }>;
   limits: { dailyLoss: number; weeklyLoss: number; tradesToday: number; tradesWeek: number };
   lastTrade: { symbol: string; entryPrice: number; exitPrice: number; quantity: number; pnl: number; result: string; reason: string | null; enteredAt: string | null; exitedAt: string } | null;
+  octo: KryptotronOctoPresentation;
 };
+
+type OctoSource = Pick<KryptotronSnapshot, "status" | "lastError" | "entriesPaused" | "positions" | "lastTrade" | "nextCheckAt" | "lastMarketCheckAt" | "balance">;
+
+export function deriveKryptotronOcto(source: OctoSource, now = Date.now()): KryptotronOctoPresentation {
+  const open = source.positions.find((position) => position.inPosition);
+  if (source.lastError || source.status === "degraded" || source.status === "offline") {
+    return {
+      state: "error",
+      message: "Spojení potřebuje pozornost. Zkouším ho obnovit.",
+      meta: source.status === "offline" ? "Kryptotron je nedostupný" : "Zkontroluj palubní deník",
+      eventKey: `error:${source.status}:${source.lastError ?? "runtime"}`,
+      autoOpen: true,
+      critical: true,
+    };
+  }
+  if (open) {
+    const protectedPosition = open.protectionActive;
+    return {
+      state: "trade_open",
+      message: protectedPosition
+        ? `${open.symbol} je v pozici a ochrana je aktivní.`
+        : `${open.symbol} je v pozici. Ochrana potřebuje kontrolu.`,
+      meta: protectedPosition ? "Pozice je chráněná" : "Ověř ochranný příkaz",
+      eventKey: `position:${open.symbol}:${open.entryPrice}`,
+      autoOpen: true,
+      critical: !protectedPosition,
+    };
+  }
+
+  const tradeTime = source.lastTrade ? Date.parse(source.lastTrade.exitedAt) : Number.NaN;
+  const recentTrade = source.lastTrade && Number.isFinite(tradeTime) && now - tradeTime >= -60_000 && now - tradeTime <= 15 * 60_000;
+  if (recentTrade && source.lastTrade) {
+    const won = source.lastTrade.result === "WIN" || (source.lastTrade.result !== "LOSS" && source.lastTrade.pnl >= 0);
+    const formattedPnl = `${source.lastTrade.pnl >= 0 ? "+" : ""}${source.lastTrade.pnl.toFixed(2)} ${source.balance.asset}`;
+    return {
+      state: won ? "profit" : "loss",
+      message: won ? "Obchod je uzavřený v zisku." : "Obchod je uzavřený ve ztrátě.",
+      meta: `${source.lastTrade.symbol} · ${formattedPnl}`,
+      eventKey: `trade:${source.lastTrade.exitedAt}:${source.lastTrade.result}`,
+      autoOpen: true,
+      critical: false,
+    };
+  }
+  if (source.entriesPaused) {
+    return {
+      state: "sleep",
+      message: "Nové obchody jsou pozastavené.",
+      meta: source.nextCheckAt ? "Sledování trhu pokračuje" : null,
+      eventKey: "control:paused",
+      autoOpen: false,
+      critical: false,
+    };
+  }
+  const checkTime = source.lastMarketCheckAt ? Date.parse(source.lastMarketCheckAt) : Number.NaN;
+  const checkingNow = Number.isFinite(checkTime) && now - checkTime >= -30_000 && now - checkTime <= 45_000;
+  if (checkingNow && (source.status === "running" || source.status === "waiting")) {
+    return {
+      state: "calculating",
+      message: "Vyhodnocuji trh a počítám další krok.",
+      meta: null,
+      eventKey: "runtime:calculating",
+      autoOpen: false,
+      critical: false,
+    };
+  }
+  if (source.status === "running") {
+    return {
+      state: "scanning",
+      message: "Kontroluji trh a hledám nový signál.",
+      meta: null,
+      eventKey: "runtime:scanning",
+      autoOpen: false,
+      critical: false,
+    };
+  }
+  return {
+    state: "idle",
+    message: "Klid. Čekám na další signál.",
+    meta: source.nextCheckAt ? "Další kontrola je naplánovaná" : null,
+    eventKey: "runtime:idle",
+    autoOpen: false,
+    critical: false,
+  };
+}
 
 async function supabaseRows(url: string, key: string, path: string): Promise<SupabaseRow[]> {
   const response = await fetch(`${url}/rest/v1/${path}`, {
@@ -230,7 +326,7 @@ export async function loadKryptotronSnapshot(url: string, key: string, stateKey 
   const dcaPurchases = Array.isArray(rawDca.purchases) ? rawDca.purchases.filter((purchase): purchase is Record<string, unknown> => Boolean(purchase) && typeof purchase === "object") : [];
   const dcaTargets: Record<string, number> = { BTCUSDC: 1, ETHUSDC: 10, SOLUSDC: 100 };
   const dcaSymbols = Array.isArray(rawDca.symbols) ? rawDca.symbols.filter((symbol): symbol is string => typeof symbol === "string") : [];
-  return {
+  const snapshot: Omit<KryptotronSnapshot, "octo"> = {
     connected: Boolean(state),
     environment: data.environment === "testnet" || data.environment === "mainnet" ? data.environment : null,
     status: runtimeStatus(data.runtime_status, data.last_heartbeat_at),
@@ -301,6 +397,7 @@ export async function loadKryptotronSnapshot(url: string, key: string, stateKey 
       exitedAt: String(trade.exit_time ?? ""),
     } : null,
   };
+  return { ...snapshot, octo: deriveKryptotronOcto(snapshot) };
 }
 
 function stringOrNull(value: unknown) {
