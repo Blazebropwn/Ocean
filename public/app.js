@@ -105,7 +105,11 @@ async function request(path, options = {}) {
   const response = await fetch(path, { ...options, headers: { ...headers, ...options.headers } });
   if (response.status === 204) return null;
   const body = await response.json();
-  if (!response.ok) throw new Error(body.error || "Něco se nepovedlo.");
+  if (!response.ok) {
+    const error = new Error(body.error || "Něco se nepovedlo.");
+    error.status = response.status;
+    throw error;
+  }
   return body;
 }
 
@@ -346,6 +350,7 @@ window.addEventListener("resize", () => {
 async function loadKryptotron() {
   try {
     const { kryptotron } = await request("/api/kryptotron");
+    $("#kryptotron-degraded").classList.add("hidden");
     const statuses = { running: "Kontroluje trh", waiting: "Čeká na signál", degraded: "Vyžaduje pozornost", offline: "Nedostupný", unknown: "Propojeno" };
     const open = kryptotron.positions.find((position) => position.inPosition);
     entriesPaused = kryptotron.entriesPaused;
@@ -399,9 +404,17 @@ async function loadKryptotron() {
     renderEvents(kryptotron.events);
     renderOcto(kryptotron.octo);
   } catch (error) {
-    $("#kryptotron-status").lastChild.textContent = " Nepřipojeno";
-    $("#bot-position").textContent = error.message;
-    renderOcto({ state: "error", message: "Stav Kryptotronu se nepodařilo načíst.", meta: "Zkouším spojení obnovit", eventKey: `load:${error.message}`, autoOpen: true, critical: true });
+    if (error.status === 502 || error.status === 503) {
+      $("#kryptotron-degraded").classList.remove("hidden");
+      $("#kryptotron-status").lastChild.textContent = " Data mimo dosah";
+      $("#kryptotron-status").classList.add("warning");
+      renderOcto({ state: "sleep", message: "Stav Kryptotronu je teď mimo dosah. Zkouším to znovu.", meta: "Bot běží dál", eventKey: "data:unavailable", autoOpen: false, critical: false });
+    } else {
+      $("#kryptotron-degraded").classList.add("hidden");
+      $("#kryptotron-status").lastChild.textContent = " Nepřipojeno";
+      $("#bot-position").textContent = error.message;
+      renderOcto({ state: "error", message: "Stav Kryptotronu se nepodařilo načíst.", meta: "Zkouším spojení obnovit", eventKey: `load:${error.message}`, autoOpen: true, critical: true });
+    }
   }
 }
 

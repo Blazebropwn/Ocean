@@ -898,6 +898,30 @@ input:focus { border-color: var(--cyan); background: rgba(2, 17, 23, 0.9); box-s
 @keyframes octo-sleep { 0%, 100% { transform: translateY(1px) scale(1); } 50% { transform: translateY(3px) scale(0.985); } }
 @keyframes octo-bubble-in { from { opacity: 0; transform: translateX(-5px) scale(0.985); } to { opacity: 1; transform: translateX(0) scale(1); } }
 
+.kryptotron-degraded {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 13px 15px;
+  border: 1px solid rgba(255, 202, 106, 0.3);
+  border-radius: 12px;
+  background: rgba(255, 202, 106, 0.06);
+}
+.kryptotron-degraded > i {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--warn);
+  box-shadow: 0 0 10px var(--warn);
+  animation: degraded-pulse 2s ease-in-out infinite;
+}
+.kryptotron-degraded strong { display: block; color: var(--ink); font-size: 13px; }
+.kryptotron-degraded small { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+@keyframes degraded-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
 @media (prefers-reduced-motion: reduce) {
   .octo-avatar,
   .octo-dock[data-state] .octo-avatar { animation: none; }
@@ -905,6 +929,7 @@ input:focus { border-color: var(--cyan); background: rgba(2, 17, 23, 0.9); box-s
   .octo-avatar-button { transition: filter 170ms ease; }
   .octo-avatar-button:hover { transform: none; }
   .octo-avatar.changing { transform: none; }
+  .kryptotron-degraded > i { animation: none; }
 }
 
 /* Readability scale */

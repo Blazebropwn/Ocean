@@ -82,3 +82,21 @@ test("invited member can verify and securely stage a personal Binance connection
   assert.deepEqual(disconnectedState.json().connection, { status: "unconfigured", environment: "testnet", configured: false, legacy: false });
   await app.close();
 });
+
+test("kryptotron snapshot returns 502 when the state store is unreachable", async (t) => {
+  const config: Config = {
+    port: 0, host: "127.0.0.1", databasePath: ":memory:", appOrigin: "http://localhost:3000", isProduction: false,
+    kryptotronSupabaseUrl: "https://example.supabase.co", kryptotronSupabaseKey: "service-key",
+  };
+  const app = buildApp(config, openDatabase(":memory:"));
+  const owner = await app.inject({ method: "POST", url: "/api/auth/register", payload: { username: "deck_owner", password: "owner password" } });
+  const ownerCookie = owner.headers["set-cookie"]?.toString().split(";")[0];
+
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async () => { throw new Error("Supabase unreachable"); };
+
+  const response = await app.inject({ method: "GET", url: "/api/kryptotron", headers: { cookie: ownerCookie! } });
+  assert.equal(response.statusCode, 502);
+  await app.close();
+});
