@@ -727,6 +727,12 @@ input:focus { border-color: var(--cyan); background: rgba(2, 17, 23, 0.9); box-s
 .invite-list article button { border: 0; color: var(--danger); background: transparent; font-size: 9px; cursor: pointer; }
 .invite-list article button.approve-member { color: var(--good); font-weight: 800; }
 .invite-list article button.reset-member-password { color: var(--cyan); }
+.invite-list article button.member-detail-toggle { color: var(--ink-soft); }
+.member-entry { display: flex; flex-direction: column; }
+.member-detail { margin: 0 0 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; color: var(--muted); background: rgba(2, 17, 23, 0.5); font-size: 11px; }
+.member-detail-row { display: flex; justify-content: space-between; gap: 14px; padding: 5px 0; }
+.member-detail-row small { color: var(--muted); }
+.member-detail-row span { color: var(--ink-soft); text-align: right; }
 .invite-list article button:disabled { opacity: 0.5; cursor: wait; }
 .invite-status { padding: 6px 8px; border-radius: 12px; color: var(--muted); background: rgba(121, 152, 157, 0.08); font-size: 8px; }
 .invite-status.active { color: var(--good); background: rgba(92, 229, 168, 0.08); }

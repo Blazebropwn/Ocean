@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import type { Config } from "../config.js";
-import { publicUser, type OceanDatabase, type UserRecord } from "../db.js";
+import { publicUser, type KryptotronInstanceRecord, type OceanDatabase, type UserRecord } from "../db.js";
 import { hashToken, newVerificationToken } from "../security.js";
+import { loadKryptotronSnapshot } from "../kryptotron.js";
 import { approvalMode, currentUser, requestMeta } from "./shared.js";
 
 export function registerMemberRoutes(app: FastifyInstance, db: OceanDatabase, config: Config) {
@@ -31,6 +32,36 @@ export function registerMemberRoutes(app: FastifyInstance, db: OceanDatabase, co
         };
       }),
     };
+  });
+
+  app.get("/api/members/:id/kryptotron", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (request, reply) => {
+    const owner = currentUser(db, request);
+    if (!owner) return reply.code(401).send({ error: "Nejste přihlášeni." });
+    if (owner.role !== "owner") return reply.code(403).send({ error: "Kryptotron člena může zobrazit pouze vlastník." });
+    const id = (request.params as { id?: unknown }).id;
+    if (typeof id !== "string" || !/^usr_[a-f0-9]{32}$/.test(id)) return reply.code(400).send({ error: "Neplatný účet." });
+    const member = db.prepare("SELECT id FROM users WHERE id = ? AND role = 'member'").get(id) as { id: string } | undefined;
+    if (!member) return reply.code(404).send({ error: "Člen nebyl nalezen." });
+    const instance = db.prepare("SELECT * FROM kryptotron_instances WHERE user_id = ?").get(id) as KryptotronInstanceRecord | undefined;
+    if (!instance || instance.status !== "connected" || !instance.remote_state_key) return reply.code(409).send({ error: "Člen nemá připojený Kryptotron." });
+    if (!config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return reply.code(503).send({ error: "Kryptotron není dostupný." });
+    try {
+      const snapshot = await loadKryptotronSnapshot(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, instance.remote_state_key);
+      const open = snapshot.positions.find((position) => position.inPosition);
+      return {
+        kryptotron: {
+          status: snapshot.status,
+          environment: snapshot.environment,
+          entriesPaused: snapshot.entriesPaused,
+          balance: snapshot.balance,
+          octo: { state: snapshot.octo.state, message: snapshot.octo.message },
+          position: open ? { symbol: open.symbol, protectionActive: open.protectionActive } : null,
+          lastError: snapshot.lastError,
+        },
+      };
+    } catch {
+      return reply.code(502).send({ error: "Stav Kryptotronu se nepodařilo načíst." });
+    }
   });
 
   app.post("/api/members/:id/approval", { config: { rateLimit: { max: 20, timeWindow: "1 hour" } } }, async (request, reply) => {

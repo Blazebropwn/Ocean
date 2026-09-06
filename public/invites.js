@@ -23,6 +23,30 @@ function botStatus(instance) {
   }[instance.status] || { label: instance.status, className: "idle" };
 }
 
+function renderMemberDetail(panel, kryptotron) {
+  const balance = kryptotron.balance && kryptotron.balance.amount != null
+    ? `${Number(kryptotron.balance.amount).toLocaleString("cs-CZ", { maximumFractionDigits: 2 })} ${kryptotron.balance.asset}`
+    : "—";
+  const rows = [
+    ["Automatizace", kryptotron.entriesPaused ? "Pozastavená" : "Běží"],
+    ["Pozice", kryptotron.position ? `${kryptotron.position.symbol} · ${kryptotron.position.protectionActive ? "chráněná" : "bez ochrany"}` : "Žádná otevřená pozice"],
+    ["Balance", balance],
+    ["Kryptotron", kryptotron.octo?.message || "—"],
+  ];
+  if (kryptotron.lastError) rows.push(["Poslední chyba", kryptotron.lastError]);
+  panel.replaceChildren();
+  for (const [label, value] of rows) {
+    const line = document.createElement("div");
+    line.className = "member-detail-row";
+    const term = document.createElement("small");
+    const description = document.createElement("span");
+    term.textContent = label;
+    description.textContent = value;
+    line.append(term, description);
+    panel.append(line);
+  }
+}
+
 function setInviteMessage(text, success = false) {
   const message = document.querySelector("#invite-message");
   message.textContent = text;
@@ -145,7 +169,36 @@ async function loadMembers() {
       }
     });
     row.append(resetPassword);
-    list.append(row);
+
+    const entry = document.createElement("div");
+    entry.className = "member-entry";
+    entry.append(row);
+    if (member.instance && member.instance.status === "connected") {
+      const detailPanel = document.createElement("div");
+      detailPanel.className = "member-detail hidden";
+      let loaded = false;
+      const detailToggle = document.createElement("button");
+      detailToggle.type = "button";
+      detailToggle.className = "member-detail-toggle";
+      detailToggle.textContent = "Detail";
+      detailToggle.addEventListener("click", async () => {
+        const willShow = detailPanel.classList.contains("hidden");
+        detailPanel.classList.toggle("hidden", !willShow);
+        detailToggle.textContent = willShow ? "Skrýt" : "Detail";
+        if (!willShow || loaded) return;
+        detailPanel.textContent = "Načítám…";
+        try {
+          const { kryptotron } = await inviteRequest(`/api/members/${member.id}/kryptotron`);
+          renderMemberDetail(detailPanel, kryptotron);
+          loaded = true;
+        } catch (error) {
+          detailPanel.textContent = error instanceof Error ? error.message : "Detail se nepodařilo načíst.";
+        }
+      });
+      row.append(detailToggle);
+      entry.append(detailPanel);
+    }
+    list.append(entry);
   }
 }
 
