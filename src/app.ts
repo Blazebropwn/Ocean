@@ -13,6 +13,7 @@ import { registerInvitationRoutes } from "./routes/invitations.js";
 import { registerKryptotronRoutes } from "./routes/kryptotron.js";
 import { registerMemberRoutes } from "./routes/members.js";
 import { registerTelegramRoutes } from "./routes/telegram.js";
+import { buildVersionedPages } from "./asset-versioning.js";
 
 function isAllowedOrigin(origin: string, config: Config) {
   if (origin === config.appOrigin) return true;
@@ -35,10 +36,17 @@ export function buildApp(config: Config, database?: OceanDatabase) {
   const trustProxy = config.trustedProxies?.length ? config.trustedProxies : false;
   const app = Fastify<RawServerDefault>({ logger: process.env.NODE_ENV !== "test", trustProxy });
 
+  const publicRoot = join(process.cwd(), "public");
   app.register(cookie);
   app.register(helmet, { contentSecurityPolicy: { directives: { defaultSrc: ["'self'"], styleSrc: ["'self'"], scriptSrc: ["'self'"], imgSrc: ["'self'", "data:"] } } });
   app.register(rateLimit, { max: 100, timeWindow: "1 minute" });
-  app.register(staticFiles, { root: join(process.cwd(), "public"), prefix: "/" });
+  app.register(staticFiles, { root: publicRoot, prefix: "/", index: false });
+
+  for (const page of buildVersionedPages(publicRoot)) {
+    for (const route of page.routes) {
+      app.get(route, (_request, reply) => reply.header("content-type", "text/html; charset=utf-8").header("cache-control", "no-cache").send(page.html));
+    }
+  }
 
   app.addHook("onRequest", async (request, reply) => {
     if (!["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return;
