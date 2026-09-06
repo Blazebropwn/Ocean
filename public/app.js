@@ -160,7 +160,12 @@ function showAppView(view, activeLink = null) {
   }
   if (selected !== "overview") setOctoOpen(false);
   document.querySelectorAll(".app-view").forEach((panel) => panel.classList.toggle("hidden", panel.id !== `${selected}-view`));
-  document.querySelectorAll(".side-link[data-view]").forEach((link) => link.classList.toggle("active", activeLink ? link === activeLink : link.dataset.view === selected));
+  document.querySelectorAll(".side-link[data-view]").forEach((link) => {
+    const active = activeLink ? link === activeLink : link.dataset.view === selected;
+    link.classList.toggle("active", active);
+    if (active) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  });
   $("#workspace-title").textContent = selected === "overview" ? "Přehled" : selected === "arcade" ? "Arcade" : "Vault";
   if (selected === "arcade") openArcade();
 }
@@ -629,7 +634,10 @@ $("#octo-mute").addEventListener("click", () => {
   $("#octo-mute").textContent = octoMuted ? "Povolit automatické zprávy" : "Ztišit automatické zprávy";
 });
 
-$("#profile-button").addEventListener("click", () => $("#profile-menu").classList.toggle("hidden"));
+$("#profile-button").addEventListener("click", () => {
+  const hidden = $("#profile-menu").classList.toggle("hidden");
+  $("#profile-button").setAttribute("aria-expanded", String(!hidden));
+});
 
 document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => {
   document.querySelectorAll(".tab").forEach((item) => item.classList.toggle("active", item === tab));
