@@ -12,6 +12,15 @@ function command(text = "") {
   return { name: name.toLowerCase().split("@")[0], argument: argument.toUpperCase() };
 }
 
+const HELP_TEXT = [
+  "🌊 Ocean příkazy:",
+  "/status — stav tvého Kryptotronu",
+  "/pause — pozastavit nové obchody",
+  "/resume — obnovit obchodování",
+  "/help — tato nápověda",
+  "/link <kód> — propojit účet (kód najdeš v Oceanu)",
+].join("\n");
+
 function connectionForChat(db: OceanDatabase, chatId: string) {
   return db.prepare(`SELECT t.user_id, i.remote_state_key, i.status
     FROM telegram_connections t JOIN kryptotron_instances i ON i.user_id = t.user_id
@@ -35,15 +44,22 @@ export async function processTelegramMessage(db: OceanDatabase, config: Config, 
       db.prepare("DELETE FROM telegram_pairings WHERE user_id = ?").run(pairing.user_id);
     });
     link();
-    return send(chatId, "Ocean byl propojen. Příkazy: /status a /pause");
+    return send(chatId, `Ocean byl propojen.\n\n${HELP_TEXT}`);
   }
 
+  if (parsed.name === "/help") return send(chatId, HELP_TEXT);
+
   const connection = connectionForChat(db, chatId);
-  if (!connection) return send(chatId, "Telegram není propojený s účtem Ocean.");
+  if (!connection) return send(chatId, "Telegram není propojený s účtem Ocean. Otevři Ocean → profil → Telegram a propoj účet.");
   if (parsed.name === "/pause") {
     if (!connection.remote_state_key || !config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return send(chatId, "Kryptotron teď není dostupný.");
     await setKryptotronEntriesPaused(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, true, connection.remote_state_key);
     return send(chatId, "⏸ Nové obchody jsou pozastavené. Otevřená pozice zůstává chráněná.");
+  }
+  if (parsed.name === "/resume") {
+    if (!connection.remote_state_key || !config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return send(chatId, "Kryptotron teď není dostupný.");
+    await setKryptotronEntriesPaused(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, false, connection.remote_state_key);
+    return send(chatId, "▶️ Obchodování obnoveno. Kryptotron zase může otevírat nové obchody.");
   }
   if (parsed.name === "/status" || parsed.name === "/start") {
     if (!connection.remote_state_key || connection.status !== "connected" || !config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return send(chatId, "Kryptotron zatím není připojený.");
@@ -52,7 +68,7 @@ export async function processTelegramMessage(db: OceanDatabase, config: Config, 
     const position = snapshot.positions.find((item) => item.inPosition)?.symbol ?? "bez pozice";
     return send(chatId, `🌊 Ocean\nKryptotron: ${snapshot.entriesPaused ? "pozastaven" : snapshot.status}\nBalance: ${balance}\nPozice: ${position}`);
   }
-  return send(chatId, "Příkazy: /status a /pause");
+  return send(chatId, HELP_TEXT);
 }
 
 async function telegramCall(token: string, method: string, body?: Record<string, unknown>) {
@@ -73,6 +89,14 @@ export function startTelegramBot(config: Config, db: OceanDatabase, logger: Tele
   }
   let stopped = false;
   let timer: NodeJS.Timeout | undefined;
+  void telegramCall(config.telegramBotToken, "setMyCommands", {
+    commands: [
+      { command: "status", description: "Stav Kryptotronu" },
+      { command: "pause", description: "Pozastavit nové obchody" },
+      { command: "resume", description: "Obnovit obchodování" },
+      { command: "help", description: "Seznam příkazů" },
+    ],
+  }).catch((error) => logger.warn({ err: error }, "Nepodařilo se nastavit Telegram příkazy"));
   const send = async (chatId: string, text: string) => { await telegramCall(config.telegramBotToken!, "sendMessage", { chat_id: chatId, text }); };
   const poll = async () => {
     if (stopped) return;

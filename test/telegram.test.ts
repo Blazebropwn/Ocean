@@ -41,3 +41,37 @@ test("unlinked Telegram chat cannot control Kryptotron", async () => {
   assert.match(messages[0]!, /není propojený/);
   db.close();
 });
+
+test("Telegram exposes the basic command set via /help even before linking", async () => {
+  const db = openDatabase(":memory:");
+  const config = { port: 0, host: "127.0.0.1", databasePath: ":memory:", appOrigin: "http://localhost", isProduction: false };
+  const messages: string[] = [];
+  await processTelegramMessage(db, config, { chat: { id: 5 }, text: "/help" }, async (_chat, text) => { messages.push(text); });
+  assert.match(messages[0]!, /\/status/);
+  assert.match(messages[0]!, /\/pause/);
+  assert.match(messages[0]!, /\/resume/);
+  db.close();
+});
+
+test("linked member can resume trading from Telegram", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const patches: Array<{ data: { entries_paused: boolean } }> = [];
+  globalThis.fetch = async (_input, init) => {
+    if (init?.method === "PATCH") { patches.push(JSON.parse(String(init?.body))); return new Response(null, { status: 204 }); }
+    return new Response(JSON.stringify([{ data: { entries_paused: true, events: [] } }]), { status: 200, headers: { "content-type": "application/json" } });
+  };
+
+  const db = openDatabase(":memory:");
+  const config = { port: 0, host: "127.0.0.1", databasePath: ":memory:", appOrigin: "http://localhost", isProduction: false, kryptotronSupabaseUrl: "https://example.supabase.co", kryptotronSupabaseKey: "key" };
+  const app = buildApp(config, db);
+  const registration = await app.inject({ method: "POST", url: "/api/auth/register", payload: { username: "captain", password: "safe password" } });
+  const userId = registration.json().user.id as string;
+  db.prepare("INSERT INTO telegram_connections (user_id, chat_id) VALUES (?, '77')").run(userId);
+
+  const messages: string[] = [];
+  await processTelegramMessage(db, config, { chat: { id: 77 }, text: "/resume" }, async (_chat, text) => { messages.push(text); });
+  assert.match(messages[0]!, /obnoveno/i);
+  assert.equal(patches.at(-1)!.data.entries_paused, false);
+  await app.close();
+});
