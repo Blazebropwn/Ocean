@@ -11,6 +11,7 @@ Kontrola každé 4 hodiny.
 import time
 import json
 import logging
+from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -72,7 +73,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
-        logging.FileHandler("logs/bot.log"),
+        RotatingFileHandler("logs/bot.log", maxBytes=5 * 1024 * 1024, backupCount=3),
         logging.StreamHandler(),
     ]
 )
