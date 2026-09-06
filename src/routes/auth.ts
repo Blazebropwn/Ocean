@@ -42,8 +42,8 @@ export function registerAuthRoutes(app: FastifyInstance, db: OceanDatabase, conf
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? "Neplatné údaje." });
 
     const { email, username, password, inviteToken } = parsed.data;
-    const exists = db.prepare("SELECT 1 FROM users WHERE email = ? OR username = ?").get(email, username);
-    if (exists) return reply.code(409).send({ error: "Účet s tímto e-mailem nebo uživatelským jménem již existuje." });
+    const exists = db.prepare("SELECT 1 FROM users WHERE username = ?").get(username);
+    if (exists) return reply.code(409).send({ error: "Účet s tímto uživatelským jménem již existuje." });
 
     const userId = newUserId();
     const passwordHash = await hashPassword(password);
@@ -52,17 +52,20 @@ export function registerAuthRoutes(app: FastifyInstance, db: OceanDatabase, conf
         const count = (db.prepare("SELECT COUNT(*) AS count FROM users").get() as { count: number }).count;
         let role: "owner" | "member" = "owner";
         let invitationId: string | null = null;
+        let invitationEmail: string | null = null;
         if (count > 0) {
           if (!inviteToken) throw new Error("INVITATION_REQUIRED");
           const invitation = db.prepare(`SELECT id, email FROM invitations WHERE token_hash = ? AND used_at IS NULL AND revoked_at IS NULL AND expires_at > datetime('now')`)
             .get(hashToken(inviteToken)) as { id: string; email: string | null } | undefined;
-          if (!invitation || (invitation.email && invitation.email.toLowerCase() !== email)) throw new Error("INVITATION_REQUIRED");
+          if (!invitation || (invitation.email && email && invitation.email.toLowerCase() !== email)) throw new Error("INVITATION_REQUIRED");
           role = "member";
           invitationId = invitation.id;
+          invitationEmail = invitation.email;
         }
+        const accountEmail = email ?? invitationEmail ?? `${userId}@users.ocean.invalid`;
         db.prepare(`INSERT INTO users (id, email, username, password_hash, role, approved_at, approved_by)
           VALUES (?, ?, ?, ?, ?, CASE WHEN ? = 'owner' THEN datetime('now') ELSE NULL END, CASE WHEN ? = 'owner' THEN ? ELSE NULL END)`)
-          .run(userId, email, username, passwordHash, role, role, role, userId);
+          .run(userId, accountEmail, username, passwordHash, role, role, role, userId);
         db.prepare("INSERT INTO kryptotron_instances (id, user_id, remote_state_key, status, environment) VALUES (?, ?, ?, ?, ?)")
           .run(`kry_${userId.slice(4)}`, userId, role === "owner" ? "main" : null, role === "owner" ? "connected" : "unconfigured", role === "owner" ? "mainnet" : "testnet");
         if (invitationId) {
@@ -73,7 +76,7 @@ export function registerAuthRoutes(app: FastifyInstance, db: OceanDatabase, conf
       register();
     } catch (error: any) {
       if (error?.message === "INVITATION_REQUIRED") return reply.code(403).send({ error: "Platná pozvánka je vyžadována." });
-      if (error?.code === "SQLITE_CONSTRAINT_UNIQUE") return reply.code(409).send({ error: "Účet s tímto e-mailem nebo uživatelským jménem již existuje." });
+      if (error?.code === "SQLITE_CONSTRAINT_UNIQUE") return reply.code(409).send({ error: "Účet s tímto uživatelským jménem již existuje." });
       throw error;
     }
     const meta = requestMeta(request);
@@ -81,7 +84,7 @@ export function registerAuthRoutes(app: FastifyInstance, db: OceanDatabase, conf
     const token = createSession(db, userId, request);
     setSessionCookie(reply, token, config);
     const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as UserRecord;
-    if (!config.manualApprovalEnabled) issueVerification(db, user, config);
+    if (!config.manualApprovalEnabled && email) issueVerification(db, user, config);
     return reply.code(201).send({ user: publicUser(user, approvalMode(config)) });
   });
 

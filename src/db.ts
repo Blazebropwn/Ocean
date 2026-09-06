@@ -18,7 +18,7 @@ export type UserRecord = {
 export type PublicUser = {
   id: string;
   displayId: string;
-  email: string;
+  email: string | null;
   username: string;
   emailVerified: boolean;
   approved: boolean;
@@ -39,10 +39,11 @@ export type KryptotronInstanceRecord = {
 };
 
 export function publicUser(user: UserRecord, approvalMode: "owner" | "email" = "email"): PublicUser {
+  const email = user.email.endsWith("@users.ocean.invalid") ? null : user.email;
   return {
     id: user.id,
     displayId: `OCEAN-${String(user.public_id).padStart(6, "0")}`,
-    email: user.email,
+    email,
     username: user.username,
     emailVerified: Boolean(user.email_verified_at),
     approved: Boolean(user.approved_at),

@@ -39,7 +39,8 @@ function showUser(user) {
   $("#nav-avatar").textContent = user.username[0].toUpperCase();
   $("#nav-username").textContent = user.username;
   $("#menu-username").textContent = user.username;
-  $("#email").textContent = user.email;
+  $("#email").textContent = user.email || "";
+  $("#email").classList.toggle("hidden", !user.email);
   $("#email-status").textContent = user.emailVerified ? "✓ OVĚŘENO" : "ČEKÁ NA OVĚŘENÍ";
   $("#email-status").className = user.emailVerified ? "hidden verified" : "hidden pending";
   $("#invite-admin-link").classList.toggle("hidden", user.role !== "owner");
@@ -536,6 +537,7 @@ for (const [id, path] of [["#register-form", "/api/auth/register"], ["#login-for
     try {
       const body = Object.fromEntries(new FormData(form));
       if (id === "#register-form") {
+        if (body.password !== body.confirmation) throw new Error("Hesla se neshodují.");
         if (registrationInviteToken) body.inviteToken = registrationInviteToken;
       }
       const result = await request(path, { method: "POST", body: JSON.stringify(body) });

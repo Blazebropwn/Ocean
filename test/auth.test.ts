@@ -37,6 +37,37 @@ test("register creates an opaque identity and authenticated session", async () =
   await app.close();
 });
 
+test("registration works without email and rejects mismatched password confirmation", async () => {
+  const db = openDatabase(":memory:");
+  const app = buildApp({ ...config, manualApprovalEnabled: true }, db);
+  const mismatch = await app.inject({
+    method: "POST", url: "/api/auth/register",
+    payload: { username: "new_diver", password: "a safe password", confirmation: "a different password" },
+  });
+  assert.equal(mismatch.statusCode, 400);
+  assert.equal(mismatch.json().error, "Hesla se neshodují.");
+
+  const response = await app.inject({
+    method: "POST", url: "/api/auth/register",
+    payload: { username: "new_diver", password: "a safe password", confirmation: "a safe password" },
+  });
+  assert.equal(response.statusCode, 201);
+  assert.equal(response.json().user.email, null);
+  const stored = db.prepare("SELECT email FROM users WHERE username = ?").get("new_diver") as { email: string };
+  assert.match(stored.email, /^usr_[a-f0-9]{32}@users\.ocean\.invalid$/);
+
+  const ownerCookie = response.headers["set-cookie"]?.toString().split(";")[0];
+  const invitation = await app.inject({ method: "POST", url: "/api/invitations", headers: { cookie: ownerCookie! }, payload: {} });
+  const inviteToken = new URL(invitation.json().invitation.inviteUrl).searchParams.get("invite");
+  const member = await app.inject({
+    method: "POST", url: "/api/auth/register",
+    payload: { username: "second_diver", password: "another safe password", confirmation: "another safe password", inviteToken },
+  });
+  assert.equal(member.statusCode, 201);
+  assert.equal(member.json().user.email, null);
+  await app.close();
+});
+
 test("additional accounts require a single-use owner invitation", async () => {
   const db = openDatabase(":memory:");
   const app = buildApp(config, db);

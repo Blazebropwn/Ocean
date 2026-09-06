@@ -1,10 +1,14 @@
 import { z } from "zod";
 
 export const registerSchema = z.object({
-  email: z.email("Zadejte platný e-mail.").max(254).transform((v) => v.trim().toLowerCase()),
+  email: z.email("Zadejte platný e-mail.").max(254).transform((v) => v.trim().toLowerCase()).optional(),
   username: z.string().trim().min(3, "Uživatelské jméno musí mít alespoň 3 znaky.").max(32, "Uživatelské jméno může mít nejvýše 32 znaků.").regex(/^[a-zA-Z0-9_]+$/, "Použijte pouze písmena, čísla a podtržítko."),
   password: z.string().min(8, "Heslo musí mít alespoň 8 znaků.").max(128),
+  confirmation: z.string().min(8).max(128).optional(),
   inviteToken: z.string().min(32).max(128).optional(),
+}).refine((data) => data.confirmation === undefined || data.password === data.confirmation, {
+  message: "Hesla se neshodují.",
+  path: ["confirmation"],
 });
 
 export const invitationCreateSchema = z.object({
