@@ -36,6 +36,12 @@ function setOctoOpen(open) {
   $("#octo-toggle").setAttribute("aria-expanded", String(open));
 }
 
+function setProfileOpen(open) {
+  $("#profile-menu").classList.toggle("hidden", !open);
+  $("#profile-button").setAttribute("aria-expanded", String(open));
+  if (open) setOctoOpen(false);
+}
+
 function initializeOcto() {
   const assistant = $("#octo-assistant");
   assistant.classList.remove("hidden");
@@ -76,7 +82,8 @@ function renderOcto(presentation) {
     avatar.addEventListener("load", () => avatar.classList.remove("changing"), { once: true });
   }
 
-  if (changed && presentation?.autoOpen && !octoMuted) {
+  const profileOpen = !$("#profile-menu").classList.contains("hidden");
+  if (changed && presentation?.autoOpen && !octoMuted && !profileOpen) {
     setOctoOpen(true);
     if (!presentation.critical) octoCloseTimer = setTimeout(() => setOctoOpen(false), 5600);
   }
@@ -626,7 +633,11 @@ function formatBips(value) {
   return value ? `trail ${(value / 100).toLocaleString("cs-CZ", { maximumFractionDigits: 2 })} %` : "trail";
 }
 
-$("#octo-toggle").addEventListener("click", () => setOctoOpen($("#octo-bubble").hidden));
+$("#octo-toggle").addEventListener("click", () => {
+  const open = $("#octo-bubble").hidden;
+  if (open) setProfileOpen(false);
+  setOctoOpen(open);
+});
 $("#octo-close").addEventListener("click", () => setOctoOpen(false));
 $("#octo-mute").addEventListener("click", () => {
   octoMuted = !octoMuted;
@@ -635,8 +646,7 @@ $("#octo-mute").addEventListener("click", () => {
 });
 
 $("#profile-button").addEventListener("click", () => {
-  const hidden = $("#profile-menu").classList.toggle("hidden");
-  $("#profile-button").setAttribute("aria-expanded", String(!hidden));
+  setProfileOpen($("#profile-menu").classList.contains("hidden"));
 });
 
 document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => {

@@ -760,7 +760,9 @@ input:focus { border-color: var(--cyan); background: rgba(2, 17, 23, 0.9); box-s
   display: flex;
   align-items: center;
   justify-content: center;
-  position: relative;
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
   z-index: 51;
 }
 .octo-avatar-button {
@@ -817,11 +819,11 @@ input:focus { border-color: var(--cyan); background: rgba(2, 17, 23, 0.9); box-s
   max-width: calc(100vw - 110px);
   padding: 16px;
   position: absolute;
-  right: calc(100% + 10px);
-  top: calc(100% + 8px);
+  right: 0;
+  bottom: calc(100% + 12px);
   overflow: visible;
   border: 1px solid rgba(84, 238, 226, 0.3);
-  border-radius: 15px 5px 15px 15px;
+  border-radius: 15px 15px 5px 15px;
   color: var(--ink);
   background: linear-gradient(145deg, rgba(13, 43, 54, 0.98), rgba(4, 20, 27, 0.99));
   box-shadow: 0 20px 55px rgba(0, 5, 9, 0.5), inset 0 1px rgba(255, 255, 255, 0.035);
@@ -843,10 +845,10 @@ input:focus { border-color: var(--cyan); background: rgba(2, 17, 23, 0.9); box-s
   width: 10px;
   height: 10px;
   position: absolute;
-  right: -6px;
-  top: 18px;
+  right: 18px;
+  bottom: -6px;
   border-right: 1px solid rgba(84, 238, 226, 0.3);
-  border-top: 1px solid rgba(84, 238, 226, 0.3);
+  border-bottom: 1px solid rgba(84, 238, 226, 0.3);
   background: #071d26;
   transform: rotate(45deg);
 }
