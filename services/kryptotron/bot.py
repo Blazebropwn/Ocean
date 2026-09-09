@@ -729,16 +729,17 @@ def maybe_send_weekly_summary(state):
         send_weekly_summary(state)
 
 
-def maybe_send_scheduled_summaries(client, state, pair_filters):
+def maybe_send_scheduled_summaries(client, state, pair_filters, market_client=None):
+    market_client = market_client or client
     refresh_entries_control(state)
     maybe_run_test_dca(client, state, pair_filters)
-    maybe_run_streak_paper(client, state, pair_filters)
+    maybe_run_streak_paper(market_client, state, pair_filters)
     maybe_send_daily_summary(state)
     maybe_run_weekly_dca(client, state, pair_filters)
     maybe_send_weekly_summary(state)
 
 
-def sleep_until_next_4h_candle(client, state, pair_filters, cycle_errors):
+def sleep_until_next_4h_candle(client, state, pair_filters, cycle_errors, market_client=None):
     n          = now_utc()
     h_in_block = n.hour % 4
     secs_past  = h_in_block * 3600 + n.minute * 60 + n.second
@@ -758,7 +759,7 @@ def sleep_until_next_4h_candle(client, state, pair_filters, cycle_errors):
         if remaining <= 0:
             break
         process_telegram(state)
-        maybe_send_scheduled_summaries(client, state, pair_filters)
+        maybe_send_scheduled_summaries(client, state, pair_filters, market_client)
         state["last_heartbeat_at"] = now_utc().isoformat()
         save_state(state)
         log.info("OCEAN_HEARTBEAT")
@@ -812,6 +813,11 @@ def run():
         pass
 
     client = Client(API_KEY, API_SECRET, testnet=TESTNET)
+    # Spot Testnet se pravidelně resetuje a po resetu nemá dost historie pro
+    # EMA200. Objednávky zůstávají na Testnetu, veřejné ceny čteme z Mainnetu.
+    market_client = Client(testnet=False) if TESTNET else client
+    if TESTNET:
+        log.info("Tržní data: veřejný Binance Spot | Objednávky: TESTNET")
 
     try:
         enforce_safe_api_permissions(client, state)
@@ -887,7 +893,7 @@ def run():
                 ps     = get_pair_state(state, symbol)
 
                 try:
-                    data              = get_cross_data(client, symbol, EMA_FAST_PERIOD, EMA_SLOW_PERIOD)
+                    data              = get_cross_data(market_client, symbol, EMA_FAST_PERIOD, EMA_SLOW_PERIOD)
                     pair_data[symbol] = data
                     trend_str         = "🟢 BULL" if data["bull"] else "🔴 BEAR"
                     cross_str         = " ⚡ GOLDEN CROSS!" if data["golden_cross"] else \
@@ -1068,7 +1074,7 @@ def run():
             log.error(f"Neočekávaná chyba: {e}", exc_info=True)
             tg_alert(state, f"worker:global:{type(e).__name__}", f"🚨 <b>Chyba Kryptotronu</b>\n{str(e)[:240]}")
 
-        sleep_until_next_4h_candle(client, state, pair_filters, cycle_errors)
+        sleep_until_next_4h_candle(client, state, pair_filters, cycle_errors, market_client)
 
 
 if __name__ == "__main__":
