@@ -755,19 +755,19 @@ input:focus { border-color: var(--cyan); background: rgba(2, 17, 23, 0.9); box-s
 .side-nav { z-index: 31; }
 .octo-dock {
   --octo-color: var(--cyan);
-  width: 52px;
-  height: 52px;
+  width: 72px;
+  height: 72px;
   display: flex;
   align-items: center;
   justify-content: center;
   position: fixed;
-  right: 22px;
+  left: 22px;
   bottom: 22px;
   z-index: 51;
 }
 .octo-avatar-button {
-  width: 52px;
-  height: 52px;
+  width: 72px;
+  height: 72px;
   display: grid;
   place-items: center;
   padding: 0;
@@ -819,11 +819,11 @@ input:focus { border-color: var(--cyan); background: rgba(2, 17, 23, 0.9); box-s
   max-width: calc(100vw - 110px);
   padding: 16px;
   position: absolute;
-  right: 0;
+  left: 0;
   bottom: calc(100% + 12px);
   overflow: visible;
   border: 1px solid rgba(84, 238, 226, 0.3);
-  border-radius: 15px 15px 5px 15px;
+  border-radius: 15px 15px 15px 5px;
   color: var(--ink);
   background: linear-gradient(145deg, rgba(13, 43, 54, 0.98), rgba(4, 20, 27, 0.99));
   box-shadow: 0 20px 55px rgba(0, 5, 9, 0.5), inset 0 1px rgba(255, 255, 255, 0.035);
@@ -845,9 +845,9 @@ input:focus { border-color: var(--cyan); background: rgba(2, 17, 23, 0.9); box-s
   width: 10px;
   height: 10px;
   position: absolute;
-  right: 18px;
+  left: 24px;
   bottom: -6px;
-  border-right: 1px solid rgba(84, 238, 226, 0.3);
+  border-left: 1px solid rgba(84, 238, 226, 0.3);
   border-bottom: 1px solid rgba(84, 238, 226, 0.3);
   background: #071d26;
   transform: rotate(45deg);
