@@ -3,6 +3,7 @@ import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import staticFiles from "@fastify/static";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Config } from "./config.js";
 import { openDatabase, type OceanDatabase } from "./db.js";
@@ -13,7 +14,7 @@ import { registerInvitationRoutes } from "./routes/invitations.js";
 import { registerKryptotronRoutes } from "./routes/kryptotron.js";
 import { registerMemberRoutes } from "./routes/members.js";
 import { registerTelegramRoutes } from "./routes/telegram.js";
-import { buildVersionedPages } from "./asset-versioning.js";
+import { buildVersionedPages, versionAssetReferences } from "./asset-versioning.js";
 
 function isAllowedOrigin(origin: string, config: Config) {
   if (origin === config.appOrigin) return true;
@@ -44,7 +45,10 @@ export function buildApp(config: Config, database?: OceanDatabase) {
 
   for (const page of buildVersionedPages(publicRoot)) {
     for (const route of page.routes) {
-      app.get(route, (_request, reply) => reply.header("content-type", "text/html; charset=utf-8").header("cache-control", "no-cache").send(page.html));
+      app.get(route, (_request, reply) => {
+        const html = config.isProduction ? page.html : versionAssetReferences(readFileSync(join(publicRoot, page.file), "utf8"), publicRoot);
+        reply.header("content-type", "text/html; charset=utf-8").header("cache-control", "no-cache").send(html);
+      });
     }
   }
 

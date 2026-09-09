@@ -22,7 +22,7 @@ export function versionAssetReferences(html: string, publicRoot: string, hashes 
   });
 }
 
-export type VersionedPage = { routes: string[]; html: string };
+export type VersionedPage = { routes: string[]; file: string; html: string };
 
 // Render every public HTML page once with content-hashed asset URLs.
 export function buildVersionedPages(publicRoot: string): VersionedPage[] {
@@ -31,7 +31,7 @@ export function buildVersionedPages(publicRoot: string): VersionedPage[] {
   for (const entry of readdirSync(publicRoot)) {
     if (!entry.endsWith(".html")) continue;
     const html = versionAssetReferences(readFileSync(join(publicRoot, entry), "utf8"), publicRoot, hashes);
-    pages.push({ routes: entry === "index.html" ? ["/", "/index.html"] : [`/${entry}`], html });
+    pages.push({ routes: entry === "index.html" ? ["/", "/index.html"] : [`/${entry}`], file: entry, html });
   }
   return pages;
 }
