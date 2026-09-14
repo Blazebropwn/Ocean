@@ -93,6 +93,55 @@ test("Binance provider refuses users without a connected account", async () => {
   db.close();
 });
 
+test("owner legacy mainnet instance reads only the normalized worker snapshot", async () => {
+  const db = openDatabase(":memory:");
+  db.prepare(`INSERT INTO users (id, email, username, password_hash, role, approved_at)
+    VALUES (?, 'owner@example.com', 'owner', 'unused', 'owner', datetime('now'))`).run(userId);
+  db.prepare(`INSERT INTO kryptotron_instances (id, user_id, remote_state_key, status, environment)
+    VALUES (?, ?, 'main', 'connected', 'mainnet')`).run(instanceId, userId);
+  let requestedStateKey: string | null = null;
+  const provider = new BinancePortfolioProvider(
+    db,
+    undefined,
+    undefined,
+    () => now,
+    () => "psn_abcdefabcdefabcdefabcdefabcdefab",
+    async (stateKey) => {
+      requestedStateKey = stateKey;
+      return { portfolio_snapshot: {
+        schema_version: "ocean.worker-portfolio.v1",
+        captured_at: "2026-09-14T11:59:00.000Z",
+        quote_currency: "USDC",
+        assets: [
+          { asset: "USDC", quantity: 40, price_usdc: 1 },
+          { asset: "BTC", quantity: 0.001, price_usdc: 60_000 },
+        ],
+      } };
+    },
+  );
+
+  const snapshot = await provider.getSnapshot({ userId, quoteCurrency: "USDC" });
+  assert.equal(requestedStateKey, "main");
+  assert.equal(snapshot.provider.environment, "mainnet");
+  assert.equal(snapshot.provider.readOnly, true);
+  assert.deepEqual(snapshot.assets[1]?.value, { amount: 60, quotedIn: "USDC" });
+  db.close();
+});
+
+test("legacy mainnet instance fails closed until the worker publishes a snapshot", async () => {
+  const db = openDatabase(":memory:");
+  db.prepare(`INSERT INTO users (id, email, username, password_hash, role, approved_at)
+    VALUES (?, 'owner@example.com', 'owner', 'unused', 'owner', datetime('now'))`).run(userId);
+  db.prepare(`INSERT INTO kryptotron_instances (id, user_id, remote_state_key, status, environment)
+    VALUES (?, ?, 'main', 'connected', 'mainnet')`).run(instanceId, userId);
+  const provider = new BinancePortfolioProvider(db, undefined, undefined, () => now, undefined, async () => ({}));
+  await assert.rejects(
+    provider.getSnapshot({ userId, quoteCurrency: "USDC" }),
+    /ještě neposkytl portfolio snapshot/,
+  );
+  db.close();
+});
+
 test("Binance portfolio reader performs GET-only account and market-data requests", async (t) => {
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });

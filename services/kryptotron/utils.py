@@ -3,6 +3,7 @@ import math
 import logging
 import requests
 import pandas as pd
+from datetime import datetime, timezone
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +39,41 @@ def get_balance(client, asset="USDT", raise_on_error=False):
         if raise_on_error:
             raise
         return 0.0
+
+
+def read_portfolio_snapshot(client, quote_asset="USDC"):
+    """Return a bounded, credential-free portfolio view safe to persist in Ocean state."""
+    account = client.get_account()
+    prices = {}
+    for ticker in client.get_all_tickers():
+        symbol = ticker.get("symbol")
+        try:
+            price = float(ticker.get("price", 0))
+        except (TypeError, ValueError):
+            continue
+        if isinstance(symbol, str) and math.isfinite(price) and price >= 0:
+            prices[symbol] = price
+
+    assets = []
+    for balance in account.get("balances", []):
+        asset = balance.get("asset")
+        if not isinstance(asset, str) or not asset.isalnum() or not 2 <= len(asset) <= 16:
+            continue
+        try:
+            quantity = float(balance.get("free", 0)) + float(balance.get("locked", 0))
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(quantity) or quantity <= 0:
+            continue
+        price = 1.0 if asset == quote_asset else prices.get(f"{asset}{quote_asset}")
+        assets.append({"asset": asset, "quantity": quantity, "price_usdc": price})
+
+    return {
+        "schema_version": "ocean.worker-portfolio.v1",
+        "captured_at": datetime.now(timezone.utc).isoformat(),
+        "quote_currency": quote_asset,
+        "assets": assets[:2000],
+    }
 
 
 def get_symbol_filters(client, symbol):

@@ -35,7 +35,7 @@ from config.settings import (
 from strategy import get_cross_data
 from utils import (
     answer_telegram_callback, get_balance, get_symbol_filters, notify,
-    round_price, round_step, telegram_updates,
+    read_portfolio_snapshot, round_price, round_step, telegram_updates,
 )
 from order_safety import apply_filled_buy, classify_order, new_buy_intent
 from events import add_event
@@ -123,6 +123,7 @@ DEFAULT_STATE = {
     "quote_asset":          QUOTE_ASSET,
     "events":               [],
     "market_snapshot":      {},
+    "portfolio_snapshot":   None,
     "last_daily_summary_date": "",
     "dca":                    {},
     "streak":                 {},
@@ -864,6 +865,10 @@ def run():
             log.warning("Binance připojení není dostupné; další pokus za 5 minut")
             time.sleep(300)
     state.update(account_balance=balance, quote_asset=QUOTE_ASSET)
+    try:
+        state["portfolio_snapshot"] = read_portfolio_snapshot(client, QUOTE_ASSET)
+    except Exception as exc:
+        log.warning(f"Portfolio snapshot se nepodařilo obnovit: {exc}")
     save_state(state)
     add_event(state, "SYSTEM", f"Kryptotron připraven · {mode.split()[-1]}")
     save_state(state)
@@ -1055,6 +1060,10 @@ def run():
             # ── BALANCE LOG ──────────────────────────────────────────────────
             balance   = get_balance(client, QUOTE_ASSET, raise_on_error=True)
             state.update(account_balance=balance, quote_asset=QUOTE_ASSET)
+            try:
+                state["portfolio_snapshot"] = read_portfolio_snapshot(client, QUOTE_ASSET)
+            except Exception as exc:
+                log.warning(f"Portfolio snapshot se nepodařilo obnovit: {exc}")
             state["market_snapshot"] = {
                 symbol: {"close": data["close"], "bull": data["bull"]}
                 for symbol, data in pair_data.items()
