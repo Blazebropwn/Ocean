@@ -8,16 +8,20 @@ import { openDatabase } from "../src/db.js";
 import { migrateDatabase, type DatabaseMigration } from "../src/database/migrate.js";
 
 const expectedTables = [
-  "email_verification_tokens", "invitations", "kryptotron_credentials", "kryptotron_instances",
-  "mail_outbox", "password_reset_tokens", "schema_migrations", "security_events", "sessions",
-  "telegram_bot_state", "telegram_connections", "telegram_pairings", "users",
+  "agent_ledger_entries", "agent_runs", "agents", "email_verification_tokens", "invitations",
+  "kryptotron_credentials", "kryptotron_instances", "mail_outbox", "password_reset_tokens",
+  "schema_migrations", "security_events", "sessions", "telegram_bot_state",
+  "telegram_connections", "telegram_pairings", "users",
 ];
 
 test("a new database receives the versioned Ocean schema exactly once", () => {
   const db = openDatabase(":memory:");
   const tables = (db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all() as Array<{ name: string }>).map(({ name }) => name);
   assert.deepEqual(tables, expectedTables);
-  assert.deepEqual(db.prepare("SELECT version, name FROM schema_migrations").all(), [{ version: 1, name: "existing_ocean_schema" }]);
+  assert.deepEqual(db.prepare("SELECT version, name FROM schema_migrations ORDER BY version").all(), [
+    { version: 1, name: "existing_ocean_schema" },
+    { version: 2, name: "agent_001_foundation" },
+  ]);
   assert.equal((db.pragma("foreign_keys", { simple: true }) as number), 1);
   db.close();
 });
@@ -31,7 +35,7 @@ test("reopening a database is idempotent and preserves rows", () => {
 
   db = openDatabase(path);
   assert.equal((db.prepare("SELECT COUNT(*) AS count FROM users WHERE id = 'usr_preserved'").get() as { count: number }).count, 1);
-  assert.equal((db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get() as { count: number }).count, 1);
+  assert.equal((db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get() as { count: number }).count, 2);
   assert.equal(String(db.pragma("journal_mode", { simple: true })).toLowerCase(), "wal");
   db.close();
   rmSync(directory, { recursive: true, force: true });
@@ -48,6 +52,7 @@ test("a legacy database is upgraded without losing its owner", () => {
   const owner = migrated.prepare("SELECT id, role FROM users WHERE id = 'usr_legacy'").get();
   assert.deepEqual(owner, { id: "usr_legacy", role: "owner" });
   assert.equal((migrated.prepare("SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 1").get() as { count: number }).count, 1);
+  assert.equal((migrated.prepare("SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 2").get() as { count: number }).count, 1);
   migrated.close();
   rmSync(directory, { recursive: true, force: true });
 });
