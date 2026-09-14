@@ -213,6 +213,7 @@ async function loadAgentRunDetail(runId) {
     appendAgentValue(report, "Riziko", metrics ? `${metrics.riskLevel.toUpperCase()} · ${metrics.riskScore}` : "—");
     appendAgentValue(report, "Největší pozice", metrics?.largestPosition ? `${metrics.largestPosition.asset} · ${metrics.largestPosition.sharePct} %` : "—");
     appendAgentValue(report, "Zásahy člověka", String(run.humanInterventions));
+    if (run.error?.message) appendAgentValue(report, "Důvod", run.error.message);
     for (const entry of run.ledger) {
       const item = document.createElement("li");
       const sequence = document.createElement("b");

@@ -39,6 +39,7 @@ KRYPTOTRON_SUPABASE_KEY=...
 OCEAN_CREDENTIALS_KEY=...
 OCEAN_TELEGRAM_BOT_TOKEN=...
 OCEAN_TELEGRAM_BOT_USERNAME=...
+OCEAN_TELEGRAM_POLLING_ENABLED=true
 OCEAN_MANUAL_APPROVAL_ENABLED=true
 TRUST_PROXY=100.0.0.0/8
 RESEND_API_KEY=...
@@ -46,6 +47,8 @@ EMAIL_FROM=Ocean <ocean@vase-domena.cz>
 ```
 
 `KRYPTOTRON_SUPABASE_KEY`, `OCEAN_CREDENTIALS_KEY`, `OCEAN_BACKUP_KEY`, přístupové údaje k úložišti, Telegram token ani Binance klíče nesmí být součástí repozitáře nebo veřejných proměnných frontendu. Hodnotu `OCEAN_CREDENTIALS_KEY` po vytvoření neměňte bez řízené rotace a samostatné zálohy.
+
+Telegram long polling smí běžet jen v jedné instanci. Produkční služba má `OCEAN_TELEGRAM_POLLING_ENABLED=true`; lokální `.env` ponechte na `false`, pokud používá stejný bot token.
 
 `TRUST_PROXY` je omezené na privátní proxy rozsah Railway. Nepoužívejte hodnotu `true`, která by důvěřovala libovolnému odesílateli hlaviček.
 

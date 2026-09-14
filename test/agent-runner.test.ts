@@ -5,6 +5,7 @@ import { AGENT_001_PERMISSION_POLICY } from "../src/agents/permissions.js";
 import { AgentRepository } from "../src/agents/repository.js";
 import { AgentRunError, PortfolioRiskAgentRunner } from "../src/agents/runner.js";
 import type { PortfolioProvider } from "../src/portfolio/provider.js";
+import { z } from "zod";
 import { completePortfolioSnapshotFixture, portfolioFixtureNow } from "./fixtures/portfolio.js";
 
 const AGENT_ID = `agt_${"a".repeat(32)}`;
@@ -75,6 +76,26 @@ test("failed provider action is auditable and closes the run as failed", async (
     error_code: "ACTION_FAILED",
   });
   assert.deepEqual(db.prepare("SELECT sequence, result FROM agent_ledger_entries").get(), { sequence: 1, result: "failure" });
+  db.close();
+});
+
+test("snapshot validation failures expose a safe public message", async () => {
+  const provider: PortfolioProvider = {
+    id: "invalid-snapshot-provider",
+    async getSnapshot() { return z.never().parse("invalid"); },
+  };
+  const { db, runner } = setup({ provider });
+
+  await assert.rejects(
+    runner.run(AGENT_ID, "manual"),
+    (error) => error instanceof AgentRunError
+      && error.message === "Data portfolia neprošla bezpečnostní kontrolou.",
+  );
+  const stored = db.prepare("SELECT error_code, error_message FROM agent_runs").get();
+  assert.deepEqual(stored, {
+    error_code: "INVALID_PORTFOLIO_SNAPSHOT",
+    error_message: "Data portfolia neprošla bezpečnostní kontrolou.",
+  });
   db.close();
 });
 

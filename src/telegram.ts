@@ -87,6 +87,10 @@ export function startTelegramBot(config: Config, db: OceanDatabase, logger: Tele
     logger.info({}, "Ocean Telegram není nastaven");
     return { stop() {} };
   }
+  if (config.telegramPollingEnabled === false) {
+    logger.info({}, "Ocean Telegram polling je na této instanci vypnutý");
+    return { stop() {} };
+  }
   let stopped = false;
   let timer: NodeJS.Timeout | undefined;
   void telegramCall(config.telegramBotToken, "setMyCommands", {

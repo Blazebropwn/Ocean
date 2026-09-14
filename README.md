@@ -98,7 +98,10 @@ Pro osobní Telegram propojení použijte samostatného bota, který současně 
 ```text
 OCEAN_TELEGRAM_BOT_TOKEN=...
 OCEAN_TELEGRAM_BOT_USERNAME=vas_ocean_bot
+OCEAN_TELEGRAM_POLLING_ENABLED=false
 ```
+
+Jeden Telegram bot může mít pouze jeden aktivní long polling proces. Na produkci nastavte přepínač na `true`; lokálně jej při sdíleném tokenu ponechte vypnutý.
 
 Uživatel otevře Telegram z menu účtu a použije desetiminutový jednorázový 128bitový kód. Centrální bot podporuje `/status` a bezpečné `/pause`; obnovení obchodování zůstává pouze v přihlášeném dashboardu.
 

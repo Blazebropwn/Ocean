@@ -16,6 +16,7 @@ export type Config = {
   emailFrom?: string;
   telegramBotToken?: string;
   telegramBotUsername?: string;
+  telegramPollingEnabled?: boolean;
   manualApprovalEnabled?: boolean;
   offsiteBackupEnabled?: boolean;
   backupEncryptionKey?: string;
@@ -46,6 +47,9 @@ export function loadConfig(env = process.env): Config {
     emailFrom: env.EMAIL_FROM,
     telegramBotToken: env.OCEAN_TELEGRAM_BOT_TOKEN,
     telegramBotUsername: env.OCEAN_TELEGRAM_BOT_USERNAME,
+    telegramPollingEnabled: env.OCEAN_TELEGRAM_POLLING_ENABLED === undefined
+      ? env.NODE_ENV === "production"
+      : env.OCEAN_TELEGRAM_POLLING_ENABLED === "true",
     manualApprovalEnabled: env.OCEAN_MANUAL_APPROVAL_ENABLED === "true",
     offsiteBackupEnabled: env.OCEAN_OFFSITE_BACKUP_ENABLED === "true",
     backupEncryptionKey: env.OCEAN_BACKUP_KEY,

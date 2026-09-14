@@ -184,6 +184,7 @@ test("failed manual run remains auditable and returns its run id", async () => {
   const response = await app.inject({ method: "POST", url: "/api/agent/runs", headers: { cookie: owner.cookie } });
   assert.equal(response.statusCode, 422);
   assert.match(response.json().runId, /^run_[a-f0-9]{32}$/);
+  assert.equal(response.json().error, "Portfolio není dostupné.");
 
   const detail = await app.inject({
     method: "GET",
@@ -192,6 +193,7 @@ test("failed manual run remains auditable and returns its run id", async () => {
   });
   assert.equal(detail.statusCode, 200);
   assert.equal(detail.json().run.status, "failed");
+  assert.equal(detail.json().run.error.message, "Portfolio není dostupné.");
   assert.equal(detail.json().run.ledger[0].result, "failure");
   await app.close();
 });
