@@ -4,6 +4,19 @@ import { buildApp } from "../src/app.js";
 import { openDatabase, type OceanDatabase } from "../src/db.js";
 import type { Config } from "../src/config.js";
 import { AGENT_001_PERMISSION_POLICY } from "../src/agents/permissions.js";
+import type { PortfolioProvider } from "../src/portfolio/provider.js";
+import { completePortfolioSnapshotFixture } from "./fixtures/portfolio.js";
+
+function portfolioFor(userId: string) {
+  const snapshot = completePortfolioSnapshotFixture();
+  snapshot.subject.userId = userId;
+  const observedAt = new Date().toISOString();
+  snapshot.capturedAt = observedAt;
+  for (const asset of snapshot.assets) {
+    if (asset.price) asset.price.observedAt = observedAt;
+  }
+  return snapshot;
+}
 
 const config: Config = {
   port: 0,
@@ -113,5 +126,95 @@ test("agent endpoints require authentication and validate run ids", async () => 
   const owner = await register(app, "validation_owner");
   assert.equal((await app.inject({ method: "GET", url: "/api/agent/runs/not-a-run", headers: { cookie: owner.cookie } })).statusCode, 400);
   assert.equal((await app.inject({ method: "GET", url: "/api/agent", headers: { cookie: owner.cookie } })).statusCode, 404);
+  await app.close();
+});
+
+test("approved user can provision and complete one simulation-only AGENT-001 run", async () => {
+  let providerUserId: string | null = null;
+  const provider: PortfolioProvider = {
+    id: "route-fixture",
+    async getSnapshot(input) {
+      providerUserId = input.userId;
+      return portfolioFor(input.userId);
+    },
+  };
+  const db = openDatabase(":memory:");
+  const app = buildApp(config, db, { portfolioProvider: provider });
+  const owner = await register(app, "run_owner");
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/agent/runs",
+    headers: { cookie: owner.cookie },
+  });
+  assert.equal(response.statusCode, 201);
+  const run = response.json().run;
+  assert.equal(providerUserId, owner.id);
+  assert.equal(run.status, "succeeded");
+  assert.equal(run.validationStatus, "passed");
+  assert.equal(run.actionCount, 4);
+  assert.equal(run.humanInterventions, 0);
+  assert.equal((run.result as { mode: string }).mode, "simulation");
+
+  const card = await app.inject({ method: "GET", url: "/api/agent", headers: { cookie: owner.cookie } });
+  assert.equal(card.statusCode, 200);
+  assert.equal(card.json().agent.lastRun.id, run.id);
+  assert.equal(card.json().agent.lastRun.success, true);
+
+  const detail = await app.inject({ method: "GET", url: `/api/agent/runs/${run.id}`, headers: { cookie: owner.cookie } });
+  assert.deepEqual(detail.json().run.ledger.map((entry: { actionType: string }) => entry.actionType), [
+    "portfolio_snapshot_loaded",
+    "risk_metrics_calculated",
+    "risk_report_generated",
+    "risk_report_validated",
+  ]);
+  assert.equal(db.prepare("SELECT COUNT(*) FROM agents WHERE user_id = ?").pluck().get(owner.id), 1);
+  await app.close();
+});
+
+test("failed manual run remains auditable and returns its run id", async () => {
+  const provider: PortfolioProvider = {
+    id: "failed-route-fixture",
+    async getSnapshot() { throw new Error("Portfolio není dostupné."); },
+  };
+  const db = openDatabase(":memory:");
+  const app = buildApp(config, db, { portfolioProvider: provider });
+  const owner = await register(app, "failed_run_owner");
+
+  const response = await app.inject({ method: "POST", url: "/api/agent/runs", headers: { cookie: owner.cookie } });
+  assert.equal(response.statusCode, 422);
+  assert.match(response.json().runId, /^run_[a-f0-9]{32}$/);
+
+  const detail = await app.inject({
+    method: "GET",
+    url: `/api/agent/runs/${response.json().runId}`,
+    headers: { cookie: owner.cookie },
+  });
+  assert.equal(detail.statusCode, 200);
+  assert.equal(detail.json().run.status, "failed");
+  assert.equal(detail.json().run.ledger[0].result, "failure");
+  await app.close();
+});
+
+test("manual run refuses unapproved users and concurrent execution", async () => {
+  const db = openDatabase(":memory:");
+  const app = buildApp(config, db, { portfolioProvider: {
+    id: "unused-fixture",
+    async getSnapshot(input) { return portfolioFor(input.userId); },
+  } });
+  const owner = await register(app, "approval_owner");
+  const invitation = await app.inject({ method: "POST", url: "/api/invitations", headers: { cookie: owner.cookie }, payload: {} });
+  const token = new URL(invitation.json().invitation.inviteUrl).searchParams.get("invite")!;
+  const member = await register(app, "unapproved_runner", token);
+  assert.equal((await app.inject({ method: "POST", url: "/api/agent/runs", headers: { cookie: member.cookie } })).statusCode, 403);
+
+  const agentId = `agt_${"d".repeat(32)}`;
+  db.prepare(`INSERT INTO agents (id, user_id, name, goal, status, permissions_json)
+    VALUES (?, ?, 'Risk Agent', 'Risk report.', 'active', ?)`)
+    .run(agentId, owner.id, JSON.stringify(AGENT_001_PERMISSION_POLICY));
+  db.prepare(`INSERT INTO agent_runs (id, agent_id, trigger_type, goal, status, started_at)
+    VALUES (?, ?, 'manual', 'Risk report.', 'running', ?)`)
+    .run(`run_${"d".repeat(32)}`, agentId, new Date().toISOString());
+  assert.equal((await app.inject({ method: "POST", url: "/api/agent/runs", headers: { cookie: owner.cookie } })).statusCode, 409);
   await app.close();
 });

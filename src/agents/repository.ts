@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { OceanDatabase } from "../db.js";
-import type { AgentAuthorizationContext } from "./permissions.js";
+import { AGENT_001_PERMISSION_POLICY, type AgentAuthorizationContext } from "./permissions.js";
 
 export type AgentRecord = AgentAuthorizationContext["agent"] & {
   id: string;
@@ -84,7 +84,7 @@ export type AgentRunDetail = AgentRunSummary & {
   }>;
 };
 
-function id(prefix: "run" | "led") {
+function id(prefix: "agt" | "run" | "led") {
   return `${prefix}_${randomBytes(16).toString("hex")}`;
 }
 
@@ -133,6 +133,32 @@ export class AgentRepository {
       maxCostMicrounitsPerRun: Number(row.max_cost_microunits_per_run),
       killSwitchAt: row.kill_switch_at === null ? null : String(row.kill_switch_at),
     };
+  }
+
+  ensurePortfolioRiskAgent(userId: string): AgentRecord {
+    const existing = this.db.prepare(`
+      SELECT id FROM agents
+      WHERE user_id = ? AND kind = 'portfolio_risk_report_v1'
+    `).get(userId) as { id: string } | undefined;
+    if (existing) return this.getAgent(existing.id)!;
+
+    const agentId = id("agt");
+    this.db.prepare(`
+      INSERT INTO agents (
+        id, user_id, kind, name, goal, mode, status, permissions_json,
+        max_actions_per_run, max_cost_microunits_per_run
+      ) VALUES (?, ?, 'portfolio_risk_report_v1', 'Portfolio Risk Agent',
+        'Načíst portfolio, vyhodnotit koncentraci rizika a vytvořit ověřený risk report.',
+        'simulation', 'active', ?, 5, 0)
+    `).run(agentId, userId, JSON.stringify(AGENT_001_PERMISSION_POLICY));
+    return this.getAgent(agentId)!;
+  }
+
+  hasRunningRun(agentId: string): boolean {
+    return Boolean(this.db.prepare(`
+      SELECT 1 FROM agent_runs
+      WHERE agent_id = ? AND status IN ('queued', 'running') LIMIT 1
+    `).get(agentId));
   }
 
   getAgentCardForUser(userId: string): AgentCard | null {

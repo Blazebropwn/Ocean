@@ -16,6 +16,11 @@ import { registerMemberRoutes } from "./routes/members.js";
 import { registerTelegramRoutes } from "./routes/telegram.js";
 import { registerAgentRoutes } from "./routes/agents.js";
 import { buildVersionedPages, versionAssetReferences } from "./asset-versioning.js";
+import type { PortfolioProvider } from "./portfolio/provider.js";
+
+export type AppDependencies = {
+  portfolioProvider?: PortfolioProvider;
+};
 
 function isAllowedOrigin(origin: string, config: Config) {
   if (origin === config.appOrigin) return true;
@@ -33,7 +38,7 @@ function isAllowedOrigin(origin: string, config: Config) {
   }
 }
 
-export function buildApp(config: Config, database?: OceanDatabase) {
+export function buildApp(config: Config, database?: OceanDatabase, dependencies: AppDependencies = {}) {
   const db = database ?? openDatabase(config.databasePath);
   const trustProxy = config.trustedProxies?.length ? config.trustedProxies : false;
   const app = Fastify<RawServerDefault>({ logger: process.env.NODE_ENV !== "test", trustProxy });
@@ -66,7 +71,7 @@ export function buildApp(config: Config, database?: OceanDatabase) {
   registerMemberRoutes(app, db, config);
   registerTelegramRoutes(app, db, config);
   registerKryptotronRoutes(app, db, config);
-  registerAgentRoutes(app, db);
+  registerAgentRoutes(app, db, config, dependencies.portfolioProvider);
 
   app.addHook("onClose", async () => db.close());
   return app;
