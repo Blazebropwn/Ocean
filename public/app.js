@@ -12,6 +12,7 @@ let arcadeFrame = null;
 let octoCloseTimer = null;
 let octoLastEventKey = null;
 let octoMuted = false;
+let agentLastRunId = null;
 
 const octoLabels = {
   idle: "ČEKÁM",
@@ -115,6 +116,7 @@ async function request(path, options = {}) {
   if (!response.ok) {
     const error = new Error(body.error || "Něco se nepovedlo.");
     error.status = response.status;
+    if (body.runId) error.runId = body.runId;
     throw error;
   }
   return body;
@@ -156,8 +158,128 @@ function showUser(user) {
   }
   initializeOcto();
   initializeKryptotron();
+  loadAgentCard();
   kryptotronRefresh = setInterval(initializeKryptotron, 60_000);
 }
+
+function setAgentEmpty() {
+  agentLastRunId = null;
+  $("#agent-state").textContent = "PŘIPRAVEN";
+  $("#agent-last-run").textContent = "—";
+  $("#agent-actions").textContent = "—";
+  $("#agent-result").textContent = "—";
+  $("#agent-ledger-open").classList.add("hidden");
+}
+
+async function loadAgentCard() {
+  try {
+    const { agent } = await request("/api/agent");
+    const run = agent.lastRun;
+    agentLastRunId = run?.id || null;
+    $("#agent-state").textContent = agent.killSwitchActive ? "VYPNUT" : agent.status === "active" ? "AKTIVNÍ" : "POZASTAVEN";
+    $("#agent-last-run").textContent = run ? formatDate(run.completedAt || run.startedAt) : "—";
+    $("#agent-actions").textContent = run ? String(run.actionCount) : "—";
+    $("#agent-result").textContent = !run ? "—" : run.success ? "OVĚŘENO" : run.status === "failed" ? "SELHAL" : run.status.toUpperCase();
+    $("#agent-result").className = run?.success ? "positive" : run?.status === "failed" ? "negative" : "";
+    $("#agent-ledger-open").classList.toggle("hidden", !run);
+  } catch (error) {
+    if (error.status === 404) setAgentEmpty();
+    else $("#agent-message").textContent = error.message;
+  }
+}
+
+function appendAgentValue(container, label, value) {
+  const item = document.createElement("span");
+  const small = document.createElement("small");
+  const strong = document.createElement("strong");
+  small.textContent = label;
+  strong.textContent = value;
+  item.append(small, strong);
+  container.append(item);
+}
+
+async function loadAgentRunDetail(runId) {
+  const report = $("#agent-report");
+  const ledger = $("#agent-ledger");
+  report.replaceChildren();
+  ledger.replaceChildren();
+  appendAgentValue(report, "Stav", "Načítám…");
+  document.querySelectorAll("#agent-run-history button").forEach((button) => button.classList.toggle("active", button.dataset.runId === runId));
+  try {
+    const { run } = await request(`/api/agent/runs/${runId}`);
+    report.replaceChildren();
+    const metrics = run.result?.metrics;
+    appendAgentValue(report, "Stav", run.success ? "Ověřeno" : "Selhalo");
+    appendAgentValue(report, "Riziko", metrics ? `${metrics.riskLevel.toUpperCase()} · ${metrics.riskScore}` : "—");
+    appendAgentValue(report, "Největší pozice", metrics?.largestPosition ? `${metrics.largestPosition.asset} · ${metrics.largestPosition.sharePct} %` : "—");
+    appendAgentValue(report, "Zásahy člověka", String(run.humanInterventions));
+    for (const entry of run.ledger) {
+      const item = document.createElement("li");
+      const sequence = document.createElement("b");
+      const content = document.createElement("span");
+      const state = document.createElement("strong");
+      sequence.textContent = String(entry.sequence).padStart(2, "0");
+      content.textContent = entry.actionType.replaceAll("_", " ");
+      state.textContent = entry.result === "success" ? "OK" : "FAIL";
+      state.className = entry.result === "success" ? "positive" : "negative";
+      item.append(sequence, content, state);
+      ledger.append(item);
+    }
+  } catch (error) {
+    report.replaceChildren();
+    appendAgentValue(report, "Chyba", error.message);
+  }
+}
+
+async function openAgentLedger() {
+  if (!agentLastRunId) return;
+  const dialog = $("#agent-dialog");
+  const history = $("#agent-run-history");
+  history.replaceChildren();
+  dialog.showModal();
+  try {
+    const { runs } = await request("/api/agent/runs");
+    for (const run of runs) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.runId = run.id;
+      button.textContent = `${formatDate(run.completedAt || run.startedAt)} · ${run.success ? "OK" : run.status === "failed" ? "FAIL" : run.status.toUpperCase()}`;
+      button.addEventListener("click", () => loadAgentRunDetail(run.id));
+      history.append(button);
+    }
+    await loadAgentRunDetail(agentLastRunId);
+  } catch (error) {
+    $("#agent-report").replaceChildren();
+    appendAgentValue($("#agent-report"), "Chyba", error.message);
+  }
+}
+
+$("#agent-run").addEventListener("click", async () => {
+  const button = $("#agent-run");
+  const feedback = $("#agent-message");
+  button.disabled = true;
+  button.textContent = "Analyzuji…";
+  feedback.textContent = "Načítám portfolio a ověřuji report.";
+  try {
+    const { run } = await request("/api/agent/runs", { method: "POST", body: "{}" });
+    agentLastRunId = run.id;
+    feedback.textContent = "Risk report byl ověřen.";
+    await loadAgentCard();
+  } catch (error) {
+    if (error.runId) agentLastRunId = error.runId;
+    feedback.textContent = error.message;
+    await loadAgentCard();
+  } finally {
+    button.disabled = false;
+    button.textContent = "Spustit analýzu";
+  }
+});
+
+$("#agent-ledger-open").addEventListener("click", openAgentLedger);
+$("#agent-dialog-close").addEventListener("click", () => $("#agent-dialog").close());
+$("#agent-dialog").addEventListener("click", (event) => {
+  if (event.target === event.currentTarget) event.currentTarget.close();
+});
 
 function showAppView(view, activeLink = null) {
   const selected = ["overview", "arcade", "vault"].includes(view) ? view : "overview";

@@ -245,11 +245,20 @@
                       <li><time>—</time><span>Načítám události</span></li>
                     </ol>
                   </section>
-                  <div class="bot-control">
-                    <span>Otevřená pozice zůstane chráněná.</span
-                    ><button id="bot-control" type="button">
-                      Pozastavit nové obchody
-                    </button>
+                  <div class="detail-actions">
+                    <section class="agent-card" id="agent-card" aria-labelledby="agent-card-title">
+                      <header><div><small>SIMULATION</small><h3 id="agent-card-title">Risk Agent</h3></div><span id="agent-state">PŘIPRAVEN</span></header>
+                      <p id="agent-summary">Ověří koncentraci portfolia.</p>
+                      <div class="agent-metrics"><span><small>Poslední run</small><strong id="agent-last-run">—</strong></span><span><small>Akce</small><strong id="agent-actions">—</strong></span><span><small>Výsledek</small><strong id="agent-result">—</strong></span></div>
+                      <div class="agent-buttons"><button id="agent-run" type="button">Spustit analýzu</button><button class="hidden" id="agent-ledger-open" type="button">Otevřít ledger</button></div>
+                      <p class="agent-message" id="agent-message" role="status"></p>
+                    </section>
+                    <div class="bot-control">
+                      <span>Otevřená pozice zůstane chráněná.</span
+                      ><button id="bot-control" type="button">
+                        Pozastavit nové obchody
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -275,6 +284,12 @@
         ><b class="hidden" id="email-status"></b>
       </section>
     </main>
+    <dialog class="agent-dialog" id="agent-dialog" aria-labelledby="agent-dialog-title">
+      <div class="agent-dialog-head"><div><small>PROOF LEDGER</small><h2 id="agent-dialog-title">Risk report</h2></div><button id="agent-dialog-close" type="button" aria-label="Zavřít">×</button></div>
+      <div class="agent-run-history" id="agent-run-history" aria-label="Historie runů"></div>
+      <div class="agent-report" id="agent-report"></div>
+      <ol class="agent-ledger" id="agent-ledger"></ol>
+    </dialog>
     <div class="octo-dock hidden" id="octo-assistant" data-state="idle">
       <section class="octo-bubble" id="octo-bubble" aria-live="polite" hidden>
         <header>
