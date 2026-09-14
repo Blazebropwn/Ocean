@@ -1,4 +1,5 @@
 import type { PortfolioProvider } from "../portfolio/provider.js";
+import { z } from "zod";
 import {
   AgentAuthorizationError,
   authorizeAgentCapability,
@@ -26,6 +27,9 @@ const systemClock: RunnerClock = { now: () => new Date() };
 
 function publicError(error: unknown): { code: string; message: string } {
   if (error instanceof AgentAuthorizationError) return { code: error.code, message: error.message };
+  if (error instanceof z.ZodError) {
+    return { code: "INVALID_PORTFOLIO_SNAPSHOT", message: "Data portfolia neprošla bezpečnostní kontrolou." };
+  }
   if (error instanceof Error) return { code: "ACTION_FAILED", message: error.message || "Akce agenta selhala." };
   return { code: "ACTION_FAILED", message: "Akce agenta selhala." };
 }

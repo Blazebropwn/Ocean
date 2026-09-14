@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { z } from "zod";
 import {
+  PORTFOLIO_MAX_ASSETS,
   PortfolioSnapshotContractError,
   validatePortfolioSnapshot,
 } from "../src/portfolio/contract.js";
@@ -16,6 +17,35 @@ test("accepts a complete, fresh and internally consistent snapshot", () => {
   const result = validatePortfolioSnapshot(completePortfolioSnapshotFixture(), portfolioFixtureNow);
   assert.equal(result.freshness, "fresh");
   assert.equal(result.snapshot.status, "complete");
+});
+
+test("accepts a bounded testnet portfolio with more than 100 funded assets", () => {
+  const snapshot = completePortfolioSnapshotFixture();
+  snapshot.assets = Array.from({ length: 150 }, (_, index) => ({
+    asset: `ASSET${index}`,
+    quantity: 1,
+    price: {
+      amount: 1,
+      quotedIn: "USDC" as const,
+      source: "binance-ticker",
+      observedAt: "2026-09-14T11:59:00.000Z",
+    },
+    value: { amount: 1, quotedIn: "USDC" as const },
+  }));
+
+  const result = validatePortfolioSnapshot(snapshot, portfolioFixtureNow);
+  assert.equal(result.snapshot.assets.length, 150);
+  assert.ok(result.snapshot.assets.length < PORTFOLIO_MAX_ASSETS);
+});
+
+test("still rejects unbounded portfolio payloads", () => {
+  const snapshot = completePortfolioSnapshotFixture();
+  const asset = snapshot.assets[0]!;
+  snapshot.assets = Array.from({ length: PORTFOLIO_MAX_ASSETS + 1 }, (_, index) => ({
+    ...structuredClone(asset),
+    asset: `A${index.toString().padStart(4, "0")}`,
+  }));
+  assert.throws(() => validatePortfolioSnapshot(snapshot, portfolioFixtureNow), z.ZodError);
 });
 
 test("accepts a partial snapshot only when a nonzero asset is unpriced", () => {

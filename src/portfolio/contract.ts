@@ -4,7 +4,10 @@ export const PORTFOLIO_SNAPSHOT_SCHEMA_VERSION = "portfolio.snapshot.v1" as cons
 export const PORTFOLIO_SNAPSHOT_STALE_AFTER_MS = 5 * 60 * 1000;
 export const PORTFOLIO_PRICE_MAX_AGE_MS = 15 * 60 * 1000;
 export const PORTFOLIO_TIMESTAMP_FUTURE_TOLERANCE_MS = 60 * 1000;
-export const PORTFOLIO_MAX_ASSETS = 100;
+// Binance Spot Testnet commonly seeds accounts with hundreds of non-zero assets.
+// Keep the payload bounded, but high enough to represent the account without
+// silently dropping holdings and producing an incorrect concentration report.
+export const PORTFOLIO_MAX_ASSETS = 2_000;
 
 const isoTimestampSchema = z.iso.datetime({ offset: true });
 const identifierSchema = z.string().min(3).max(128).regex(/^[a-zA-Z0-9._:-]+$/);
