@@ -41,12 +41,73 @@ export type CompletedRun = {
   errorMessage: string | null;
 };
 
+export type AgentRunSummary = {
+  id: string;
+  triggerType: "manual" | "scheduled";
+  status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+  validationStatus: "pending" | "passed" | "failed";
+  actionCount: number;
+  costMicrounits: number;
+  humanInterventions: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  success: boolean;
+  ledgerUrl: string;
+};
+
+export type AgentCard = {
+  id: string;
+  name: string;
+  status: "active" | "paused" | "disabled";
+  goal: string;
+  mode: "simulation";
+  killSwitchActive: boolean;
+  maxActionsPerRun: number;
+  maxCostMicrounitsPerRun: number;
+  lastRun: AgentRunSummary | null;
+};
+
+export type AgentRunDetail = AgentRunSummary & {
+  goal: string;
+  snapshotId: string | null;
+  result: unknown | null;
+  error: { code: string; message: string } | null;
+  ledger: Array<{
+    sequence: number;
+    actionType: string;
+    input: unknown;
+    output: unknown;
+    result: "success" | "failure";
+    costMicrounits: number;
+    occurredAt: string;
+  }>;
+};
+
 function id(prefix: "run" | "led") {
   return `${prefix}_${randomBytes(16).toString("hex")}`;
 }
 
 function parseJson(value: string | null): unknown | null {
   return value === null ? null : JSON.parse(value);
+}
+
+function runSummary(row: Record<string, unknown>): AgentRunSummary {
+  const runId = String(row.id);
+  return {
+    id: runId,
+    triggerType: row.trigger_type as AgentRunSummary["triggerType"],
+    status: row.status as AgentRunSummary["status"],
+    validationStatus: row.validation_status as AgentRunSummary["validationStatus"],
+    actionCount: Number(row.action_count),
+    costMicrounits: Number(row.cost_microunits),
+    humanInterventions: Number(row.human_interventions),
+    startedAt: row.started_at === null ? null : String(row.started_at),
+    completedAt: row.completed_at === null ? null : String(row.completed_at),
+    createdAt: String(row.created_at),
+    success: row.status === "succeeded" && row.validation_status === "passed",
+    ledgerUrl: `/api/agent/runs/${runId}`,
+  };
 }
 
 export class AgentRepository {
@@ -71,6 +132,76 @@ export class AgentRepository {
       maxActionsPerRun: Number(row.max_actions_per_run),
       maxCostMicrounitsPerRun: Number(row.max_cost_microunits_per_run),
       killSwitchAt: row.kill_switch_at === null ? null : String(row.kill_switch_at),
+    };
+  }
+
+  getAgentCardForUser(userId: string): AgentCard | null {
+    const row = this.db.prepare(`
+      SELECT id, name, status, goal, mode, kill_switch_at,
+             max_actions_per_run, max_cost_microunits_per_run
+      FROM agents WHERE user_id = ? AND kind = 'portfolio_risk_report_v1'
+    `).get(userId) as Record<string, unknown> | undefined;
+    if (!row) return null;
+    const lastRun = this.db.prepare(`
+      SELECT id, trigger_type, status, validation_status, action_count,
+             cost_microunits, human_interventions, started_at, completed_at, created_at
+      FROM agent_runs WHERE agent_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1
+    `).get(String(row.id)) as Record<string, unknown> | undefined;
+    return {
+      id: String(row.id),
+      name: String(row.name),
+      status: row.status as AgentCard["status"],
+      goal: String(row.goal),
+      mode: "simulation",
+      killSwitchActive: row.kill_switch_at !== null,
+      maxActionsPerRun: Number(row.max_actions_per_run),
+      maxCostMicrounitsPerRun: Number(row.max_cost_microunits_per_run),
+      lastRun: lastRun ? runSummary(lastRun) : null,
+    };
+  }
+
+  listRunsForUser(userId: string, limit = 20): AgentRunSummary[] {
+    const rows = this.db.prepare(`
+      SELECT r.id, r.trigger_type, r.status, r.validation_status, r.action_count,
+             r.cost_microunits, r.human_interventions, r.started_at, r.completed_at, r.created_at
+      FROM agent_runs r
+      JOIN agents a ON a.id = r.agent_id
+      WHERE a.user_id = ? AND a.kind = 'portfolio_risk_report_v1'
+      ORDER BY r.created_at DESC, r.rowid DESC LIMIT ?
+    `).all(userId, limit) as Array<Record<string, unknown>>;
+    return rows.map(runSummary);
+  }
+
+  getRunDetailForUser(userId: string, runId: string): AgentRunDetail | null {
+    const row = this.db.prepare(`
+      SELECT r.* FROM agent_runs r
+      JOIN agents a ON a.id = r.agent_id
+      WHERE r.id = ? AND a.user_id = ? AND a.kind = 'portfolio_risk_report_v1'
+    `).get(runId, userId) as Record<string, unknown> | undefined;
+    if (!row) return null;
+    const entries = this.db.prepare(`
+      SELECT sequence, action_type, input_json, output_json, result,
+             cost_microunits, occurred_at
+      FROM agent_ledger_entries WHERE run_id = ? ORDER BY sequence
+    `).all(runId) as Array<Record<string, unknown>>;
+    return {
+      ...runSummary(row),
+      goal: String(row.goal),
+      snapshotId: row.snapshot_id === null ? null : String(row.snapshot_id),
+      result: parseJson(row.result_json === null ? null : String(row.result_json)),
+      error: row.error_code === null ? null : {
+        code: String(row.error_code),
+        message: String(row.error_message ?? "Run selhal."),
+      },
+      ledger: entries.map((entry) => ({
+        sequence: Number(entry.sequence),
+        actionType: String(entry.action_type),
+        input: parseJson(String(entry.input_json)),
+        output: parseJson(String(entry.output_json)),
+        result: entry.result as "success" | "failure",
+        costMicrounits: Number(entry.cost_microunits),
+        occurredAt: String(entry.occurred_at),
+      })),
     };
   }
 

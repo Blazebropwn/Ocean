@@ -14,6 +14,7 @@ import { registerInvitationRoutes } from "./routes/invitations.js";
 import { registerKryptotronRoutes } from "./routes/kryptotron.js";
 import { registerMemberRoutes } from "./routes/members.js";
 import { registerTelegramRoutes } from "./routes/telegram.js";
+import { registerAgentRoutes } from "./routes/agents.js";
 import { buildVersionedPages, versionAssetReferences } from "./asset-versioning.js";
 
 function isAllowedOrigin(origin: string, config: Config) {
@@ -65,6 +66,7 @@ export function buildApp(config: Config, database?: OceanDatabase) {
   registerMemberRoutes(app, db, config);
   registerTelegramRoutes(app, db, config);
   registerKryptotronRoutes(app, db, config);
+  registerAgentRoutes(app, db);
 
   app.addHook("onClose", async () => db.close());
   return app;
