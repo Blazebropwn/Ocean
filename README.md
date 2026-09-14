@@ -14,6 +14,8 @@ Aktuální vertikální řez v0.1 obsahuje registraci, přihlášení pomocí us
 
 ## Spuštění
 
+SQLite schéma se při startu aktualizuje pomocí očíslovaných migrací v `src/database/migrations`. Každá migrace proběhne právě jednou a atomicky; databáze s neznámou novější verzí je odmítnuta, aby ji starší aplikace nemohla poškodit.
+
 ```bash
 npm install
 npm run dev
