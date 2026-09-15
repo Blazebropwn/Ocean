@@ -72,6 +72,23 @@ test("scheduler performs at most one autonomous simulation run per local day", a
   fixture.db.close();
 });
 
+test("scheduler notifies once after a completed autonomous run", async () => {
+  const fixture = setup();
+  fixture.config.agentDailyRunTime = "00:00";
+  const notifications: Array<{ userId: string; runId: string; status: string }> = [];
+  const notify = async (agent: { userId: string }, run: { id: string; status: string }) => {
+    notifications.push({ userId: agent.userId, runId: run.id, status: run.status });
+  };
+
+  await runScheduledAgentCheck({ ...fixture, now: portfolioFixtureNow, notify });
+  await runScheduledAgentCheck({ ...fixture, now: portfolioFixtureNow, notify });
+
+  assert.equal(notifications.length, 1);
+  assert.equal(notifications[0]?.userId, USER_ID);
+  assert.equal(notifications[0]?.status, "succeeded");
+  fixture.db.close();
+});
+
 test("scheduler ignores agents without an approved connected account", async () => {
   const fixture = setup();
   fixture.db.prepare("UPDATE kryptotron_instances SET status = 'suspended' WHERE user_id = ?").run(USER_ID);

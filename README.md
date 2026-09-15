@@ -93,6 +93,8 @@ Výsledek vložte jako `OCEAN_CREDENTIALS_KEY`. Jeho ztráta znemožní rozšifr
 
 ## Telegram
 
+Propojený Telegram dostane po automatickém denním běhu Risk Agenta stručný výsledek. Oznámení neobsahuje přístupové údaje a jeho případné selhání nemění výsledek ani auditní stopu agentního runu.
+
 Pro osobní Telegram propojení použijte samostatného bota, který současně neběží v Railway workeru:
 
 ```text

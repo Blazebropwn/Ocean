@@ -2,6 +2,8 @@ import type { Config } from "./config.js";
 import type { OceanDatabase } from "./db.js";
 import { loadKryptotronSnapshot, setKryptotronEntriesPaused } from "./kryptotron.js";
 import { hashToken } from "./security.js";
+import { portfolioRiskReportSchema } from "./agents/risk-report.js";
+import type { CompletedRun } from "./agents/repository.js";
 
 type TelegramMessage = { chat?: { id?: number }; from?: { username?: string }; text?: string };
 type TelegramUpdate = { update_id: number; message?: TelegramMessage };
@@ -80,6 +82,49 @@ async function telegramCall(token: string, method: string, body?: Record<string,
   });
   if (!response.ok) throw new Error(`Telegram odpověděl ${response.status}.`);
   return await response.json() as { ok: boolean; result: TelegramUpdate[] };
+}
+
+export function agentRunNotificationText(run: CompletedRun, appOrigin: string) {
+  const dashboardUrl = `${appOrigin.replace(/\/$/, "")}/#dashboard`;
+  const report = portfolioRiskReportSchema.safeParse(run.result);
+  if (run.status === "succeeded" && run.validationStatus === "passed" && report.success) {
+    const largest = report.data.metrics.largestPosition;
+    return [
+      "🐙 Risk Agent · report ověřen",
+      `Riziko: ${report.data.metrics.riskLevel.toUpperCase()} · ${report.data.metrics.riskScore.toFixed(2)}/100`,
+      `Největší pozice: ${largest ? `${largest.asset} · ${largest.sharePct.toFixed(2)} %` : "—"}`,
+      `Akce: ${run.actionCount} · Zásahy člověka: ${run.humanInterventions}`,
+      `Ocean: ${dashboardUrl}`,
+    ].join("\n");
+  }
+  return [
+    "⚠️ Risk Agent · report se nezdařil",
+    run.errorMessage ? `Důvod: ${run.errorMessage.slice(0, 240)}` : "Automatickou analýzu se nepodařilo dokončit.",
+    `Ocean: ${dashboardUrl}`,
+  ].join("\n");
+}
+
+export async function sendAgentRunTelegramNotification(
+  config: Config,
+  db: OceanDatabase,
+  userId: string,
+  run: CompletedRun,
+  send: (chatId: string, text: string) => Promise<void> = async (chatId, text) => {
+    if (!config.telegramBotToken) return;
+    const response = await telegramCall(config.telegramBotToken, "sendMessage", {
+      chat_id: chatId,
+      text,
+      disable_web_page_preview: true,
+    });
+    if (!response.ok) throw new Error("Telegram zprávu odmítl.");
+  },
+) {
+  if (!config.telegramBotToken) return false;
+  const connection = db.prepare("SELECT chat_id FROM telegram_connections WHERE user_id = ?")
+    .get(userId) as { chat_id: string } | undefined;
+  if (!connection) return false;
+  await send(connection.chat_id, agentRunNotificationText(run, config.appOrigin));
+  return true;
 }
 
 export function startTelegramBot(config: Config, db: OceanDatabase, logger: TelegramLogger) {

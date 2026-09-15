@@ -4,6 +4,8 @@ import type { OceanDatabase } from "./db.js";
 import { AgentRepository } from "./agents/repository.js";
 import { AgentRunError, PortfolioRiskAgentRunner } from "./agents/runner.js";
 import type { PortfolioProvider } from "./portfolio/provider.js";
+import type { AgentRecord, CompletedRun } from "./agents/repository.js";
+import { sendAgentRunTelegramNotification } from "./telegram.js";
 
 type SchedulerLogger = Pick<FastifyBaseLogger, "info" | "error">;
 const CHECK_INTERVAL_MS = 60_000;
@@ -42,6 +44,7 @@ export async function runScheduledAgentCheck(options: {
   repository: AgentRepository;
   runner: PortfolioRiskAgentRunner;
   logger: SchedulerLogger;
+  notify?: (agent: AgentRecord, run: CompletedRun) => Promise<void>;
   now?: Date;
 }) {
   const now = options.now ?? new Date();
@@ -56,8 +59,18 @@ export async function runScheduledAgentCheck(options: {
     try {
       const run = await options.runner.run(agent.id, "scheduled");
       options.logger.info({ agentId: agent.id, runId: run.id }, "Denní Risk Agent run byl ověřen");
+      if (options.notify) {
+        try { await options.notify(agent, run); }
+        catch (error) { options.logger.error({ err: error, agentId: agent.id, runId: run.id }, "Telegram notifikaci Risk Agenta se nepodařilo odeslat"); }
+      }
     } catch (error) {
-      options.logger.error({ err: error, agentId: agent.id, runId: error instanceof AgentRunError ? error.runId : null }, "Denní Risk Agent run selhal");
+      const runId = error instanceof AgentRunError ? error.runId : null;
+      options.logger.error({ err: error, agentId: agent.id, runId }, "Denní Risk Agent run selhal");
+      const run = runId ? options.repository.getCompletedRun(runId) : null;
+      if (run && options.notify) {
+        try { await options.notify(agent, run); }
+        catch (notifyError) { options.logger.error({ err: notifyError, agentId: agent.id, runId }, "Telegram notifikaci Risk Agenta se nepodařilo odeslat"); }
+      }
     }
   }
 }
@@ -79,7 +92,15 @@ export function startAgentScheduler(config: Config, db: OceanDatabase, portfolio
   const check = async () => {
     if (stopped || running) return;
     running = true;
-    try { await runScheduledAgentCheck({ config, repository, runner, logger }); }
+    try {
+      await runScheduledAgentCheck({
+        config,
+        repository,
+        runner,
+        logger,
+        notify: (agent, run) => sendAgentRunTelegramNotification(config, db, agent.userId, run).then(() => undefined),
+      });
+    }
     finally { running = false; }
   };
   void check();

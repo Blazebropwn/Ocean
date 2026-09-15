@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildApp } from "../src/app.js";
 import { openDatabase } from "../src/db.js";
-import { processTelegramMessage } from "../src/telegram.js";
+import { agentRunNotificationText, processTelegramMessage, sendAgentRunTelegramNotification } from "../src/telegram.js";
+import { createPortfolioRiskReport } from "../src/agents/risk-report.js";
+import { completePortfolioSnapshotFixture, portfolioFixtureNow } from "./fixtures/portfolio.js";
 
 test("Telegram pairing code is hashed, single-use and binds one chat", async () => {
   const db = openDatabase(":memory:");
@@ -74,4 +76,48 @@ test("linked member can resume trading from Telegram", async (t) => {
   assert.match(messages[0]!, /obnoveno/i);
   assert.equal(patches.at(-1)!.data.entries_paused, false);
   await app.close();
+});
+
+test("scheduled Risk Agent notification goes only to the linked user's chat", async () => {
+  const db = openDatabase(":memory:");
+  const userId = "usr_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  db.prepare("INSERT INTO users (id, email, username, password_hash) VALUES (?, 'agent@example.com', 'agent-user', 'hash')").run(userId);
+  db.prepare("INSERT INTO telegram_connections (user_id, chat_id) VALUES (?, '4242')").run(userId);
+  const run = {
+    id: "run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    status: "succeeded" as const,
+    validationStatus: "passed" as const,
+    actionCount: 4,
+    costMicrounits: 0,
+    humanInterventions: 0,
+    result: createPortfolioRiskReport(completePortfolioSnapshotFixture(), portfolioFixtureNow),
+    errorCode: null,
+    errorMessage: null,
+  };
+  const sent: Array<{ chatId: string; text: string }> = [];
+  const config = { port: 0, host: "127.0.0.1", databasePath: ":memory:", appOrigin: "https://ocean.example", isProduction: false, telegramBotToken: "token" };
+
+  assert.equal(await sendAgentRunTelegramNotification(config, db, userId, run, async (chatId, text) => { sent.push({ chatId, text }); }), true);
+  assert.equal(sent[0]?.chatId, "4242");
+  assert.match(sent[0]?.text ?? "", /report ověřen/);
+  assert.match(sent[0]?.text ?? "", /Zásahy člověka: 0/);
+  assert.match(sent[0]?.text ?? "", /https:\/\/ocean\.example\/#dashboard/);
+  assert.equal(await sendAgentRunTelegramNotification(config, db, "usr_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", run, async () => { throw new Error("must not send"); }), false);
+  db.close();
+});
+
+test("failed Risk Agent notification contains a concise reason", () => {
+  const text = agentRunNotificationText({
+    id: "run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    status: "failed",
+    validationStatus: "failed",
+    actionCount: 1,
+    costMicrounits: 0,
+    humanInterventions: 0,
+    result: null,
+    errorCode: "SNAPSHOT_UNAVAILABLE",
+    errorMessage: "Portfolio snapshot není dostupný.",
+  }, "https://ocean.example/");
+  assert.match(text, /report se nezdařil/);
+  assert.match(text, /Portfolio snapshot není dostupný/);
 });
