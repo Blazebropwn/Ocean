@@ -111,6 +111,16 @@ Pokud Ocean běží za reverzní proxy, vložte její přesnou adresu nebo CIDR 
 
 Produkční Docker/Railway postup je v [docs/deploy-railway.md](docs/deploy-railway.md). Kontejner obsahuje Ocean server i Python runtime pro osobní Testnet workery; stavová data patří na připojený volume `/data`.
 
+Risk Agent může jednou denně samostatně vytvořit simulation-only report koncentrace portfolia. Spouští pouze existující aktivní agenty schválených uživatelů s připojeným Kryptotronem; nemá cestu k obchodování ani k převodu prostředků. Výchozích `10:02` navazuje na kontrolu trhu v 10:00 a používá české časové pásmo včetně letního času.
+
+```text
+OCEAN_AGENT_SCHEDULER_ENABLED=true
+OCEAN_AGENT_DAILY_RUN_TIME=10:02
+OCEAN_AGENT_DAILY_RUN_TIME_ZONE=Europe/Prague
+```
+
+Neúspěšný naplánovaný run zůstává v Proof Ledgeru a tentýž den se automaticky neopakuje. Ruční spuštění z Agent Card zůstává dostupné nezávisle na denním plánu.
+
 `npm run backup` vytvoří konzistentní a zkontrolovanou kopii SQLite databáze v `data/backups`. `npm run restore:drill` vytvoří novou zálohu, obnoví ji do dočasné databáze a ověří integritu, vazby, tabulky i počty řádků bez zásahu do běžícího Oceanu. Soubory databáze, záloh, stavů a logů jsou lokálně omezené na vlastníka procesu. Umístění a retenci lze změnit pomocí `BACKUP_DIRECTORY` a `BACKUP_RETENTION_DAYS`.
 
 Volitelné vzdálené zálohy se před odesláním šifrují samostatným klíčem AES-256-GCM. Po uploadu Ocean objekt znovu stáhne, ověří kontrolní součet, autentizaci, SQLite integritu, vazby a počty řádků. Nastavení S3-kompatibilního úložiště, automatického plánu a obnovy je v [docs/deploy-railway.md](docs/deploy-railway.md). Klíče `OCEAN_CREDENTIALS_KEY` a `OCEAN_BACKUP_KEY` uchovávejte odděleně od databáze i od sebe; ke kompletní obnově jsou potřeba oba.

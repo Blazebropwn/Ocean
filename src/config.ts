@@ -28,6 +28,9 @@ export type Config = {
   offsiteBackupS3AccessKeyId?: string;
   offsiteBackupS3SecretAccessKey?: string;
   offsiteBackupS3Prefix?: string;
+  agentSchedulerEnabled?: boolean;
+  agentDailyRunTime?: string;
+  agentDailyRunTimeZone?: string;
 };
 
 export function loadConfig(env = process.env): Config {
@@ -61,5 +64,8 @@ export function loadConfig(env = process.env): Config {
     offsiteBackupS3AccessKeyId: env.OCEAN_BACKUP_S3_ACCESS_KEY_ID,
     offsiteBackupS3SecretAccessKey: env.OCEAN_BACKUP_S3_SECRET_ACCESS_KEY,
     offsiteBackupS3Prefix: env.OCEAN_BACKUP_S3_PREFIX ?? "ocean",
+    agentSchedulerEnabled: env.OCEAN_AGENT_SCHEDULER_ENABLED === "true",
+    agentDailyRunTime: env.OCEAN_AGENT_DAILY_RUN_TIME ?? "10:02",
+    agentDailyRunTimeZone: env.OCEAN_AGENT_DAILY_RUN_TIME_ZONE ?? "Europe/Prague",
   };
 }

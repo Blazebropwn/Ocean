@@ -161,6 +161,32 @@ export class AgentRepository {
     `).get(agentId));
   }
 
+  listSchedulablePortfolioRiskAgents(manualApprovalEnabled: boolean): AgentRecord[] {
+    const approvalColumn = manualApprovalEnabled ? "u.approved_at" : "u.email_verified_at";
+    const rows = this.db.prepare(`
+      SELECT DISTINCT a.id
+      FROM agents a
+      JOIN users u ON u.id = a.user_id
+      JOIN kryptotron_instances i ON i.user_id = a.user_id
+      WHERE a.kind = 'portfolio_risk_report_v1'
+        AND a.mode = 'simulation'
+        AND a.status = 'active'
+        AND a.kill_switch_at IS NULL
+        AND ${approvalColumn} IS NOT NULL
+        AND i.status = 'connected'
+    `).all() as Array<{ id: string }>;
+    return rows.map((row) => this.getAgent(row.id)).filter((agent): agent is AgentRecord => agent !== null);
+  }
+
+  scheduledRunDates(agentId: string, since: string): string[] {
+    const rows = this.db.prepare(`
+      SELECT created_at FROM agent_runs
+      WHERE agent_id = ? AND trigger_type = 'scheduled' AND created_at >= ?
+      ORDER BY created_at DESC
+    `).all(agentId, since) as Array<{ created_at: string }>;
+    return rows.map((row) => row.created_at);
+  }
+
   getAgentCardForUser(userId: string): AgentCard | null {
     const row = this.db.prepare(`
       SELECT id, name, status, goal, mode, kill_switch_at,
@@ -236,9 +262,9 @@ export class AgentRepository {
     this.db.prepare(`
       INSERT INTO agent_runs (
         id, agent_id, trigger_type, mode, goal, status, validation_status,
-        action_count, cost_microunits, human_interventions, started_at
-      ) VALUES (?, ?, ?, 'simulation', ?, 'running', 'pending', 0, 0, 0, ?)
-    `).run(runId, agent.id, triggerType, agent.goal, startedAt);
+        action_count, cost_microunits, human_interventions, started_at, created_at
+      ) VALUES (?, ?, ?, 'simulation', ?, 'running', 'pending', 0, 0, 0, ?, ?)
+    `).run(runId, agent.id, triggerType, agent.goal, startedAt, startedAt);
     return {
       id: runId,
       agentId: agent.id,

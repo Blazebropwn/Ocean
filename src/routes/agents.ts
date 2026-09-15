@@ -2,10 +2,9 @@ import type { FastifyInstance } from "fastify";
 import type { OceanDatabase } from "../db.js";
 import { AgentRepository } from "../agents/repository.js";
 import { AgentRunError, PortfolioRiskAgentRunner } from "../agents/runner.js";
-import { BinancePortfolioProvider } from "../portfolio/binance-provider.js";
 import type { PortfolioProvider } from "../portfolio/provider.js";
+import { createDefaultPortfolioProvider } from "../portfolio/default-provider.js";
 import type { Config } from "../config.js";
-import { loadKryptotronState } from "../kryptotron.js";
 import { currentUser, hasApprovedAccess } from "./shared.js";
 
 const RUN_ID_PATTERN = /^run_[a-f0-9]{32}$/;
@@ -14,19 +13,7 @@ export function registerAgentRoutes(
   app: FastifyInstance,
   db: OceanDatabase,
   config: Config,
-  portfolioProvider: PortfolioProvider = new BinancePortfolioProvider(
-    db,
-    config.credentialsEncryptionKey,
-    undefined,
-    undefined,
-    undefined,
-    async (stateKey) => {
-      if (!config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) {
-        throw new Error("Úložiště hlavního Kryptotronu není dostupné.");
-      }
-      return await loadKryptotronState(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, stateKey);
-    },
-  ),
+  portfolioProvider: PortfolioProvider = createDefaultPortfolioProvider(db, config),
 ) {
   const repository = new AgentRepository(db);
   const runner = new PortfolioRiskAgentRunner(repository, portfolioProvider);

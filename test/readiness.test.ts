@@ -37,3 +37,19 @@ test("enabled offsite backups require a complete valid configuration", () => {
   assert.ok(issues.some((issue) => issue.includes("Vzdálené zálohy")));
   db.close();
 });
+
+test("readiness rejects an invalid enabled Risk Agent schedule", () => {
+  const db = openDatabase(":memory:");
+  const issues = readinessIssues({
+    port: 0,
+    host: "127.0.0.1",
+    databasePath: ":memory:",
+    appOrigin: "http://localhost",
+    isProduction: false,
+    agentSchedulerEnabled: true,
+    agentDailyRunTime: "25:99",
+    agentDailyRunTimeZone: "Europe/Prague",
+  }, db);
+  assert.deepEqual(issues, ["Risk Agent scheduler nemá platnou konfiguraci."]);
+  db.close();
+});

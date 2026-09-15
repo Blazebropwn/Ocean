@@ -7,27 +7,33 @@ import { startMailer } from "./mailer.js";
 import { startTelegramBot } from "./telegram.js";
 import { startOffsiteBackupScheduler } from "./offsite-scheduler.js";
 import { startMaintenance } from "./maintenance.js";
+import { createDefaultPortfolioProvider } from "./portfolio/default-provider.js";
+import { startAgentScheduler } from "./agent-scheduler.js";
 
 const config = loadConfig();
 const db = openDatabase(config.databasePath);
-const app = buildApp(config, db);
+const portfolioProvider = createDefaultPortfolioProvider(db, config);
+const app = buildApp(config, db, { portfolioProvider });
 const mailer = startMailer(config, db, app.log);
 const maintenance = startMaintenance(db, app.log);
 let supervisor: ReturnType<typeof startKryptotronSupervisor> | undefined;
 let telegram: ReturnType<typeof startTelegramBot> | undefined;
 let offsiteBackupScheduler: ReturnType<typeof startOffsiteBackupScheduler> | undefined;
+let agentScheduler: ReturnType<typeof startAgentScheduler> | undefined;
 
 try {
   await app.listen({ port: config.port, host: config.host });
   supervisor = startKryptotronSupervisor(config, db, app.log);
   telegram = startTelegramBot(config, db, app.log);
   offsiteBackupScheduler = startOffsiteBackupScheduler(config, app.log);
+  agentScheduler = startAgentScheduler(config, db, portfolioProvider, app.log);
 } catch (error) {
   supervisor?.stop();
   mailer.stop();
   maintenance.stop();
   telegram?.stop();
   offsiteBackupScheduler?.stop();
+  agentScheduler?.stop();
   app.log.error(error);
   process.exit(1);
 }
@@ -39,6 +45,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     maintenance.stop();
     telegram?.stop();
     offsiteBackupScheduler?.stop();
+    agentScheduler?.stop();
     await app.close();
     process.exit(0);
   });

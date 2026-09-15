@@ -4,6 +4,7 @@ import type { OceanDatabase } from "./db.js";
 import { backupEncryptionKey } from "./offsite-backup-lib.js";
 import { offsiteStoreConfigFromApp } from "./offsite-store.js";
 import { validateBackupSchedule } from "./offsite-scheduler.js";
+import { validateAgentSchedule } from "./agent-scheduler.js";
 
 export function readinessIssues(config: Config, db: OceanDatabase) {
   const issues: string[] = [];
@@ -30,6 +31,10 @@ export function readinessIssues(config: Config, db: OceanDatabase) {
     } catch {
       issues.push("Vzdálené zálohy nemají platnou konfiguraci.");
     }
+  }
+  if (config.agentSchedulerEnabled) {
+    try { validateAgentSchedule(config.agentDailyRunTime ?? "10:02", config.agentDailyRunTimeZone ?? "Europe/Prague"); }
+    catch { issues.push("Risk Agent scheduler nemá platnou konfiguraci."); }
   }
   return issues;
 }
