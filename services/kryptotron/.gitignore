@@ -9,3 +9,4 @@ poznamky.md
 .railway/
 .pytest_cache/
 .coverage
+.backtest_cache/
