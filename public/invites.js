@@ -170,6 +170,29 @@ async function loadMembers() {
     });
     row.append(resetPassword);
 
+    const deleteMember = document.createElement("button");
+    deleteMember.type = "button";
+    deleteMember.className = "delete-member";
+    deleteMember.textContent = "Smazat účet";
+    deleteMember.addEventListener("click", async () => {
+      const confirmation = window.prompt(`Trvalé smazání @${member.username}\n\nZanikne přihlášení, Binance klíče, Telegram, Kryptotron i historie agenta. Pro potvrzení napište přesně uživatelské jméno:`, "");
+      if (confirmation === null) return;
+      deleteMember.disabled = true;
+      setInviteMessage("");
+      try {
+        await inviteRequest(`/api/members/${member.id}`, {
+          method: "DELETE",
+          body: JSON.stringify({ confirmation }),
+        });
+        await loadMembers();
+        setInviteMessage(`Účet @${member.username} byl trvale smazán.`, true);
+      } catch (error) {
+        setInviteMessage(error instanceof Error ? error.message : "Účet se nepodařilo smazat.");
+        deleteMember.disabled = false;
+      }
+    });
+    row.append(deleteMember);
+
     const entry = document.createElement("div");
     entry.className = "member-entry";
     entry.append(row);

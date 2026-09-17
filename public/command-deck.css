@@ -767,7 +767,7 @@ input:focus { border-color: var(--cyan); background: rgba(2, 17, 23, 0.9); box-s
 .invite-result button { padding: 0 16px; border: 1px solid var(--line); border-radius: 9px; color: var(--cyan); background: rgba(84, 238, 226, 0.05); cursor: pointer; }
 .invite-list-head { display: flex; justify-content: space-between; margin-top: 32px; padding-bottom: 10px; border-bottom: 1px solid var(--line); font-size: 13px; }
 .invite-list-head small { color: var(--muted); }
-.invite-list article { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 12px; padding: 13px 0; border-bottom: 1px solid var(--line); }
+.invite-list article { display: grid; grid-template-columns: minmax(0, 1fr) repeat(5, auto); align-items: center; gap: 10px; padding: 13px 0; border-bottom: 1px solid var(--line); }
 .invite-list article strong, .invite-list article small { display: block; }
 .invite-list article strong { font-size: 13px; }
 .invite-list article small { margin-top: 4px; color: var(--muted); font-size: var(--text-xs); }
@@ -777,6 +777,7 @@ input:focus { border-color: var(--cyan); background: rgba(2, 17, 23, 0.9); box-s
 .invite-list article button.approve-member { color: var(--good); font-weight: 800; }
 .invite-list article button.reset-member-password { color: var(--cyan); }
 .invite-list article button.member-detail-toggle { color: var(--ink-soft); }
+.invite-list article button.delete-member { color: var(--danger); }
 .member-entry { display: flex; flex-direction: column; }
 .member-detail { margin: 0 0 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; color: var(--muted); background: rgba(2, 17, 23, 0.5); font-size: var(--text-sm); }
 .member-detail-row { display: flex; justify-content: space-between; gap: 14px; padding: 5px 0; }
