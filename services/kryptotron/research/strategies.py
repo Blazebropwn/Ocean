@@ -112,6 +112,14 @@ def _golden_cross_entry(ema_f, ema_s, i):
     return ema_f[i - 1] <= ema_s[i - 1] and ema_f[i] > ema_s[i]
 
 
+def _regime_entry(ema_f, ema_s, i):
+    """Kandidat: vstup kdykoliv jsi flat A uz jsi v bull rezimu, ne jen
+    presne v okamziku crossu. Random-entry kontrola ukazala, ze presny
+    timing vstupu skoro nema hodnotu - tohle testuje, jestli vic vstupu
+    v ramci existujiciho bull rezimu (misto cekani na cross) pomuze."""
+    return ema_f[i] > ema_s[i]
+
+
 def make_random_trend_entry(probability=0.01, seed=1):
     rng = random.Random(seed)
 

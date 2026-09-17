@@ -142,6 +142,14 @@ def monte_carlo_drawdown(trades, n_sims=2000, seed=7):
     }
 
 
+def percentile_rank(value, distribution):
+    """Kolik procent distribuce je <= value (0-100)."""
+    if not distribution:
+        return None
+    below = sum(1 for x in distribution if x <= value)
+    return below / len(distribution) * 100
+
+
 def irr(cashflows, lo=-0.99, hi=10.0, iters=100):
     """Money-weighted rocni vynos pro nerovnomerne cashflow (napr. DCA).
 

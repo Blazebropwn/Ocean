@@ -14,7 +14,7 @@ Spusteni:
     cd services/kryptotron/research && python3 validate.py
 """
 from data import load_bars, validate_bars
-from metrics import summarize, trade_stats, fold_returns, monte_carlo_drawdown
+from metrics import summarize, trade_stats, fold_returns, monte_carlo_drawdown, percentile_rank
 import strategies as S
 
 SYMBOLS = ["BTCUSDC", "ETHUSDC"]
@@ -80,6 +80,9 @@ def stage2_baseline_and_benchmarks(bars4h, bars15m):
         bars4h, entry_fn=S.make_random_trend_entry(probability=0.003, seed=1))
     print_summary_row("  -> RANDOM entry kontrola", gc_rand_curve, gc_rand_trades)
 
+    regime_curve, regime_trades = S.golden_cross(bars4h, entry_fn=S._regime_entry)
+    print_summary_row("Golden Cross - REGIME entry (kandidat)", regime_curve, regime_trades)
+
     st_curve, st_trades = S.streak(bars15m)
     print_summary_row("Streak pullback (15m)", st_curve, st_trades)
 
@@ -96,37 +99,83 @@ def stage2_baseline_and_benchmarks(bars4h, bars15m):
     return {
         "buy_hold": bh_curve, "golden_cross": (gc_curve, gc_trades),
         "golden_cross_random": (gc_rand_curve, gc_rand_trades),
+        "golden_cross_regime": (regime_curve, regime_trades),
         "streak": (st_curve, st_trades), "streak_random": (st_rand_curve, st_rand_trades),
     }
+
+
+def _calibrate_random_probability(bars4h, target_trades, lo=0.0003, hi=0.2, max_iter=18):
+    """Binarni hledani pravdepodobnosti random-entry, aby pocet obchodu
+    odpovidal target_trades (frekvence realne strategie) - bez tohohle
+    neni srovnani s random kontrolou ferove."""
+    for _ in range(max_iter):
+        mid = (lo + hi) / 2
+        _, trades = S.golden_cross(bars4h, entry_fn=S.make_random_trend_entry(probability=mid, seed=0))
+        n = len(trades)
+        if n < target_trades:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
+
+def stage2b_random_control_distribution(bars4h, baseline, n_seeds=40):
+    print(f"\n{'=' * 70}\nSTAGE 2B - RANDOM CONTROL DISTRIBUCE (frekvenc. kalibrovana, {n_seeds} seedu)\n{'=' * 70}")
+    print("Jeden random seed muze byt smula/stesti - tady se srovnava realny\n"
+          "signal proti rozdeleni z N random-entry behu se STEJNYM poctem obchodu.\n")
+    for name in ["golden_cross", "golden_cross_regime"]:
+        curve, trades = baseline[name]
+        real_s = summarize(curve)
+        target = len(trades)
+        p = _calibrate_random_probability(bars4h, target)
+        sharpes, cagrs = [], []
+        for seed in range(1, n_seeds + 1):
+            c, t = S.golden_cross(bars4h, entry_fn=S.make_random_trend_entry(probability=p, seed=seed))
+            s = summarize(c)
+            sharpes.append(s["sharpe"])
+            cagrs.append(s["cagr"])
+        sharpes.sort()
+        pct = percentile_rank(real_s["sharpe"], sharpes)
+        print(f"  {name} ({target} obchodu, kalibrovana p={p:.4f}):")
+        print(f"    realny Sharpe {real_s['sharpe']:.2f}   |   random rozdeleni: "
+              f"min {sharpes[0]:.2f}  median {sharpes[len(sharpes)//2]:.2f}  max {sharpes[-1]:.2f}")
+        print(f"    -> realny signal je na {pct:.0f}. percentilu random rozdeleni "
+              f"{'(silny signal, ne sum)' if pct >= 90 else '(slaby/zadny signal nad ramec frekvence)' if pct < 70 else '(mirny signal)'}")
 
 
 def stage3_robustness(bars4h, bars15m, baseline):
     print(f"\n{'=' * 70}\nSTAGE 3 - ROBUSTNOST\n{'=' * 70}")
 
-    print("\n[3a] Parameter sensitivity - Golden Cross EMA fast/slow (BTCUSDC, Sharpe)")
-    fasts = [40, 45, 50, 55, 60]
-    slows = [150, 175, 200, 225, 250]
-    header = "        " + "".join(f"slow={s:<6}" for s in slows)
-    print(header)
-    for fast in fasts:
-        row = f"  fast={fast:<3} "
-        for slow in slows:
-            curve, _ = S.simulate_trend_symbol(bars4h["BTCUSDC"], ema_fast=fast, ema_slow=slow)
-            s = summarize(curve)
-            row += f"{s['sharpe']:7.2f} "
-        print(row)
+    for label, entry_fn in [("Golden Cross (cross-timing)", S._golden_cross_entry),
+                             ("Golden Cross (REGIME entry)", S._regime_entry)]:
+        print(f"\n[3a] Parameter sensitivity - {label} EMA fast/slow (BTCUSDC, Sharpe)")
+        fasts = [40, 45, 50, 55, 60]
+        slows = [150, 175, 200, 225, 250]
+        header = "        " + "".join(f"slow={s:<6}" for s in slows)
+        print(header)
+        for fast in fasts:
+            row = f"  fast={fast:<3} "
+            for slow in slows:
+                curve, _ = S.simulate_trend_symbol(bars4h["BTCUSDC"], entry_fn=entry_fn, ema_fast=fast, ema_slow=slow)
+                s = summarize(curve)
+                row += f"{s['sharpe']:7.2f} "
+            print(row)
     print("  (produkcni hodnota: fast=50, slow=200 - hleda se plateau kolem ni, ne spicka)")
 
     print("\n[3b] Stress test (2x fees + 2x slippage)")
-    for name, sym_fn in [("Golden Cross", lambda: S.golden_cross(
+    for name, sym_fn in [("Golden Cross (cross-timing)", lambda: S.golden_cross(
                               bars4h, fee_rate=S.FEE_RATE * 2, slippage_rate=S.SLIPPAGE_RATE * 2)),
+                          ("Golden Cross (REGIME entry)", lambda: S.golden_cross(
+                              bars4h, entry_fn=S._regime_entry,
+                              fee_rate=S.FEE_RATE * 2, slippage_rate=S.SLIPPAGE_RATE * 2)),
                           ("Streak pullback", lambda: S.streak(
                               bars15m, fee_rate=S.FEE_RATE * 2, slippage_rate=S.SLIPPAGE_RATE * 2))]:
         curve, trades = sym_fn()
         print_summary_row(f"  {name} @ 2x naklady", curve, trades)
 
     print("\n[3c] Monte Carlo - reshuffle poradi obchodu (2000 simulaci)")
-    for name, (curve, trades) in [("Golden Cross", baseline["golden_cross"]),
+    for name, (curve, trades) in [("Golden Cross (cross-timing)", baseline["golden_cross"]),
+                                   ("Golden Cross (REGIME entry)", baseline["golden_cross_regime"]),
                                    ("Streak pullback", baseline["streak"])]:
         mc = monte_carlo_drawdown(trades)
         if mc is None:
@@ -141,7 +190,7 @@ def stage3_robustness(bars4h, bars15m, baseline):
 def stage4_fold_consistency(baseline, n_folds=6):
     print(f"\n{'=' * 70}\nSTAGE 4 - FOLD CONSISTENCY (walk-forward-style, {n_folds} oken)\n{'=' * 70}")
     bh_folds = fold_returns(baseline["buy_hold"], n_folds)
-    for name in ["golden_cross", "streak"]:
+    for name in ["golden_cross", "golden_cross_regime", "streak"]:
         curve, _ = baseline[name]
         folds = fold_returns(curve, n_folds)
         common = min(len(folds), len(bh_folds))
@@ -160,5 +209,6 @@ if __name__ == "__main__":
 
     stage1_data_gate(bars4h, bars15m)
     baseline = stage2_baseline_and_benchmarks(bars4h, bars15m)
+    stage2b_random_control_distribution(bars4h, baseline)
     stage3_robustness(bars4h, bars15m, baseline)
     stage4_fold_consistency(baseline)

@@ -990,7 +990,12 @@ def run():
 
                     # ── BEZ POZICE ────────────────────────────────────────────
                     else:
-                        if data["golden_cross"]:
+                        # Regime entry: vstup kdykoliv jsme flat A uz jsme v bull
+                        # rezimu (ne jen presne v okamziku crossu). Validovano
+                        # v research/validate.py - porazilo 40/40 frekvencne
+                        # sladenych random-entry behu (100. percentil), zatimco
+                        # presny cross-timing byl na 28. percentilu (viz git log).
+                        if data["bull"]:
                             state = refresh_entries_control(state)
                             allowed, reason = can_trade(state)
                             if not allowed:
@@ -1002,9 +1007,9 @@ def run():
 
                                 if spend < min_notional:
                                     log.warning(f"[{symbol}] Nedostatečný balance: {balance:.2f} {QUOTE_ASSET}")
-                                    tg(f"⚠️ <b>Golden Cross — {symbol}</b>\nNedostatečný balance: {balance:.2f} {QUOTE_ASSET}")
+                                    tg(f"⚠️ <b>Trend Entry — {symbol}</b>\nNedostatečný balance: {balance:.2f} {QUOTE_ASSET}")
                                 else:
-                                    log.info(f"[{symbol}] ⚡ GOLDEN CROSS — Nakupuji za {spend:.2f} {QUOTE_ASSET}")
+                                    log.info(f"[{symbol}] 📈 TREND ENTRY (bull regime) — Nakupuji za {spend:.2f} {QUOTE_ASSET}")
                                     intent = new_buy_intent(symbol, spend)
                                     state["pending_order"] = intent
                                     if not save_state(state):
@@ -1036,7 +1041,7 @@ def run():
 
                                     log.info(f"[{symbol}] Nakoupeno a chráněno: {qty_filled} {base} @ {entry_price:.2f}")
                                     tg(
-                                        f"⚡ <b>GOLDEN CROSS — {symbol}</b>\n"
+                                        f"📈 <b>Trend Entry (bull regime) — {symbol}</b>\n"
                                         f"{DIVIDER}\n"
                                         f"💵 Nakoupeno: <b>{qty_filled} {base}</b>\n"
                                         f"📈 Cena vstupu: <b>{entry_price:.2f} {QUOTE_ASSET}</b>\n"
@@ -1047,7 +1052,7 @@ def run():
                         else:
                             gap_pct   = (data["ema_slow"] - data["ema_fast"]) / data["ema_slow"] * 100
                             today_str = now_utc().strftime("%Y-%m-%d")
-                            log.info(f"[{symbol}] Čekám na Golden Cross | mezera EMA: {gap_pct:.2f}%")
+                            log.info(f"[{symbol}] Čekám na Bull regime | mezera EMA: {gap_pct:.2f}%")
                             if not data["bull"] and gap_pct <= PRE_CROSS_PCT \
                                     and ps.get("pre_cross_alerted") != today_str:
                                 ps["pre_cross_alerted"] = today_str
