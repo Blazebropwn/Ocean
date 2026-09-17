@@ -753,6 +753,9 @@ input:focus { border-color: var(--cyan); background: rgba(2, 17, 23, 0.9); box-s
 }
 .mail { margin: 12px 0; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: rgba(12, 39, 49, 0.75); }
 .invite-page { height: 100%; padding: clamp(24px, 5vh, 54px); overflow: auto; }
+.back-link { display: inline-flex; align-items: center; min-height: 38px; padding: 0 12px; border: 1px solid transparent; border-radius: 9px; }
+.back-link:hover { border-color: var(--line); background: rgba(84, 238, 226, 0.05); }
+.utility-page { display: grid; align-items: start; }
 .invite-shell { width: min(780px, 100%); margin: auto; padding: clamp(24px, 4vw, 42px); }
 .invite-head { display: flex; align-items: flex-start; justify-content: space-between; }
 .invite-head small { color: var(--cyan); font: 700 8px/1 ui-monospace, monospace; letter-spacing: 0.16em; }
@@ -765,7 +768,7 @@ input:focus { border-color: var(--cyan); background: rgba(2, 17, 23, 0.9); box-s
 .invite-result { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 14px; }
 .invite-result input { margin: 0; }
 .invite-result button { padding: 0 16px; border: 1px solid var(--line); border-radius: 9px; color: var(--cyan); background: rgba(84, 238, 226, 0.05); cursor: pointer; }
-.invite-list-head { display: flex; justify-content: space-between; margin-top: 32px; padding-bottom: 10px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.invite-list-head { display: flex; justify-content: space-between; align-items: baseline; margin-top: 0; padding-bottom: 13px; border-bottom: 1px solid var(--line); font-size: 14px; }
 .invite-list-head small { color: var(--muted); }
 .invite-list article { display: grid; grid-template-columns: minmax(0, 1fr) repeat(5, auto); align-items: center; gap: 10px; padding: 13px 0; border-bottom: 1px solid var(--line); }
 .invite-list article strong, .invite-list article small { display: block; }
@@ -793,13 +796,49 @@ input:focus { border-color: var(--cyan); background: rgba(2, 17, 23, 0.9); box-s
 .bot-status.pending { color: var(--warn); background: rgba(255, 202, 106, 0.1); }
 .bot-status.error { color: var(--danger); background: rgba(255, 125, 139, 0.12); }
 .member-bot small { color: var(--muted); font-size: var(--text-xs); letter-spacing: 0.06em; }
-.telegram-shell { width: min(620px, 100%); }
-.telegram-code { margin-top: 16px; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: rgba(2, 17, 23, 0.48); }
-.telegram-code strong { display: block; color: var(--cyan); font: 800 30px/1 ui-monospace, monospace; letter-spacing: 0.08em; }
-.telegram-code a { display: inline-block; margin: 15px 0 10px; color: var(--cyan); }
-.telegram-code small, #telegram-connected small { display: block; color: var(--muted); }
-#telegram-connected > strong { display: block; margin-top: 14px; }
-.danger-link { margin-top: 18px; padding: 0; border: 0; color: var(--danger); background: transparent; cursor: pointer; }
+.telegram-shell { width: min(720px, 100%); padding: 0; overflow: hidden; }
+.utility-identity { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 18px; padding: 27px 30px; border-bottom: 1px solid var(--line); }
+.utility-identity small, .admin-heading small, .section-heading small { color: var(--cyan); font: 800 8px/1 ui-monospace, monospace; letter-spacing: 0.16em; }
+.utility-identity h1 { margin: 5px 0 0; font-size: 29px; letter-spacing: -0.04em; }
+.utility-identity > span, .admin-heading > span { padding: 7px 10px; border: 1px solid var(--line-hot); border-radius: 20px; color: var(--cyan); background: rgba(84, 238, 226, 0.06); font: 800 8px/1 ui-monospace, monospace; }
+.utility-mark { width: 52px; height: 52px; display: grid; place-items: center; position: relative; border: 1px solid var(--line-hot); border-radius: 14px; background: rgba(84, 238, 226, 0.07); }
+.telegram-mark i, .telegram-mark::before, .telegram-mark::after { position: absolute; border: 1px solid var(--cyan); border-radius: 50%; content: ""; }
+.telegram-mark i { width: 8px; height: 8px; background: var(--cyan); box-shadow: 0 0 12px var(--cyan); }
+.telegram-mark::before { width: 23px; height: 23px; border-left-color: transparent; border-bottom-color: transparent; transform: rotate(45deg); }
+.telegram-mark::after { width: 36px; height: 36px; opacity: 0.45; border-left-color: transparent; border-bottom-color: transparent; transform: rotate(45deg); }
+.telegram-panel { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 22px; padding: 28px 30px 30px; }
+.telegram-panel > div > strong { display: block; font-size: 16px; }
+.telegram-panel > div > small { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.telegram-primary { width: auto; min-width: 180px; margin: 0; }
+.telegram-code { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 7px 18px; padding: 18px 20px; border: 1px solid var(--line); border-radius: 12px; background: rgba(2, 17, 23, 0.48); }
+.telegram-code > span { color: var(--muted); font: 800 8px/1 ui-monospace, monospace; letter-spacing: 0.14em; }
+.telegram-code strong { grid-column: 1; display: block; color: var(--cyan); font: 800 30px/1 ui-monospace, monospace; letter-spacing: 0.08em; }
+.telegram-code small { grid-column: 1; color: var(--muted); }
+.telegram-code a { grid-column: 2; grid-row: 1 / span 2; color: var(--cyan); text-decoration: none; font-weight: 800; }
+.telegram-code code { grid-column: 1 / -1; color: var(--ink-soft); font-size: 10px; }
+.telegram-connected { grid-template-columns: minmax(190px, 1fr) auto auto auto; }
+.connection-state { display: flex; align-items: center; gap: 12px; }
+.connection-state > i { width: 10px; height: 10px; flex: none; border-radius: 50%; background: var(--good); box-shadow: 0 0 14px rgba(92, 229, 168, 0.75); }
+.telegram-capability { min-width: 100px; padding-left: 18px; border-left: 1px solid var(--line); }
+.telegram-capability span { display: block; color: var(--muted); font-size: 10px; }
+.telegram-capability strong { margin-top: 5px; color: var(--ink-soft); font-size: 12px !important; }
+.danger-link { padding: 10px 13px; border: 1px solid rgba(255, 125, 139, 0.32); border-radius: 9px; color: var(--danger); background: rgba(255, 125, 139, 0.04); cursor: pointer; }
+.danger-link:hover { background: rgba(255, 125, 139, 0.1); }
+.telegram-shell > .message { margin: 0 30px 22px; }
+
+.admin-page { padding-top: clamp(22px, 4vh, 42px); }
+.admin-shell { width: min(1180px, 100%); margin: 0 auto; }
+.admin-heading { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 20px; }
+.admin-heading h1 { margin: 7px 0 0; font-size: 36px; letter-spacing: -0.045em; }
+.admin-section { position: relative; padding: 24px; border: 1px solid var(--line); border-radius: 15px; background: linear-gradient(150deg, rgba(14, 43, 53, 0.88), rgba(5, 24, 32, 0.94)); box-shadow: 0 18px 45px rgba(0, 8, 12, 0.18); }
+.invite-create-section { border-color: var(--line-hot); }
+.section-heading { display: flex; align-items: flex-end; justify-content: space-between; }
+.section-heading h2 { margin: 6px 0 0; font-size: 20px; }
+.section-heading > span { color: var(--muted); font-size: 11px; }
+.invite-create-section .invite-create { margin-top: 18px; }
+.admin-columns { display: grid; grid-template-columns: minmax(320px, 0.8fr) minmax(520px, 1.2fr); gap: 16px; margin-top: 16px; }
+.admin-section .invite-list > p { margin: 18px 0 4px; color: var(--muted); font-size: 13px; }
+.admin-section .member-entry:last-child article, .admin-section .invite-list > article:last-child { border-bottom: 0; }
 
 /* Kryptotron Octo — compact status companion */
 .side-nav { z-index: 31; }
@@ -977,7 +1016,7 @@ input:focus { border-color: var(--cyan); background: rgba(2, 17, 23, 0.9); box-s
 .overview-controls { min-height: 38px; display: flex; align-items: center; }
 .overview-controls .app-status { margin-left: auto; }
 .balance-block strong { font-size: clamp(52px, 4.8vw, 76px); }
-.invite-shell { width: min(880px, 100%); }
+.invite-shell:not(.telegram-shell) { width: min(880px, 100%); }
 .invite-head h1 { font-size: 42px; }
 .invite-create { grid-template-columns: 1fr 200px; }
 .invite-list article { padding: 16px 0; }
@@ -1008,6 +1047,10 @@ input:focus { border-color: var(--cyan); background: rgba(2, 17, 23, 0.9); box-s
   .kryptotron-card { grid-template-columns: 1fr; overflow: visible; }
   .kryptotron-overview { border-right: 0; border-bottom: 1px solid var(--line); }
   .kryptotron-detail { min-height: 600px; }
+  .admin-columns { grid-template-columns: 1fr; }
+  .telegram-connected { grid-template-columns: 1fr 1fr; }
+  .telegram-connected .connection-state { grid-column: 1 / -1; }
+  .telegram-connected .danger-link { justify-self: end; }
 }
 
 @media (max-width: 560px) {
@@ -1034,6 +1077,24 @@ input:focus { border-color: var(--cyan); background: rgba(2, 17, 23, 0.9); box-s
   .auth-screen::before, .auth-screen::after { display: none; }
   .auth-card { padding: 23px; }
   .invite-page { padding: 18px 12px; }
+  .utility-page { display: block; }
+  .utility-identity { grid-template-columns: auto 1fr; gap: 13px; padding: 22px 20px; }
+  .utility-identity > span { grid-column: 2; width: max-content; }
+  .telegram-panel { grid-template-columns: 1fr; gap: 18px; padding: 22px 20px; }
+  .telegram-primary { width: 100%; }
+  .telegram-code { grid-template-columns: 1fr; }
+  .telegram-code a, .telegram-code code { grid-column: 1; grid-row: auto; }
+  .telegram-connected { grid-template-columns: 1fr; }
+  .telegram-connected .connection-state, .telegram-connected .danger-link { grid-column: 1; }
+  .telegram-connected .danger-link { width: 100%; justify-self: stretch; }
+  .telegram-capability { padding: 12px 0 0; border-top: 1px solid var(--line); border-left: 0; }
+  .telegram-shell > .message { margin-inline: 20px; }
+  .admin-heading { align-items: flex-start; }
+  .admin-heading h1 { font-size: 30px; }
+  .admin-heading > span { margin-top: 3px; }
+  .admin-section { padding: 19px; }
+  .section-heading { align-items: flex-start; gap: 12px; }
+  .admin-columns { grid-template-columns: minmax(0, 1fr); }
   .invite-create { grid-template-columns: 1fr; }
   .invite-list article { grid-template-columns: 1fr auto; }
   .invite-list article button { grid-column: 2; }
