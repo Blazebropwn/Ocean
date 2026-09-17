@@ -65,7 +65,7 @@ Potom vytvořte novou testovací pozvánku a celý onboarding proveďte pouze na
 
 ## 4. Zapnutí supervisoru osobních botů
 
-Supervisor spouští osobní Kryptotrony členů jako samostatné procesy vedle Oceanu. Běží **výhradně testnetové** instance členů — vyžaduje `environment = testnet` a `remote_state_key = id` instance. Vlastnický mainnet bot (`remote_state_key = main`) se nespouští a zůstává na samostatné Railway službě beze změny, takže zapnutí se nedotkne reálného obchodování.
+Supervisor spouští osobní Kryptotrony členů jako samostatné procesy vedle Oceanu. Každá instance vyžaduje `remote_state_key = id` instance. Testnet je dostupný vždy; mainnetové instance se spouštějí pouze při explicitním globálním přepínači `KRYPTOTRON_MAINNET_ENABLED=true`. Nové připojení je založeno s pozastavenými vstupy a Binance klíč musí mít povolené čtení a spot trading, ale zakázané výběry. Vlastnický legacy bot (`remote_state_key = main`) se supervisorem nespouští a zůstává na samostatné Railway službě beze změny.
 
 Před zapnutím musí být nastaveno, jinak se supervisor sám vypne a jen to zaloguje:
 

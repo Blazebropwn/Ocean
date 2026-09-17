@@ -35,7 +35,8 @@ from config.settings import (
 from strategy import get_cross_data
 from utils import (
     answer_telegram_callback, get_balance, get_symbol_filters, notify,
-    read_portfolio_snapshot, round_price, round_step, telegram_updates,
+    portfolio_snapshot_due, read_portfolio_snapshot, round_price, round_step,
+    telegram_updates,
 )
 from order_safety import apply_filled_buy, classify_order, new_buy_intent
 from events import add_event
@@ -730,9 +731,19 @@ def maybe_send_weekly_summary(state):
         send_weekly_summary(state)
 
 
+def maybe_refresh_portfolio_snapshot(client, state):
+    if not portfolio_snapshot_due(state):
+        return
+    try:
+        state["portfolio_snapshot"] = read_portfolio_snapshot(client, QUOTE_ASSET)
+    except Exception as exc:
+        log.warning(f"Portfolio snapshot se nepodařilo obnovit: {exc}")
+
+
 def maybe_send_scheduled_summaries(client, state, pair_filters, market_client=None):
     market_client = market_client or client
     refresh_entries_control(state)
+    maybe_refresh_portfolio_snapshot(client, state)
     maybe_run_test_dca(client, state, pair_filters)
     maybe_run_streak_paper(market_client, state, pair_filters)
     maybe_send_daily_summary(state)

@@ -18,6 +18,7 @@ type RunnableInstance = {
   api_secret_iv: string;
   api_secret_tag: string;
   approved_at: string | null;
+  username: string;
 };
 
 type SupervisorLogger = Pick<FastifyBaseLogger, "info" | "warn" | "error">;
@@ -36,8 +37,12 @@ export function workerHeartbeatExpired(worker: Pick<ManagedChild, "ready" | "sta
   return now > deadline;
 }
 
-export function isRunnablePersonalInstance(instance: Pick<RunnableInstance, "id" | "environment"> & { status: string; remote_state_key: string | null }) {
-  return instance.environment === "testnet"
+export function isMainnetEnabled(config: Pick<Config, "kryptotronMainnetEnabled">) {
+  return config.kryptotronMainnetEnabled === true;
+}
+
+export function isRunnablePersonalInstance(instance: Pick<RunnableInstance, "id" | "environment"> & { status: string; remote_state_key: string | null }, mainnetEnabled = false) {
+  return (instance.environment === "testnet" || (instance.environment === "mainnet" && mainnetEnabled))
     && instance.remote_state_key === instance.id
     && ["provisioning", "connected", "error"].includes(instance.status);
 }
@@ -45,8 +50,9 @@ export function isRunnablePersonalInstance(instance: Pick<RunnableInstance, "id"
 export function canRunPersonalInstance(
   instance: Pick<RunnableInstance, "id" | "environment" | "approved_at"> & { status: string; remote_state_key: string | null },
   manualApprovalEnabled = false,
+  mainnetEnabled = false,
 ) {
-  return isRunnablePersonalInstance(instance) && (!manualApprovalEnabled || Boolean(instance.approved_at));
+  return isRunnablePersonalInstance(instance, mainnetEnabled) && (!manualApprovalEnabled || Boolean(instance.approved_at));
 }
 
 export function workerEnvironment(base: NodeJS.ProcessEnv, instance: Pick<RunnableInstance, "id" | "environment">, apiKey: string, apiSecret: string, config: Config, accessToken?: string): NodeJS.ProcessEnv {
@@ -99,14 +105,18 @@ export function startKryptotronSupervisor(config: Config, db: OceanDatabase, log
     const now = Date.now();
     const instances = db.prepare(`
       SELECT i.id, i.user_id, i.environment, i.status, i.remote_state_key,
-        u.approved_at,
+        u.approved_at, u.username,
         c.api_key_ciphertext, c.api_key_iv, c.api_key_tag,
         c.api_secret_ciphertext, c.api_secret_iv, c.api_secret_tag
       FROM kryptotron_instances i
       JOIN kryptotron_credentials c ON c.instance_id = i.id
       JOIN users u ON u.id = i.user_id
     `).all() as Array<RunnableInstance & { status: string; remote_state_key: string | null }>;
-    const runnableInstances = instances.filter((instance) => canRunPersonalInstance(instance, config.manualApprovalEnabled));
+    const runnableInstances = instances.filter((instance) => canRunPersonalInstance(
+      instance,
+      config.manualApprovalEnabled,
+      isMainnetEnabled(config),
+    ));
     const runnableIds = new Set(runnableInstances.map((instance) => instance.id));
 
     for (const [instanceId, child] of children) {

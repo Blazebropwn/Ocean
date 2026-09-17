@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { Config } from "../src/config.js";
-import { canRunPersonalInstance, isRunnablePersonalInstance, restartDelayMs, workerEnvironment, workerHeartbeatExpired } from "../src/supervisor.js";
+import { canRunPersonalInstance, isMainnetEnabled, isRunnablePersonalInstance, restartDelayMs, workerEnvironment, workerHeartbeatExpired } from "../src/supervisor.js";
 
 test("personal worker environment is isolated and forced to Testnet", () => {
   const config = {
@@ -54,7 +54,14 @@ test("only isolated Testnet instances are started automatically", () => {
   assert.equal(isRunnablePersonalInstance({ ...personal, environment: "testnet", status: "connected" }), true);
   assert.equal(isRunnablePersonalInstance({ ...personal, environment: "testnet", status: "suspended" }), false);
   assert.equal(isRunnablePersonalInstance({ ...personal, environment: "mainnet", status: "connected" }), false);
+  assert.equal(isRunnablePersonalInstance({ ...personal, environment: "mainnet", status: "connected" }, true), true);
   assert.equal(isRunnablePersonalInstance({ ...personal, remote_state_key: "main", environment: "testnet", status: "connected" }), false);
   assert.equal(canRunPersonalInstance({ ...personal, environment: "testnet", status: "connected", approved_at: null }, true), false);
   assert.equal(canRunPersonalInstance({ ...personal, environment: "testnet", status: "connected", approved_at: "2026-09-04T18:00:00Z" }, true), true);
+});
+
+test("mainnet access requires the explicit global server switch", () => {
+  assert.equal(isMainnetEnabled({ kryptotronMainnetEnabled: true }), true);
+  assert.equal(isMainnetEnabled({ kryptotronMainnetEnabled: false }), false);
+  assert.equal(isMainnetEnabled({}), false);
 });

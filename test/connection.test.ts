@@ -71,7 +71,13 @@ test("invited member can verify and securely stage a personal Binance connection
   const instance = db.prepare("SELECT id, remote_state_key FROM kryptotron_instances WHERE user_id = (SELECT id FROM users WHERE username = 'diver')").get() as { id: string; remote_state_key: string };
   assert.equal(instance.remote_state_key, instance.id);
   const state = await app.inject({ method: "GET", url: "/api/kryptotron/connection", headers: { cookie: memberCookie! } });
-  assert.deepEqual(state.json().connection, { status: "provisioning", environment: "testnet", configured: true, legacy: false });
+  assert.deepEqual(state.json().connection, {
+    status: "provisioning",
+    environment: "testnet",
+    configured: true,
+    legacy: false,
+    mainnetAvailable: false,
+  });
 
   const disconnected = await app.inject({ method: "DELETE", url: "/api/kryptotron/connection", headers: { cookie: memberCookie! } });
   assert.equal(disconnected.statusCode, 204);
@@ -79,7 +85,57 @@ test("invited member can verify and securely stage a personal Binance connection
   const reset = db.prepare("SELECT status, environment, remote_state_key FROM kryptotron_instances WHERE id = ?").get(instance.id);
   assert.deepEqual(reset, { status: "unconfigured", environment: "testnet", remote_state_key: null });
   const disconnectedState = await app.inject({ method: "GET", url: "/api/kryptotron/connection", headers: { cookie: memberCookie! } });
-  assert.deepEqual(disconnectedState.json().connection, { status: "unconfigured", environment: "testnet", configured: false, legacy: false });
+  assert.deepEqual(disconnectedState.json().connection, {
+    status: "unconfigured",
+    environment: "testnet",
+    configured: false,
+    legacy: false,
+    mainnetAvailable: false,
+  });
+  await app.close();
+});
+
+test("an approved user can stage a safe mainnet connection when globally enabled", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    if (url.startsWith("https://api.binance.com/api/v3/account?")) {
+      return new Response(JSON.stringify({ canTrade: true, balances: [{ asset: "USDC", free: "25", locked: "0" }] }), { status: 200 });
+    }
+    if (url.startsWith("https://api.binance.com/sapi/v1/account/apiRestrictions?")) {
+      return new Response(JSON.stringify({ enableReading: true, enableWithdrawals: false, enableSpotAndMarginTrading: true }), { status: 200 });
+    }
+    assert.equal(url, "https://example.supabase.co/rest/v1/bot_state?on_conflict=key");
+    const provisioned = JSON.parse(String(init?.body)) as { data: Record<string, unknown> };
+    assert.equal(provisioned.data.environment, "mainnet");
+    assert.equal(provisioned.data.entries_paused, true);
+    return new Response(null, { status: 201 });
+  };
+  const config: Config = {
+    port: 0, host: "127.0.0.1", databasePath: ":memory:", appOrigin: "http://localhost:3000", isProduction: false,
+    credentialsEncryptionKey: randomBytes(32).toString("base64"),
+    kryptotronSupabaseUrl: "https://example.supabase.co", kryptotronSupabaseKey: "service-key",
+    kryptotronMainnetEnabled: true,
+  };
+  const db = openDatabase(":memory:");
+  const app = buildApp(config, db);
+  const registration = await app.inject({ method: "POST", url: "/api/auth/register", payload: { username: "Pilot", password: "pilot password" } });
+  const cookie = registration.headers["set-cookie"]?.toString().split(";")[0];
+  db.prepare("UPDATE users SET email_verified_at = datetime('now') WHERE username = 'pilot'").run();
+  db.prepare("UPDATE kryptotron_instances SET remote_state_key = NULL, status = 'unconfigured', environment = 'testnet' WHERE user_id = (SELECT id FROM users WHERE username = 'pilot')").run();
+
+  const state = await app.inject({ method: "GET", url: "/api/kryptotron/connection", headers: { cookie: cookie! } });
+  assert.equal(state.json().connection.mainnetAvailable, true);
+  const connected = await app.inject({
+    method: "POST", url: "/api/kryptotron/connection", headers: { cookie: cookie! },
+    payload: { apiKey: "A".repeat(32), apiSecret: "S".repeat(32), environment: "mainnet", withdrawalsDisabledConfirmed: true },
+  });
+  assert.equal(connected.statusCode, 201);
+  assert.deepEqual(connected.json().connection, { status: "provisioning", environment: "mainnet", configured: true });
+  assert.deepEqual(connected.json().verification, { readingEnabled: true, tradingEnabled: true, withdrawalsDisabled: true, assets: 1 });
+  const instance = db.prepare("SELECT status, environment FROM kryptotron_instances WHERE user_id = (SELECT id FROM users WHERE username = 'pilot')").get();
+  assert.deepEqual(instance, { status: "provisioning", environment: "mainnet" });
   await app.close();
 });
 

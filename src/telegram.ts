@@ -88,19 +88,16 @@ export function agentRunNotificationText(run: CompletedRun, appOrigin: string) {
   const dashboardUrl = `${appOrigin.replace(/\/$/, "")}/#dashboard`;
   const report = portfolioRiskReportSchema.safeParse(run.result);
   if (run.status === "succeeded" && run.validationStatus === "passed" && report.success) {
-    const largest = report.data.metrics.largestPosition;
     return [
-      "🐙 Risk Agent · report ověřen",
-      `Riziko: ${report.data.metrics.riskLevel.toUpperCase()} · ${report.data.metrics.riskScore.toFixed(2)}/100`,
-      `Největší pozice: ${largest ? `${largest.asset} · ${largest.sharePct.toFixed(2)} %` : "—"}`,
-      `Akce: ${run.actionCount} · Zásahy člověka: ${run.humanInterventions}`,
-      `Ocean: ${dashboardUrl}`,
+      "✅ Kontrola portfolia dokončena",
+      "Podrobný výsledek najdeš v Oceanu.",
+      dashboardUrl,
     ].join("\n");
   }
   return [
-    "⚠️ Risk Agent · report se nezdařil",
-    run.errorMessage ? `Důvod: ${run.errorMessage.slice(0, 240)}` : "Automatickou analýzu se nepodařilo dokončit.",
-    `Ocean: ${dashboardUrl}`,
+    "⚠️ Kontrolu portfolia se nepodařilo dokončit",
+    "Kryptotron tím není zastavený. Podrobnosti najdeš v Oceanu.",
+    dashboardUrl,
   ].join("\n");
 }
 

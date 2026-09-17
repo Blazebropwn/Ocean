@@ -4,14 +4,18 @@ import type { OceanDatabase } from "../db.js";
 import { credentialsKey } from "../credentials.js";
 import { validWorkerAccessToken } from "../worker-auth.js";
 import { loadKryptotronState, logKryptotronTrade, saveKryptotronState } from "../kryptotron.js";
+import { isMainnetEnabled } from "../supervisor.js";
 
 export function registerInternalWorkerRoutes(app: FastifyInstance, db: OceanDatabase, config: Config) {
   function internalWorker(request: FastifyRequest) {
     const instanceId = request.headers["x-ocean-instance"];
     const authorization = request.headers.authorization;
     if (typeof instanceId !== "string" || !/^kry_[a-f0-9]{32}$/.test(instanceId) || !authorization?.startsWith("Bearer ")) return null;
-    const instance = db.prepare("SELECT id FROM kryptotron_instances WHERE id = ? AND remote_state_key = id AND environment = 'testnet' AND status IN ('provisioning', 'connected')").get(instanceId);
-    if (!instance) return null;
+    const instance = db.prepare(`SELECT i.id, i.environment, u.username
+      FROM kryptotron_instances i JOIN users u ON u.id = i.user_id
+      WHERE i.id = ? AND i.remote_state_key = i.id AND i.status IN ('provisioning', 'connected')`).get(instanceId) as
+      { id: string; environment: "testnet" | "mainnet"; username: string } | undefined;
+    if (!instance || (instance.environment === "mainnet" && !isMainnetEnabled(config))) return null;
     try {
       const key = credentialsKey(config.credentialsEncryptionKey);
       return validWorkerAccessToken(authorization.slice(7), key, instanceId) ? instanceId : null;

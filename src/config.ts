@@ -31,6 +31,8 @@ export type Config = {
   agentSchedulerEnabled?: boolean;
   agentDailyRunTime?: string;
   agentDailyRunTimeZone?: string;
+  agentTelegramNotificationsEnabled?: boolean;
+  kryptotronMainnetEnabled?: boolean;
 };
 
 export function loadConfig(env = process.env): Config {
@@ -67,5 +69,7 @@ export function loadConfig(env = process.env): Config {
     agentSchedulerEnabled: env.OCEAN_AGENT_SCHEDULER_ENABLED === "true",
     agentDailyRunTime: env.OCEAN_AGENT_DAILY_RUN_TIME ?? "10:02",
     agentDailyRunTimeZone: env.OCEAN_AGENT_DAILY_RUN_TIME_ZONE ?? "Europe/Prague",
+    agentTelegramNotificationsEnabled: env.OCEAN_AGENT_TELEGRAM_NOTIFICATIONS_ENABLED === "true",
+    kryptotronMainnetEnabled: env.KRYPTOTRON_MAINNET_ENABLED === "true",
   };
 }

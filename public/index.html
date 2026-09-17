@@ -108,7 +108,13 @@
                   </div>
                 </div>
                 <form class="connection-form" id="connection-form" autocomplete="off">
-                  <input type="hidden" name="environment" value="testnet" />
+                  <label class="hidden" id="connection-environment-field">Režim
+                    <select name="environment" id="connection-environment">
+                      <option value="testnet">Zkušební provoz</option>
+                      <option value="mainnet">Ostrý provoz</option>
+                    </select>
+                  </label>
+                  <input type="hidden" name="environment" id="connection-environment-fallback" value="testnet" />
                   <label>API key<input name="apiKey" type="password" autocomplete="off" required minlength="16" /></label>
                   <label>Secret key<input name="apiSecret" type="password" autocomplete="off" required minlength="16" /></label>
                   <label class="safety-check"><input name="withdrawalsDisabledConfirmed" type="checkbox" required /><span>Výběry přes API jsou na Binance zakázané.</span></label>

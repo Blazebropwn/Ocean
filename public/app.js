@@ -559,6 +559,12 @@ async function initializeKryptotron() {
     const panel = $("#connection-panel");
     const form = $("#connection-form");
     const disconnect = $("#disconnect-binance");
+    const environmentField = $("#connection-environment-field");
+    const environmentSelect = $("#connection-environment");
+    const environmentFallback = $("#connection-environment-fallback");
+    environmentField.classList.toggle("hidden", !connection.mainnetAvailable);
+    environmentSelect.disabled = !connection.mainnetAvailable;
+    environmentFallback.disabled = Boolean(connection.mainnetAvailable);
     if (connection.status === "connected") {
       panel.classList.add("hidden");
       disconnect.classList.toggle("hidden", connection.legacy);

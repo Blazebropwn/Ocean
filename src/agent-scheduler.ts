@@ -98,7 +98,9 @@ export function startAgentScheduler(config: Config, db: OceanDatabase, portfolio
         repository,
         runner,
         logger,
-        notify: (agent, run) => sendAgentRunTelegramNotification(config, db, agent.userId, run).then(() => undefined),
+        notify: config.agentTelegramNotificationsEnabled
+          ? (agent, run) => sendAgentRunTelegramNotification(config, db, agent.userId, run).then(() => undefined)
+          : undefined,
       });
     }
     finally { running = false; }

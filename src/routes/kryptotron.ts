@@ -6,6 +6,7 @@ import { verifyBinanceCredentials } from "../binance.js";
 import { credentialsKey, encryptCredential } from "../credentials.js";
 import { initializeKryptotronInstance, loadKryptotronSnapshot, requestTestDca, setDcaAmount, setDcaEnabled, setKryptotronEntriesPaused, setStreakEnabled } from "../kryptotron.js";
 import { currentUser, hasApprovedAccess, requestMeta } from "./shared.js";
+import { isMainnetEnabled } from "../supervisor.js";
 
 export function registerKryptotronRoutes(app: FastifyInstance, db: OceanDatabase, config: Config) {
   function kryptotronInstance(userId: string) {
@@ -28,6 +29,7 @@ export function registerKryptotronRoutes(app: FastifyInstance, db: OceanDatabase
         environment: instance.environment,
         configured: instance.status !== "unconfigured" && instance.status !== "error",
         legacy: instance.remote_state_key === "main",
+        mainnetAvailable: isMainnetEnabled(config),
       },
     };
   });
@@ -41,8 +43,8 @@ export function registerKryptotronRoutes(app: FastifyInstance, db: OceanDatabase
     if (instance.status === "connected" || instance.status === "provisioning") return reply.code(409).send({ error: "Kryptotron už je připojený nebo čeká na spuštění." });
     const parsed = binanceConnectionSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Zkontrolujte Binance údaje a potvrzení bezpečnosti." });
-    if (parsed.data.environment !== "testnet") {
-      return reply.code(403).send({ error: "Osobní Kryptotron je zatím dostupný pouze na Binance Testnetu." });
+    if (parsed.data.environment === "mainnet" && !isMainnetEnabled(config)) {
+      return reply.code(403).send({ error: "Ostrý provoz není pro tento účet povolený." });
     }
 
     let encryptionKey: Buffer;

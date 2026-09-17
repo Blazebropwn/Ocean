@@ -99,8 +99,9 @@ test("scheduled Risk Agent notification goes only to the linked user's chat", as
 
   assert.equal(await sendAgentRunTelegramNotification(config, db, userId, run, async (chatId, text) => { sent.push({ chatId, text }); }), true);
   assert.equal(sent[0]?.chatId, "4242");
-  assert.match(sent[0]?.text ?? "", /report ověřen/);
-  assert.match(sent[0]?.text ?? "", /Zásahy člověka: 0/);
+  assert.match(sent[0]?.text ?? "", /Kontrola portfolia dokončena/);
+  assert.doesNotMatch(sent[0]?.text ?? "", /Zásahy člověka/);
+  assert.doesNotMatch(sent[0]?.text ?? "", /Riziko:/);
   assert.match(sent[0]?.text ?? "", /https:\/\/ocean\.example\/#dashboard/);
   assert.equal(await sendAgentRunTelegramNotification(config, db, "usr_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", run, async () => { throw new Error("must not send"); }), false);
   db.close();
@@ -118,6 +119,6 @@ test("failed Risk Agent notification contains a concise reason", () => {
     errorCode: "SNAPSHOT_UNAVAILABLE",
     errorMessage: "Portfolio snapshot není dostupný.",
   }, "https://ocean.example/");
-  assert.match(text, /report se nezdařil/);
-  assert.match(text, /Portfolio snapshot není dostupný/);
+  assert.match(text, /Kontrolu portfolia se nepodařilo dokončit/);
+  assert.doesNotMatch(text, /Portfolio snapshot není dostupný/);
 });

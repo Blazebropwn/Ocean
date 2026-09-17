@@ -76,6 +76,22 @@ def read_portfolio_snapshot(client, quote_asset="USDC"):
     }
 
 
+def portfolio_snapshot_due(state, now=None, max_age_seconds=600):
+    """Return True when the persisted portfolio view should be refreshed."""
+    current = now or datetime.now(timezone.utc)
+    captured_at = state.get("portfolio_snapshot", {}).get("captured_at")
+    if not isinstance(captured_at, str):
+        return True
+    try:
+        captured = datetime.fromisoformat(captured_at.replace("Z", "+00:00"))
+    except ValueError:
+        return True
+    if captured.tzinfo is None:
+        return True
+    age_seconds = (current - captured.astimezone(timezone.utc)).total_seconds()
+    return age_seconds < 0 or age_seconds >= max_age_seconds
+
+
 def get_symbol_filters(client, symbol):
     info         = client.get_symbol_info(symbol)
     if info is None:
