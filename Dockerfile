@@ -34,6 +34,7 @@ COPY --from=node-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY public ./public
 COPY services ./services
+COPY scripts ./scripts
 COPY docker-entrypoint.sh /usr/local/bin/ocean-entrypoint
 
 RUN mkdir -p /data \

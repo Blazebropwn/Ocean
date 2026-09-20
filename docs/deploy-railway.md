@@ -1,6 +1,6 @@
 # Ocean na Railway
 
-Ocean se nasazuje jako jediná služba z kořenového `Dockerfile`. Původní Blazebro Railway worker zůstává samostatný a jeho nastavení se při tomto postupu nemění.
+Ocean se nasazuje jako jediná služba z kořenového `Dockerfile`. Web, supervisor i Telegram běží v této službě. Další samostatnou službu `binance-bot` nevytvářejte.
 
 ## 1. Služba a disk
 
@@ -61,11 +61,11 @@ GET https://vase-ocean-domena/api/health  -> 200
 GET https://vase-ocean-domena/api/ready   -> 200
 ```
 
-Potom vytvořte novou testovací pozvánku a celý onboarding proveďte pouze na Binance Testnetu. Mainnet osobních účtů zůstává automaticky zakázaný.
+Potom vytvořte novou testovací pozvánku a celý onboarding proveďte pouze na Binance Testnetu. Mainnet vyžaduje serverové `KRYPTOTRON_MAINNET_ENABLED=true`; nové vstupy zůstávají do aktivace pozastavené.
 
 ## 4. Zapnutí supervisoru osobních botů
 
-Supervisor spouští osobní Kryptotrony členů jako samostatné procesy vedle Oceanu. Každá instance vyžaduje `remote_state_key = id` instance. Testnet je dostupný vždy; mainnetové instance se spouštějí pouze při explicitním globálním přepínači `KRYPTOTRON_MAINNET_ENABLED=true`. Nové připojení je založeno s pozastavenými vstupy a Binance klíč musí mít povolené čtení a spot trading, ale zakázané výběry. Vlastnický legacy bot (`remote_state_key = main`) se supervisorem nespouští a zůstává na samostatné Railway službě beze změny.
+Supervisor spouští osobní Kryptotrony členů jako samostatné procesy vedle Oceanu. Každá instance vyžaduje `remote_state_key = id` instance. Testnet je dostupný vždy; mainnetové instance se spouštějí pouze při explicitním globálním přepínači `KRYPTOTRON_MAINNET_ENABLED=true`. Nové připojení je založeno s pozastavenými vstupy a Binance klíč musí mít povolené čtení a spot trading, ale zakázané výběry. Původní mapování `main` vyžaduje řízený převod podle [migračního postupu](kryptotron-consolidation.md); nesmí se spustit souběžně se starým workerem.
 
 Před zapnutím musí být nastaveno, jinak se supervisor sám vypne a jen to zaloguje:
 

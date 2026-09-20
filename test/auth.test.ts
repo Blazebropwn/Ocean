@@ -86,7 +86,7 @@ test("additional accounts require a single-use owner invitation", async () => {
   assert.equal(member.json().user.role, "member");
   const ownerInstance = db.prepare("SELECT remote_state_key, status FROM kryptotron_instances WHERE user_id = ?").get(owner.json().user.id) as { remote_state_key: string; status: string };
   const memberInstance = db.prepare("SELECT remote_state_key, status FROM kryptotron_instances WHERE user_id = ?").get(member.json().user.id) as { remote_state_key: string | null; status: string };
-  assert.deepEqual(ownerInstance, { remote_state_key: "main", status: "connected" });
+  assert.deepEqual(ownerInstance, { remote_state_key: null, status: "unconfigured" });
   assert.deepEqual(memberInstance, { remote_state_key: null, status: "unconfigured" });
 
   const memberKryptotron = await app.inject({ method: "GET", url: "/api/kryptotron", headers: { cookie: member.headers["set-cookie"]?.toString().split(";")[0]! } });

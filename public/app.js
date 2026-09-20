@@ -580,11 +580,8 @@ async function initializeKryptotron() {
     form.classList.toggle("hidden", provisioning);
     $("#provisioning-status").classList.toggle("hidden", !provisioning);
     if (provisioning) {
-      const mainnet = connection.environment === "mainnet";
-      $("#provisioning-heading").textContent = mainnet ? "Mainnet čeká na ruční aktivaci" : "Připravuji Kryptotron";
-      $("#provisioning-detail").textContent = mainnet
-        ? "Automatické spouštění mainnet workerů zatím Ocean nepodporuje. Ozvěte se prosím správci účtu."
-        : "Testnet worker se po ověření spustí automaticky.";
+      $("#provisioning-heading").textContent = "Připravuji Kryptotron";
+      $("#provisioning-detail").textContent = "Ocean ověřuje připojení a spouští tvého Kryptotrona. Nové obchody zůstávají pozastavené do aktivace.";
     } else if (connection.status === "error") {
       $("#connection-message").textContent = "Připojení se nepodařilo spustit. Vložte platné klíče znovu.";
     } else {

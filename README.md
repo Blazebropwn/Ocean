@@ -56,32 +56,32 @@ Zapomenuté heslo člena řeší vlastník v seznamu členů vytvořením jednor
 
 ## Kryptotron
 
-Zdrojový kód existujícího Binance workeru je v `services/kryptotron`. Obchodní logika a konfigurace strategie zůstaly beze změny. Původní `.env`, Git historie, virtuální prostředí, logy a běhový stav nebyly do Oceanu zkopírovány.
+Kryptotron je součást Oceanu v `services/kryptotron`. Jediným zdrojem kódu
+je tento repozitář; nasazení se provádí kořenovým `Dockerfile`. Ocean
+spouští Python worker pro každý připojený účet a sleduje jeho heartbeat.
+Při výpadku jej restartuje s omezeným exponenciálním odstupem.
 
-```bash
-cd services/kryptotron
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-python bot.py
-```
+Vlastník i členové mají stejný životní cyklus: účet začíná bez připojení,
+ověřené Binance klíče se uloží šifrovaně a supervisor připraví instanci
+s pozastavenými vstupy. Testnet je dostupný vždy; Mainnet vyžaduje
+serverové `KRYPTOTRON_MAINNET_ENABLED=true`.
 
-Lokální `.env` Kryptotronu musí obsahovat jeho vlastní Binance, Supabase a případně Telegram údaje. Aktuální produkční worker může dál běžet na Railway; Ocean čte jeho stav serverově přes proměnné `KRYPTOTRON_SUPABASE_URL` a `KRYPTOTRON_SUPABASE_KEY` v kořenovém `.env`.
+Worker má vlastní `kry_…` ID a token omezený na tuto instanci. Stav,
+historii i notifikace předává internímu API Oceanu. Nedostává Supabase
+ani Telegram klíč a bez brokeru se nespustí. Supabase `bot_state.key`
+a `bot_trades.instance_id` oddělují účty; přístup má jen server Oceanu.
 
-Každý Ocean účet má vlastní záznam v `kryptotron_instances`. Původní Supabase stav `main` se při migraci přiřadí pouze vlastníkovi a zachová tak současného Kryptotrona beze změny. Noví členové začínají ve stavu `unconfigured`; dokud nemají přidělenou samostatnou vzdálenou instanci, nemohou číst ani ovládat Kryptotron jiného uživatele.
+Původní `main` je pouze migrační identifikátor. Převod na osobní instanci
+popisuje [sjednocení Kryptotronu](docs/kryptotron-consolidation.md).
+Neprovádějte ho prostým připojením stejného Binance účtu podruhé.
 
-Supabase používá `bot_state.key` jako identifikátor instance a `bot_trades.instance_id` pro oddělenou historii. Worker čte `KRYPTOTRON_INSTANCE_ID` a bez jeho nastavení zachová kompatibilní hodnotu `main`. Ocean vždy filtruje stav i poslední obchod podle instance přiřazené přihlášenému účtu.
-
-Osobní Testnet workery nedostávají globální Supabase serverový klíč. Komunikují přes interní state broker Oceanu pomocí tokenu kryptograficky svázaného s jediným ID instance. Původní samostatný Railway worker může dál používat přímé Supabase připojení kvůli zpětné kompatibilitě.
-
-Po ověření Testnet klíčů supervisor nejpozději během deseti sekund spustí osobní worker. Sleduje jeho heartbeat, při výpadku jej restartuje s omezeným exponenciálním odstupem a po vyřazení instance proces ukončí. Automatické spouštění je omezené na izolované Testnet instance; původní vlastnický Mainnet worker zůstává samostatný.
-
-Kryptotron ukládá stav a historii do samostatného Supabase projektu Ocean. Tabulky `bot_state` a `bot_trades` mají zapnuté RLS bez veřejných policy a přístup k nim má pouze serverová část aplikace. CrackleCore používá vlastní oddělený projekt a jeho data ani oprávnění Ocean nesdílí.
+Výzkumné testování popisuje [Strategy Lab](services/kryptotron/research/README.md).
 
 ## Binance připojení
 
-Nové osobní Binance připojení Ocean přijímá pouze z Testnetu. Údaje se ukládají samostatně zašifrované pomocí AES-256-GCM a po ověření čekají ve stavu `provisioning` na vytvoření workeru. Původní vlastnický Mainnet worker zůstává samostatný; při startu a před každým obchodním cyklem znovu kontroluje čtení, spotové obchodování a zakázané výběry. Před prvním připojením nastavte v `.env` stabilní klíč, který je nutné bezpečně zálohovat:
+Binance údaje se ukládají pomocí AES-256-GCM. Worker při startu a před
+obchodním cyklem kontroluje čtení, spot trading a zakázané výběry.
+Před prvním připojením nastavte stabilní šifrovací klíč a bezpečně jej zálohujte:
 
 ```bash
 openssl rand -base64 32
@@ -95,7 +95,7 @@ Výsledek vložte jako `OCEAN_CREDENTIALS_KEY`. Jeho ztráta znemožní rozšifr
 
 Propojený Telegram dostane po automatickém denním běhu Risk Agenta stručný výsledek. Oznámení neobsahuje přístupové údaje a jeho případné selhání nemění výsledek ani auditní stopu agentního runu.
 
-Pro osobní Telegram propojení použijte samostatného bota, který současně neběží v Railway workeru:
+Ocean používá jediného Telegram bota pro všechny propojené účty:
 
 ```text
 OCEAN_TELEGRAM_BOT_TOKEN=...
@@ -105,7 +105,7 @@ OCEAN_TELEGRAM_POLLING_ENABLED=false
 
 Jeden Telegram bot může mít pouze jeden aktivní long polling proces. Na produkci nastavte přepínač na `true`; lokálně jej při sdíleném tokenu ponechte vypnutý.
 
-Uživatel otevře Telegram z menu účtu a použije desetiminutový jednorázový 128bitový kód. Centrální bot podporuje `/status` a bezpečné `/pause`; obnovení obchodování zůstává pouze v přihlášeném dashboardu.
+Uživatel otevře Telegram z menu účtu a použije desetiminutový jednorázový 128bitový kód. Centrální bot podporuje `/status`, `/report`, `/pause`, `/resume`, `/dca` a `/streak`. Zapnutí DCA a paper strategie vyžaduje jednorázové potvrzení. Obchodní a provozní zprávy workerů přijímá trvalá fronta Oceanu; odesílání probíhá pouze do chatu připojeného k příslušnému účtu.
 
 ## Provoz
 
@@ -139,4 +139,4 @@ Provozní kontrola je dostupná na `/api/ready`. HTTP 200 znamená, že databáz
 - zapisují se události vytvoření účtu a přihlášení,
 - mutace kontrolují `Origin` proti `APP_ORIGIN`.
 
-Před Mainnetem zůstává povinné dokončit rotaci tajemství, automatizované testy obnovy ze zálohy, oddělené omezené oprávnění každého workeru a provozní monitoring. Osobní supervisor proto automaticky spouští pouze Testnet instance. Mainnet se nesmí zpřístupnit pouhou změnou přepínače v rozhraní.
+Před Mainnetem zůstává povinné dokončit rotaci tajemství, automatizované testy obnovy ze zálohy, oddělené omezené oprávnění každého workeru a provozní monitoring. Mainnet vyžaduje výslovné serverové povolení a ověřené Binance připojení; nestačí změna přepínače v rozhraní.

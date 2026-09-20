@@ -9,5 +9,9 @@ data
 logs
 **/__pycache__
 **/.pytest_cache
+**/.backtest_cache
+**/.env
+**/state.json
+**/logs
 *.log
 state.json

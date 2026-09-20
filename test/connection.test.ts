@@ -40,6 +40,8 @@ test("invited member can verify and securely stage a personal Binance connection
   const owner = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email: "owner@example.com", username: "owner", password: "owner password" } });
   const ownerCookie = owner.headers["set-cookie"]?.toString().split(";")[0];
   db.prepare("UPDATE users SET email_verified_at = datetime('now') WHERE username = 'owner'").run();
+  // Existing installations retain their legacy mapping until explicit cutover.
+  db.prepare("UPDATE kryptotron_instances SET remote_state_key = 'main', status = 'connected', environment = 'mainnet' WHERE user_id = ?").run(owner.json().user.id);
   const legacyDisconnect = await app.inject({ method: "DELETE", url: "/api/kryptotron/connection", headers: { cookie: ownerCookie! } });
   assert.equal(legacyDisconnect.statusCode, 409);
   const invite = await app.inject({ method: "POST", url: "/api/invitations", headers: { cookie: ownerCookie! }, payload: { email: "diver@example.com" } });
@@ -144,8 +146,10 @@ test("kryptotron snapshot returns 502 when the state store is unreachable", asyn
     port: 0, host: "127.0.0.1", databasePath: ":memory:", appOrigin: "http://localhost:3000", isProduction: false,
     kryptotronSupabaseUrl: "https://example.supabase.co", kryptotronSupabaseKey: "service-key",
   };
-  const app = buildApp(config, openDatabase(":memory:"));
+  const db = openDatabase(":memory:");
+  const app = buildApp(config, db);
   const owner = await app.inject({ method: "POST", url: "/api/auth/register", payload: { username: "deck_owner", password: "owner password" } });
+  db.prepare("UPDATE kryptotron_instances SET remote_state_key = id, status = 'connected' WHERE user_id = ?").run(owner.json().user.id);
   const ownerCookie = owner.headers["set-cookie"]?.toString().split(";")[0];
 
   const originalFetch = globalThis.fetch;

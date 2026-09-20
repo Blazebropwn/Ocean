@@ -1,0 +1,102 @@
+
+======================================================================
+STAGE 1 - DATA GATE
+======================================================================
+  PASS - zadne mezery, duplicity ani nekonzistentni OHLC
+
+======================================================================
+STAGE 2 - BASELINE + BENCHMARK ARENA
+======================================================================
+  Buy & Hold (50/50 BTC+ETH)       CAGR  +23.3 %  MaxDD -58.0 %  Sharpe  0.67  Sortino  1.01  Calmar  0.40
+  Random price walk (kontrola metriky) CAGR  -12.4 %  MaxDD -63.1 %  Sharpe  0.06  Sortino  0.08  Calmar -0.20
+  DCA (tydenni, 50/50)             MOIC  1.18x   vlozeno 182.0   hodnota 215.4   MaxDD(na vlozene) -62.2 %   IRR +9.8 %
+  Golden Cross (50/50 sleeves)     CAGR   +2.2 %  MaxDD -10.4 %  Sharpe  0.29  Sortino  0.42  Calmar  0.21
+                                        42 obchodu, win 71 %, expectancy +0.13 %/trade, PF 1.14
+    -> RANDOM entry kontrola       CAGR   -0.6 %  MaxDD -19.8 %  Sharpe  0.01  Sortino  0.01  Calmar -0.03
+                                        48 obchodu, win 73 %, expectancy +0.03 %/trade, PF 1.03
+  Golden Cross - REGIME entry (kandidat) CAGR  +11.6 %  MaxDD -38.8 %  Sharpe  0.51  Sortino  0.75  Calmar  0.30
+                                        284 obchodu, win 74 %, expectancy +0.17 %/trade, PF 1.17
+  Streak pullback (15m)            CAGR  -29.3 %  MaxDD -70.7 %  Sharpe -3.42  Sortino -5.15  Calmar -0.41
+                                        1101 obchodu, win 20 %, expectancy -0.11 %/trade, PF 0.65
+    -> RANDOM entry kontrola       CAGR  -28.4 %  MaxDD -69.2 %  Sharpe -3.36  Sortino -4.83  Calmar -0.41
+                                        911 obchodu, win 21 %, expectancy -0.13 %/trade, PF 0.62
+  Core-satellite blend (50% B&H + 50% GC) CAGR  +14.3 %  MaxDD -44.8 %  Sharpe  0.53  Sortino  0.78  Calmar  0.32
+                                        42 obchodu, win 71 %, expectancy +0.07 %/trade, PF 1.14
+  BTC/ETH tydenni rebalance        CAGR  +17.0 %  MaxDD -61.9 %  Sharpe  0.56  Sortino  0.85  Calmar  0.27
+
+======================================================================
+STAGE 2B - RANDOM CONTROL DISTRIBUCE (frekvenc. kalibrovana, 40 seedu)
+======================================================================
+Jeden random seed muze byt smula/stesti - tady se srovnava realny
+signal proti rozdeleni z N random-entry behu s PRIBLIZNOU frekvenci obchodu.
+
+  golden_cross (42 obchodu, kalibrovana p=0.0034):
+    random pocet uzavrenych obchodu: 35 az 64
+    realny Sharpe 0.29   |   random rozdeleni: min -0.64  median 0.21  max 1.45
+    -> realny signal je na 57. percentilu random rozdeleni (exploracni srovnani na znamych datech; nejde o OOS dukaz)
+  golden_cross_regime (284 obchodu, kalibrovana p=0.0384):
+    random pocet uzavrenych obchodu: 255 az 290
+    realny Sharpe 0.51   |   random rozdeleni: min -0.42  median 0.27  max 0.93
+    -> realny signal je na 85. percentilu random rozdeleni (exploracni srovnani na znamych datech; nejde o OOS dukaz)
+
+======================================================================
+STAGE 3 - ROBUSTNOST
+======================================================================
+
+[3a] Parameter sensitivity - Golden Cross (cross-timing) EMA fast/slow (BTCUSDC, Sharpe)
+        slow=150   slow=175   slow=200   slow=225   slow=250   
+  fast=40     0.89    1.17    1.22    1.03    0.65 
+  fast=45     0.72    0.95    1.01    0.66    0.37 
+  fast=50     0.91    0.76    0.97    0.70    0.39 
+  fast=55     0.90    0.77    0.87    0.63    0.36 
+  fast=60     0.85    0.80    0.57    0.41    0.42 
+
+[3a] Parameter sensitivity - Golden Cross (REGIME entry) EMA fast/slow (BTCUSDC, Sharpe)
+        slow=150   slow=175   slow=200   slow=225   slow=250   
+  fast=40     0.81    0.93    0.95    0.85    0.83 
+  fast=45     0.74    0.92    0.95    0.85    0.81 
+  fast=50     0.91    0.88    0.88    0.88    0.74 
+  fast=55     0.84    0.81    0.85    0.80    0.74 
+  fast=60     0.86    0.81    0.84    0.69    0.71 
+  (produkcni hodnota: fast=50, slow=200 - hleda se plateau kolem ni, ne spicka)
+
+[3b] Stress test (2x fees + 2x slippage)
+    Golden Cross (cross-timing) @ 2x naklady CAGR   +0.3 %  MaxDD -12.9 %  Sharpe  0.08  Sortino  0.11  Calmar  0.02
+                                        42 obchodu, win 71 %, expectancy -0.01 %/trade, PF 0.99
+    Golden Cross (REGIME entry) @ 2x naklady CAGR   -2.3 %  MaxDD -44.8 %  Sharpe  0.07  Sortino  0.10  Calmar -0.05
+                                        284 obchodu, win 73 %, expectancy -0.00 %/trade, PF 1.00
+    Streak pullback @ 2x naklady   CAGR  -55.7 %  MaxDD -94.2 %  Sharpe -7.80  Sortino -8.98  Calmar -0.59
+                                        1057 obchodu, win 17 %, expectancy -0.27 %/trade, PF 0.39
+
+[3c] Monte Carlo - reshuffle poradi obchodu (2000 simulaci)
+  Golden Cross (cross-timing) historicky MaxDD -10.4 %   MC medianDD -13.3 %   MC 95th-perc DD -19.8 %   MC nejhorsi DD -27.3 %
+  Golden Cross (REGIME entry) historicky MaxDD -38.8 %   MC medianDD -31.3 %   MC 95th-perc DD -44.2 %   MC nejhorsi DD -56.0 %
+  Streak pullback      historicky MaxDD -70.7 %   MC medianDD -70.7 %   MC 95th-perc DD -72.2 %   MC nejhorsi DD -75.9 %
+
+======================================================================
+STAGE 4 - FOLD CONSISTENCY (walk-forward-style, 6 oken)
+======================================================================
+
+  golden_cross vs Buy&Hold po oknech (1/6 oken vyhrava nad B&H):
+       2023-04-27 -> 2023-11-19: strategie   -7.5 %   B&H  +10.8 %
+       2023-11-19 -> 2024-06-12: strategie   +2.4 %   B&H +110.2 %
+       2024-06-12 -> 2025-01-04: strategie   -1.8 %   B&H  +19.1 %
+       2025-01-04 -> 2025-07-29: strategie   +9.2 %   B&H  +15.8 %
+    OK 2025-07-29 -> 2026-02-20: strategie   +2.2 %   B&H  -44.0 %
+       2026-02-20 -> 2026-09-17: strategie   +3.6 %   B&H  +16.2 %
+
+  golden_cross_regime vs Buy&Hold po oknech (2/6 oken vyhrava nad B&H):
+       2023-04-27 -> 2023-11-19: strategie   +8.8 %   B&H  +10.8 %
+       2023-11-19 -> 2024-06-12: strategie  +23.0 %   B&H +110.2 %
+       2024-06-12 -> 2025-01-04: strategie   +0.4 %   B&H  +19.1 %
+    OK 2025-01-04 -> 2025-07-29: strategie  +29.6 %   B&H  +15.8 %
+    OK 2025-07-29 -> 2026-02-20: strategie  -18.5 %   B&H  -44.0 %
+       2026-02-20 -> 2026-09-17: strategie   +2.0 %   B&H  +16.2 %
+
+  streak vs Buy&Hold po oknech (1/6 oken vyhrava nad B&H):
+       2023-03-25 -> 2023-10-23: strategie  -21.5 %   B&H  +10.8 %
+       2023-10-23 -> 2024-05-22: strategie  -21.9 %   B&H +110.2 %
+       2024-05-22 -> 2024-12-20: strategie  -10.8 %   B&H  +19.1 %
+       2024-12-20 -> 2025-07-20: strategie   -9.9 %   B&H  +15.8 %
+    OK 2025-07-20 -> 2026-02-17: strategie  -24.9 %   B&H  -44.0 %
+       2026-02-17 -> 2026-09-17: strategie  -18.9 %   B&H  +16.2 %

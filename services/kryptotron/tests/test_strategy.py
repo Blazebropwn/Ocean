@@ -40,6 +40,17 @@ class StrategyDataValidationTests(unittest.TestCase):
         self.assertTrue(result["bull"])
         self.assertIn("golden_cross", result)
 
+    def test_bull_regime_does_not_require_a_new_cross(self):
+        result = get_cross_data(FakeClient([candle(100 + i) for i in range(210)]), "BTCUSDC")
+        self.assertTrue(result["bull"])
+        self.assertFalse(result["golden_cross"])
+
+    def test_unclosed_candle_cannot_change_signal(self):
+        history = [candle(100 + i) for i in range(209)]
+        low = get_cross_data(FakeClient(history + [candle(1)]), "BTCUSDC")
+        high = get_cross_data(FakeClient(history + [candle(1000000)]), "BTCUSDC")
+        self.assertEqual(low, high)
+
 
 if __name__ == "__main__":
     unittest.main()

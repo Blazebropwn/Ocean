@@ -67,7 +67,7 @@ export function registerAuthRoutes(app: FastifyInstance, db: OceanDatabase, conf
           VALUES (?, ?, ?, ?, ?, CASE WHEN ? = 'owner' THEN datetime('now') ELSE NULL END, CASE WHEN ? = 'owner' THEN ? ELSE NULL END)`)
           .run(userId, accountEmail, username, passwordHash, role, role, role, userId);
         db.prepare("INSERT INTO kryptotron_instances (id, user_id, remote_state_key, status, environment) VALUES (?, ?, ?, ?, ?)")
-          .run(`kry_${userId.slice(4)}`, userId, role === "owner" ? "main" : null, role === "owner" ? "connected" : "unconfigured", role === "owner" ? "mainnet" : "testnet");
+          .run(`kry_${userId.slice(4)}`, userId, null, "unconfigured", "testnet");
         if (invitationId) {
           const consumed = db.prepare("UPDATE invitations SET used_by = ?, used_at = datetime('now') WHERE id = ? AND used_at IS NULL AND revoked_at IS NULL").run(userId, invitationId);
           if (consumed.changes !== 1) throw new Error("INVITATION_REQUIRED");

@@ -1,9 +1,10 @@
 import type { Config } from "./config.js";
 import type { OceanDatabase } from "./db.js";
-import { loadKryptotronSnapshot, setKryptotronEntriesPaused } from "./kryptotron.js";
+import { loadKryptotronSnapshot, setKryptotronEntriesPaused, setDcaEnabled, setStreakEnabled } from "./kryptotron.js";
 import { hashToken } from "./security.js";
 import { portfolioRiskReportSchema } from "./agents/risk-report.js";
 import type { CompletedRun } from "./agents/repository.js";
+import { randomBytes } from "node:crypto";
 
 type TelegramMessage = { chat?: { id?: number }; from?: { username?: string }; text?: string };
 type TelegramUpdate = { update_id: number; message?: TelegramMessage };
@@ -11,7 +12,7 @@ type TelegramLogger = { info(value: unknown, message?: string): void; warn(value
 
 function command(text = "") {
   const [name = "", argument = ""] = text.trim().split(/\s+/, 2);
-  return { name: name.toLowerCase().split("@")[0], argument: argument.toUpperCase() };
+  return { name: name.toLowerCase().split("@")[0] ?? "", argument: argument.toUpperCase() };
 }
 
 const HELP_TEXT = [
@@ -19,6 +20,9 @@ const HELP_TEXT = [
   "/status — stav tvého Kryptotronu",
   "/pause — pozastavit nové obchody",
   "/resume — obnovit obchodování",
+  "/report — přehled portfolia a limitů",
+  "/dca · /dca_on · /dca_off — pravidelné nákupy",
+  "/streak · /streak_on · /streak_off — paper strategie",
   "/help — tato nápověda",
   "/link <kód> — propojit účet (kód najdeš v Oceanu)",
 ].join("\n");
@@ -59,9 +63,43 @@ export async function processTelegramMessage(db: OceanDatabase, config: Config, 
     return send(chatId, "⏸ Nové obchody jsou pozastavené. Otevřená pozice zůstává chráněná.");
   }
   if (parsed.name === "/resume") {
-    if (!connection.remote_state_key || !config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return send(chatId, "Kryptotron teď není dostupný.");
+    if (!connection.remote_state_key || connection.status !== "connected" || !config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return send(chatId, "Kryptotron teď není dostupný.");
     await setKryptotronEntriesPaused(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, false, connection.remote_state_key);
     return send(chatId, "▶️ Obchodování obnoveno. Kryptotron zase může otevírat nové obchody.");
+  }
+  if (["/dca_on", "/dca_off", "/streak_on", "/streak_off"].includes(parsed.name)) {
+    if (!connection.remote_state_key || connection.status !== "connected" || !config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return send(chatId, "Kryptotron teď není dostupný.");
+    const enabled = parsed.name.endsWith("_on");
+    const dca = parsed.name.startsWith("/dca");
+    if (enabled) {
+      const code = randomBytes(6).toString("hex").toUpperCase();
+      db.prepare(`INSERT INTO telegram_confirmations (user_id, token_hash, action, expires_at)
+        VALUES (?, ?, ?, datetime('now', '+5 minutes'))
+        ON CONFLICT(user_id) DO UPDATE SET token_hash=excluded.token_hash, action=excluded.action, expires_at=excluded.expires_at`)
+        .run(connection.user_id, hashToken(code), parsed.name.slice(1));
+      return send(chatId, `Zapnout ${dca ? "DCA (pravidelné nákupy)" : "PAPER Streak"}? Potvrď do 5 minut příkazem:\n/confirm ${code}`);
+    }
+    await (dca ? setDcaEnabled : setStreakEnabled)(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, enabled, connection.remote_state_key);
+    return send(chatId, `${dca ? "DCA" : "PAPER Streak"}: ${enabled ? "zapnuto" : "vypnuto"}.`);
+  }
+  if (parsed.name === "/confirm") {
+    if (!connection.remote_state_key || connection.status !== "connected" || !config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return send(chatId, "Kryptotron teď není dostupný.");
+    const pending = db.prepare("DELETE FROM telegram_confirmations WHERE user_id = ? AND token_hash = ? AND expires_at > datetime('now') RETURNING action")
+      .get(connection.user_id, hashToken(parsed.argument)) as { action: string } | undefined;
+    if (!pending) return send(chatId, "Potvrzení není platné nebo už vypršelo.");
+    const dca = pending.action === "dca_on";
+    await (dca ? setDcaEnabled : setStreakEnabled)(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, true, connection.remote_state_key);
+    return send(chatId, `${dca ? "DCA" : "PAPER Streak"}: zapnuto.`);
+  }
+  if (["/report", "/dca", "/streak"].includes(parsed.name)) {
+    if (!connection.remote_state_key || connection.status !== "connected" || !config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return send(chatId, "Kryptotron zatím není připojený.");
+    const snapshot = await loadKryptotronSnapshot(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, connection.remote_state_key);
+    return send(chatId, ["🌊 Ocean · přehled",
+      `Trading: ${snapshot.entriesPaused ? "pozastaven" : snapshot.status}`,
+      `DCA: ${snapshot.dca.enabled ? "zapnuto" : "vypnuto"} · ${snapshot.dca.amount} USDC / asset`,
+      `Streak: ${snapshot.streak.enabled ? "zapnuto" : "vypnuto"} · PAPER`,
+      `Týdenní ztráta: ${snapshot.limits.weeklyLoss.toFixed(2)} ${snapshot.balance.asset}`,
+    ].join("\n"));
   }
   if (parsed.name === "/status" || parsed.name === "/start") {
     if (!connection.remote_state_key || connection.status !== "connected" || !config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return send(chatId, "Kryptotron zatím není připojený.");
@@ -81,7 +119,30 @@ async function telegramCall(token: string, method: string, body?: Record<string,
     signal: AbortSignal.timeout(25_000),
   });
   if (!response.ok) throw new Error(`Telegram odpověděl ${response.status}.`);
-  return await response.json() as { ok: boolean; result: TelegramUpdate[] };
+  const result = await response.json() as { ok: boolean; result: TelegramUpdate[] };
+  if (!result.ok) throw new Error("Telegram požadavek odmítl.");
+  return result;
+}
+
+export async function deliverWorkerNotifications(db: OceanDatabase, send: (chatId: string, text: string) => Promise<void>) {
+  const pending = db.prepare(`SELECT n.instance_id, n.id, n.message, n.attempts, t.chat_id
+    FROM worker_notifications n
+    JOIN kryptotron_instances i ON i.id = n.instance_id
+    JOIN telegram_connections t ON t.user_id = i.user_id
+    WHERE n.sent_at IS NULL AND n.attempts < 5 AND n.next_attempt_at <= datetime('now')
+    ORDER BY n.created_at, n.id LIMIT 10`).all() as Array<{ instance_id: string; id: string; message: string; attempts: number; chat_id: string }>;
+  for (const item of pending) {
+    try {
+      await send(item.chat_id, item.message);
+      db.prepare("UPDATE worker_notifications SET sent_at = datetime('now'), last_error = NULL WHERE instance_id = ? AND id = ?")
+        .run(item.instance_id, item.id);
+    } catch {
+      db.prepare("UPDATE worker_notifications SET attempts = attempts + 1, last_error = 'TELEGRAM_SEND_FAILED', next_attempt_at = datetime('now', ?) WHERE instance_id = ? AND id = ?")
+        .run(`+${Math.min(3600, 30 * 2 ** item.attempts)} seconds`, item.instance_id, item.id);
+    }
+  }
+  // Keep deduplication records for a month, without unbounded message history.
+  db.prepare("DELETE FROM worker_notifications WHERE created_at < datetime('now', '-30 days')").run();
 }
 
 export function agentRunNotificationText(run: CompletedRun, appOrigin: string) {
@@ -140,6 +201,9 @@ export function startTelegramBot(config: Config, db: OceanDatabase, logger: Tele
       { command: "status", description: "Stav Kryptotronu" },
       { command: "pause", description: "Pozastavit nové obchody" },
       { command: "resume", description: "Obnovit obchodování" },
+      { command: "report", description: "Přehled portfolia a limitů" },
+      { command: "dca", description: "Pravidelné nákupy" },
+      { command: "streak", description: "Paper strategie" },
       { command: "help", description: "Seznam příkazů" },
     ],
   }).catch((error) => logger.warn({ err: error }, "Nepodařilo se nastavit Telegram příkazy"));
@@ -147,6 +211,9 @@ export function startTelegramBot(config: Config, db: OceanDatabase, logger: Tele
   const poll = async () => {
     if (stopped) return;
     try {
+      await deliverWorkerNotifications(db, async (chatId, text) => {
+        await telegramCall(config.telegramBotToken!, "sendMessage", { chat_id: chatId, text, parse_mode: "HTML" });
+      });
       const state = db.prepare("SELECT update_offset FROM telegram_bot_state WHERE id = 1").get() as { update_offset: number };
       const response = await telegramCall(config.telegramBotToken!, `getUpdates?timeout=20&offset=${state.update_offset}`);
       for (const update of response.result ?? []) {

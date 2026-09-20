@@ -1,5 +1,6 @@
 """Stahovani a cachovani klines z Binance REST API (bez API klice)."""
 import json
+import math
 import time
 import urllib.request
 from pathlib import Path
@@ -11,7 +12,9 @@ BINANCE_REST = "https://api.binance.com/api/v3/klines"
 def fetch_klines(symbol, interval):
     cache_file = CACHE_DIR / f"{symbol}_{interval}.json"
     if cache_file.exists():
-        return json.loads(cache_file.read_text())
+        # A candle unfinished when cached stays unfinished in that snapshot,
+        # even if wall-clock time has since passed its nominal close time.
+        return closed_klines(json.loads(cache_file.read_text()), cache_file.stat().st_mtime * 1000)
 
     CACHE_DIR.mkdir(exist_ok=True)
     klines = []
@@ -28,8 +31,13 @@ def fetch_klines(symbol, interval):
         start_time = batch[-1][0] + 1
         time.sleep(0.25)
 
+    klines = closed_klines(klines, time.time() * 1000)
     cache_file.write_text(json.dumps(klines))
     return klines
+
+
+def closed_klines(klines, observed_at_ms):
+    return [k for k in klines if k[6] < observed_at_ms]
 
 
 def to_bars(klines):
@@ -62,7 +70,8 @@ def validate_bars(symbol, interval, bars):
                 dupes += 1
             elif step_ms and delta != step_ms:
                 gaps += 1
-        if not (b["low"] <= b["open"] <= b["high"] and b["low"] <= b["close"] <= b["high"]):
+        if not (all(math.isfinite(b[k]) and b[k] > 0 for k in ("open", "high", "low", "close"))
+                and b["low"] <= b["open"] <= b["high"] and b["low"] <= b["close"] <= b["high"]):
             bad_ohlc += 1
         prev_t = b["t"]
 

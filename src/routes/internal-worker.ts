@@ -49,4 +49,19 @@ export function registerInternalWorkerRoutes(app: FastifyInstance, db: OceanData
     await logKryptotronTrade(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, instanceId, body as Record<string, unknown>);
     return reply.code(204).send();
   });
+
+  app.post("/internal/kryptotron/notifications", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (request, reply) => {
+    const instanceId = internalWorker(request);
+    if (!instanceId) return reply.code(401).send({ error: "Unauthorized" });
+    const body = request.body as { id?: unknown; message?: unknown } | null;
+    if (!body || typeof body.id !== "string" || !/^[a-f0-9]{32}$/.test(body.id)
+      || typeof body.message !== "string" || !body.message.trim() || body.message.length > 4096) {
+      return reply.code(400).send({ error: "Invalid notification" });
+    }
+    // The server chooses the recipient. Workers never receive Telegram tokens
+    // and cannot supply a user or chat ID to reach another account.
+    db.prepare("INSERT OR IGNORE INTO worker_notifications (instance_id, id, message) VALUES (?, ?, ?)")
+      .run(instanceId, body.id, body.message);
+    return reply.code(202).send({ queued: true });
+  });
 }

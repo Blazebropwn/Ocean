@@ -5,9 +5,9 @@ Stages: DATA GATE -> BASELINE + BENCHMARK ARENA (vc. random-entry kontroly)
 -> ROBUSTNOST (parameter sensitivity, stress test, Monte Carlo) -> FOLD
 CONSISTENCY (walk-forward-style konzistence pres cas).
 
-Zamerne VYNECHANO v teto verzi (roadmapa, az bude co gatovat):
-  - OOS train/test lock + walk-forward re-fitting (nema smysl, dokud nic
-    neladime na datech - vsechny parametry jsou dnes fixni produkcni hodnoty)
+Oddeleny forward holdout se zamcenym protokolem: holdout.py (viz README.md).
+Zamerne VYNECHANO v teto verzi:
+  - walk-forward re-fitting
   - multi-agent role / promotion state machine / report-card UI
 
 Spusteni:
@@ -43,7 +43,7 @@ def stage1_data_gate(bars4h, bars15m):
         problems += validate_bars(symbol, "4h", bars4h[symbol])
         problems += validate_bars(symbol, "15m", bars15m[symbol])
     if problems:
-        print("  WARN - nalezene problemy (informativni, negatuje se rucne):")
+        print("  FAIL - opravte data nebo explicitne zvolte souvisle obdobi:")
         for p in problems:
             print(f"    - {p}")
     else:
@@ -122,25 +122,27 @@ def _calibrate_random_probability(bars4h, target_trades, lo=0.0003, hi=0.2, max_
 def stage2b_random_control_distribution(bars4h, baseline, n_seeds=40):
     print(f"\n{'=' * 70}\nSTAGE 2B - RANDOM CONTROL DISTRIBUCE (frekvenc. kalibrovana, {n_seeds} seedu)\n{'=' * 70}")
     print("Jeden random seed muze byt smula/stesti - tady se srovnava realny\n"
-          "signal proti rozdeleni z N random-entry behu se STEJNYM poctem obchodu.\n")
+          "signal proti rozdeleni z N random-entry behu s PRIBLIZNOU frekvenci obchodu.\n")
     for name in ["golden_cross", "golden_cross_regime"]:
         curve, trades = baseline[name]
         real_s = summarize(curve)
         target = len(trades)
         p = _calibrate_random_probability(bars4h, target)
-        sharpes, cagrs = [], []
+        sharpes, cagrs, counts = [], [], []
         for seed in range(1, n_seeds + 1):
             c, t = S.golden_cross(bars4h, entry_fn=S.make_random_trend_entry(probability=p, seed=seed))
             s = summarize(c)
             sharpes.append(s["sharpe"])
             cagrs.append(s["cagr"])
+            counts.append(len(t))
         sharpes.sort()
         pct = percentile_rank(real_s["sharpe"], sharpes)
         print(f"  {name} ({target} obchodu, kalibrovana p={p:.4f}):")
+        print(f"    random pocet uzavrenych obchodu: {min(counts)} az {max(counts)}")
         print(f"    realny Sharpe {real_s['sharpe']:.2f}   |   random rozdeleni: "
               f"min {sharpes[0]:.2f}  median {sharpes[len(sharpes)//2]:.2f}  max {sharpes[-1]:.2f}")
         print(f"    -> realny signal je na {pct:.0f}. percentilu random rozdeleni "
-              f"{'(silny signal, ne sum)' if pct >= 90 else '(slaby/zadny signal nad ramec frekvence)' if pct < 70 else '(mirny signal)'}")
+              "(exploracni srovnani na znamych datech; nejde o OOS dukaz)")
 
 
 def stage3_robustness(bars4h, bars15m, baseline):
@@ -204,10 +206,20 @@ def stage4_fold_consistency(baseline, n_folds=6):
 
 
 if __name__ == "__main__":
+    import argparse
+    from datetime import datetime, timezone
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--start", help="Prvni den dat UTC (YYYY-MM-DD), vcetne EMA warmup")
+    args = parser.parse_args()
     bars4h = {s: load_bars(s, "4h") for s in SYMBOLS}
     bars15m = {s: load_bars(s, "15m") for s in SYMBOLS}
+    if args.start:
+        start = int(datetime.strptime(args.start, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp() * 1000)
+        bars4h = {s: [b for b in bars if b["t"] >= start] for s, bars in bars4h.items()}
+        bars15m = {s: [b for b in bars if b["t"] >= start] for s, bars in bars15m.items()}
 
-    stage1_data_gate(bars4h, bars15m)
+    if not stage1_data_gate(bars4h, bars15m):
+        raise SystemExit(1)
     baseline = stage2_baseline_and_benchmarks(bars4h, bars15m)
     stage2b_random_control_distribution(bars4h, baseline)
     stage3_robustness(bars4h, bars15m, baseline)

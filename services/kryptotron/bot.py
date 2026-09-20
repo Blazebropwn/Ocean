@@ -28,15 +28,13 @@ from config.settings import (
     MAX_DAILY_LOSS_USDT, MAX_WEEKLY_LOSS_USDT,
     MAX_CONSECUTIVE_LOSSES, MAX_TRADES_PER_DAY, MAX_TRADES_PER_WEEK,
     COOLDOWN_AFTER_LOSS_HRS, COOLDOWN_AFTER_WIN_HRS,
-    TELEGRAM_TOKEN, TELEGRAM_CHAT_ID,
     DCA_ENABLED, DCA_AMOUNT_USDC, DCA_PRESETS, DCA_SYMBOLS,
     STREAK_ENABLED, STREAK_R_USDC, STREAK_PAPER_MODE,
 )
 from strategy import get_cross_data
 from utils import (
-    answer_telegram_callback, get_balance, get_symbol_filters, notify,
+    get_balance, get_symbol_filters,
     portfolio_snapshot_due, read_portfolio_snapshot, round_price, round_step,
-    telegram_updates,
 )
 from order_safety import apply_filled_buy, classify_order, new_buy_intent
 from events import add_event
@@ -44,14 +42,6 @@ from dca import run_weekly_dca
 from streak import can_trade as streak_can_trade, close_trade as streak_close_trade, ensure_session as ensure_streak_session, open_trade as streak_open_trade
 from streak_strategy import paper_close_result, size_paper_setup, trend_pullback_signal
 from binance_safety import require_safe_api_permissions
-from telegram_control import (
-    apply_action as apply_telegram_action,
-    confirmation as telegram_confirmation,
-    confirmation_valid,
-    help_message as telegram_help_message,
-    report_message as telegram_report_message,
-    status_message as telegram_status_message,
-)
 from schedule import (
     daily_summary_due,
     mark_daily_summary_sent,
@@ -119,7 +109,7 @@ DEFAULT_STATE = {
     "last_error":           None,
     "pending_order":        None,
     "pending_protection":   None,
-    "entries_paused":       False,
+    "entries_paused":       True,
     "account_balance":      None,
     "quote_asset":          QUOTE_ASSET,
     "events":               [],
@@ -136,7 +126,7 @@ DIVIDER = "─" * 22
 
 
 def tg(msg):
-    notify(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, msg)
+    return db.notify(msg)
 
 
 def tg_alert(state, key, msg, cooldown_minutes=60):
@@ -150,97 +140,11 @@ def tg_alert(state, key, msg, cooldown_minutes=60):
                 return False
         except (TypeError, ValueError):
             pass
-    if notify(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, msg):
+    if tg(msg):
         alerts[key] = now.isoformat()
         save_state(state)
         return True
     return False
-
-
-def process_telegram(state):
-    """Zpracuje nové zprávy výhradně z nakonfigurovaného soukromého chatu."""
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        return state
-    control = state.setdefault("telegram", {})
-    try:
-        if control.get("update_offset") is None:
-            # Při prvním nasazení neprováděj historické příkazy z Telegram fronty.
-            backlog = telegram_updates(TELEGRAM_TOKEN, -1)
-            if backlog:
-                control["update_offset"] = backlog[-1]["update_id"] + 1
-                save_state(state)
-            else:
-                control["update_offset"] = 0
-                save_state(state)
-            return state
-        updates = telegram_updates(TELEGRAM_TOKEN, control.get("update_offset"))
-    except Exception as exc:
-        log.warning(f"Telegram polling selhal: {exc}")
-        return state
-
-    changed = False
-    for update in updates:
-        update_id = update.get("update_id")
-        if isinstance(update_id, int):
-            control["update_offset"] = update_id + 1
-            changed = True
-
-        callback = update.get("callback_query") or {}
-        message = update.get("message") or callback.get("message") or {}
-        chat_id = str((message.get("chat") or {}).get("id", ""))
-        if chat_id != str(TELEGRAM_CHAT_ID):
-            if callback.get("id"):
-                answer_telegram_callback(TELEGRAM_TOKEN, callback["id"], "Tento chat není autorizovaný.")
-            continue
-
-        if callback:
-            data = callback.get("data", "")
-            if data == "confirm:cancel":
-                control.pop("pending_action", None)
-                answer_telegram_callback(TELEGRAM_TOKEN, callback.get("id"), "Zrušeno")
-                tg("Akce byla zrušena.")
-            elif data.startswith("confirm:"):
-                action = data.split(":", 1)[1]
-                pending = control.get("pending_action")
-                if confirmation_valid(pending, action):
-                    response = apply_telegram_action(state, action)
-                    control.pop("pending_action", None)
-                    add_event(state, "CONTROL", f"Telegram · {action}")
-                    save_state(state)
-                    answer_telegram_callback(TELEGRAM_TOKEN, callback.get("id"), "Provedeno")
-                    tg(response)
-                else:
-                    answer_telegram_callback(TELEGRAM_TOKEN, callback.get("id"), "Potvrzení vypršelo")
-            continue
-
-        text = str(message.get("text", "")).strip()
-        command = text.split()[0].split("@", 1)[0].lower() if text.startswith("/") else ""
-        if command in {"/start", "/help"}:
-            tg(telegram_help_message())
-        elif command == "/status":
-            tg(telegram_status_message(state, QUOTE_ASSET))
-        elif command == "/report":
-            tg(telegram_report_message(state, QUOTE_ASSET))
-        elif command in {"/dca", "/streak"}:
-            tg(telegram_status_message(state, QUOTE_ASSET))
-        elif command in {"/pause", "/dca_off", "/streak_off"}:
-            action = command[1:]
-            response = apply_telegram_action(state, action)
-            add_event(state, "CONTROL", f"Telegram · {action}")
-            save_state(state)
-            tg(response)
-        elif command in {"/resume", "/dca_on", "/streak_on"}:
-            action = command[1:]
-            pending = telegram_confirmation(action)
-            control["pending_action"] = pending
-            save_state(state)
-            notify(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, pending["message"], pending["keyboard"])
-        elif command:
-            tg("Neznámý příkaz. Použij /help.")
-
-    if changed:
-        save_state(state)
-    return state
 
 
 def now_utc():
@@ -257,22 +161,13 @@ def get_pair_state(state, symbol):
 
 
 def load_state():
-    sb = db.load_state()
-    if sb is not None:
-        log.info("State načten ze Supabase")
-        for k, v in DEFAULT_STATE.items():
-            sb.setdefault(k, v)
-        return sb
-    if STATE_FILE.exists():
-        with open(STATE_FILE) as f:
-            s = json.load(f)
-        for k, v in DEFAULT_STATE.items():
-            s.setdefault(k, v)
-        if "positions" not in s:
-            s["positions"] = {}
-        log.info("State načten z lokálního souboru")
-        return s
-    return DEFAULT_STATE.copy()
+    state = db.load_state()
+    if not isinstance(state, dict):
+        raise RuntimeError("Ocean neposkytl platný stav; worker se nespustí")
+    for k, v in DEFAULT_STATE.items():
+        state.setdefault(k, v)
+    log.info("Stav načten z Oceanu")
+    return state
 
 
 def save_state(state):
@@ -312,7 +207,7 @@ def reconcile_pending_order(client, state):
 def refresh_entries_control(state):
     remote_state = db.load_state()
     if remote_state is not None:
-        state["entries_paused"] = remote_state.get("entries_paused", False)
+        state["entries_paused"] = remote_state.get("entries_paused", True)
         remote_dca = remote_state.get("dca", {})
         if isinstance(remote_dca, dict) and "enabled" in remote_dca:
             state.setdefault("dca", {})["enabled"] = remote_dca["enabled"] is True
@@ -770,7 +665,6 @@ def sleep_until_next_4h_candle(client, state, pair_filters, cycle_errors, market
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             break
-        process_telegram(state)
         maybe_send_scheduled_summaries(client, state, pair_filters, market_client)
         state["last_heartbeat_at"] = now_utc().isoformat()
         save_state(state)
@@ -885,7 +779,6 @@ def run():
     save_state(state)
     log.info(f"Kryptotron připraven · {mode.split()[-1]}")
     log.info("OCEAN_HEARTBEAT")
-    process_telegram(state)
 
     while True:
         cycle_errors = []
@@ -991,16 +884,16 @@ def run():
                     # ── BEZ POZICE ────────────────────────────────────────────
                     else:
                         # Regime entry: vstup kdykoliv jsme flat A uz jsme v bull
-                        # rezimu (ne jen presne v okamziku crossu). Validovano
-                        # v research/validate.py - porazilo 40/40 frekvencne
-                        # sladenych random-entry behu (100. percentil), zatimco
-                        # presny cross-timing byl na 28. percentilu (viz git log).
+                        # rezimu (ne jen presne v okamziku crossu). Research
+                        # vysledky jsou exploracni: simulator nema shodnou EMA
+                        # historii, intrabar OCO, sizing ani sdilene risk limity.
+                        # Viz research/README.md a zamceny forward holdout.
                         if data["bull"]:
                             state = refresh_entries_control(state)
                             allowed, reason = can_trade(state)
                             if not allowed:
-                                log.info(f"[{symbol}] Golden Cross ale trading pozastaven: {reason}")
-                                tg(f"⚠️ <b>Golden Cross — {symbol}</b>\nTrading pozastaven: {reason}")
+                                log.info(f"[{symbol}] Bull regime ale trading pozastaven: {reason}")
+                                tg(f"⚠️ <b>Trend Entry — {symbol}</b>\nTrading pozastaven: {reason}")
                             else:
                                 balance = get_balance(client, QUOTE_ASSET, raise_on_error=True)
                                 spend   = min(balance * POSITION_PCT / 100, MAX_POSITION_USDT)

@@ -11,7 +11,7 @@ const expectedTables = [
   "admin_audit_log", "agent_ledger_entries", "agent_runs", "agents", "email_verification_tokens", "invitations",
   "kryptotron_credentials", "kryptotron_instances", "mail_outbox", "password_reset_tokens",
   "schema_migrations", "security_events", "sessions", "telegram_bot_state",
-  "telegram_connections", "telegram_pairings", "users",
+  "telegram_confirmations", "telegram_connections", "telegram_pairings", "users", "worker_notifications",
 ];
 
 test("a new database receives the versioned Ocean schema exactly once", () => {
@@ -22,6 +22,7 @@ test("a new database receives the versioned Ocean schema exactly once", () => {
     { version: 1, name: "existing_ocean_schema" },
     { version: 2, name: "agent_001_foundation" },
     { version: 3, name: "admin_audit_log" },
+    { version: 4, name: "worker_notifications" },
   ]);
   assert.equal((db.pragma("foreign_keys", { simple: true }) as number), 1);
   db.close();
@@ -36,7 +37,7 @@ test("reopening a database is idempotent and preserves rows", () => {
 
   db = openDatabase(path);
   assert.equal((db.prepare("SELECT COUNT(*) AS count FROM users WHERE id = 'usr_preserved'").get() as { count: number }).count, 1);
-  assert.equal((db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get() as { count: number }).count, 3);
+  assert.equal((db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get() as { count: number }).count, 4);
   assert.equal(String(db.pragma("journal_mode", { simple: true })).toLowerCase(), "wal");
   db.close();
   rmSync(directory, { recursive: true, force: true });

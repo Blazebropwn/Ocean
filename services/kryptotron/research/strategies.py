@@ -130,7 +130,7 @@ def make_random_trend_entry(probability=0.01, seed=1):
 
 def simulate_trend_symbol(bars, entry_fn=_golden_cross_entry, ema_fast=50, ema_slow=200,
                            max_sl_pct=10.0, trail_activate_pct=3.0, trail_distance_pct=1.5,
-                           fee_rate=FEE_RATE, slippage_rate=SLIPPAGE_RATE):
+                           fee_rate=FEE_RATE, slippage_rate=SLIPPAGE_RATE, trade_start_ms=None):
     closes = [b["close"] for b in bars]
     ema_f = calculate_ema(closes, ema_fast)
     ema_s = calculate_ema(closes, ema_slow)
@@ -147,6 +147,10 @@ def simulate_trend_symbol(bars, entry_fn=_golden_cross_entry, ema_fast=50, ema_s
     warmup = ema_slow + 1
     for i in range(warmup, len(bars)):
         bar = bars[i]
+        # Earlier candles warm the indicators only: no positions or P/L cross
+        # the holdout boundary. Test starts with fresh cash.
+        if trade_start_ms is not None and bar["t"] < trade_start_ms:
+            continue
         death_cross = ema_f[i - 1] >= ema_s[i - 1] and ema_f[i] < ema_s[i]
 
         if in_position:

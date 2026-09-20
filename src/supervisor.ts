@@ -55,7 +55,7 @@ export function canRunPersonalInstance(
   return isRunnablePersonalInstance(instance, mainnetEnabled) && (!manualApprovalEnabled || Boolean(instance.approved_at));
 }
 
-export function workerEnvironment(base: NodeJS.ProcessEnv, instance: Pick<RunnableInstance, "id" | "environment">, apiKey: string, apiSecret: string, config: Config, accessToken?: string): NodeJS.ProcessEnv {
+export function workerEnvironment(base: NodeJS.ProcessEnv, instance: Pick<RunnableInstance, "id" | "environment">, apiKey: string, apiSecret: string, config: Config, accessToken: string): NodeJS.ProcessEnv {
   const inherited = Object.fromEntries(
     ["PATH", "LANG", "LC_ALL", "TZ", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"]
       .flatMap((name) => base[name] === undefined ? [] : [[name, base[name]]]),
@@ -66,10 +66,10 @@ export function workerEnvironment(base: NodeJS.ProcessEnv, instance: Pick<Runnab
     BINANCE_API_SECRET: apiSecret,
     TESTNET: String(instance.environment === "testnet"),
     KRYPTOTRON_INSTANCE_ID: instance.id,
-    SUPABASE_URL: accessToken ? "" : config.kryptotronSupabaseUrl ?? "",
-    SUPABASE_KEY: accessToken ? "" : config.kryptotronSupabaseKey ?? "",
-    OCEAN_STATE_URL: accessToken ? `http://127.0.0.1:${config.port}/internal/kryptotron` : "",
-    OCEAN_STATE_TOKEN: accessToken ?? "",
+    SUPABASE_URL: "",
+    SUPABASE_KEY: "",
+    OCEAN_STATE_URL: `http://127.0.0.1:${config.port}/internal/kryptotron`,
+    OCEAN_STATE_TOKEN: accessToken,
     TELEGRAM_TOKEN: "",
     TELEGRAM_CHAT_ID: "",
     DCA_ENABLED: "false",

@@ -7,64 +7,54 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import db
 
 
-class Query:
-    def __init__(self, calls, table):
-        self.calls = calls
-        self.table = table
-        self.data = [{"data": {"owner": "correct"}}]
-
-    def select(self, value):
-        self.calls.append((self.table, "select", value))
-        return self
-
-    def eq(self, column, value):
-        self.calls.append((self.table, "eq", column, value))
-        return self
-
-    def upsert(self, value):
-        self.calls.append((self.table, "upsert", value))
-        return self
-
-    def insert(self, value):
-        self.calls.append((self.table, "insert", value))
-        return self
-
-    def execute(self):
-        return self
-
-
-class Client:
-    def __init__(self):
-        self.calls = []
-
-    def table(self, name):
-        return Query(self.calls, name)
-
-
 class PersistenceIsolationTests(unittest.TestCase):
     def setUp(self):
-        self.client = Client()
-        db._sb = self.client
         db._broker_url = ""
         db._broker_headers = {}
 
     def tearDown(self):
-        db._sb = None
         db._broker_url = ""
         db._broker_headers = {}
 
-    @patch.object(db, "INSTANCE_ID", "usr_alpha")
-    def test_state_is_loaded_and_saved_only_for_configured_instance(self):
-        self.assertEqual(db.load_state(), {"owner": "correct"})
-        self.assertTrue(db.save_state({"balance": 42}))
-        self.assertIn(("bot_state", "eq", "key", "usr_alpha"), self.client.calls)
-        self.assertIn(("bot_state", "upsert", {"key": "usr_alpha", "data": {"balance": 42}, "updated_at": unittest.mock.ANY}), self.client.calls)
+    @patch.object(db.requests, "post")
+    def test_notification_retries_keep_the_same_id_and_scoped_headers(self, post):
+        db._broker_url = "http://127.0.0.1/internal/kryptotron"
+        db._broker_headers = {"Authorization": "Bearer scoped"}
+        post.side_effect = [db.requests.Timeout(), unittest.mock.Mock()]
+        self.assertTrue(db.notify("hello"))
+        self.assertEqual(post.call_count, 2)
+        first, second = post.call_args_list
+        self.assertEqual(first.kwargs["json"]["id"], second.kwargs["json"]["id"])
+        self.assertEqual(first.kwargs["headers"], db._broker_headers)
+        self.assertEqual(first.args[0], db._broker_url + "/notifications")
 
-    @patch.object(db, "INSTANCE_ID", "usr_alpha")
-    def test_trade_is_tagged_with_configured_instance(self):
+    @patch.object(db.requests, "put")
+    def test_state_save_uses_broker_only(self, put):
+        db._broker_url = "http://localhost/internal/kryptotron"
+        db._broker_headers = {"Authorization": "Bearer scoped", "X-Ocean-Instance": "kry_" + "a" * 32}
+        self.assertTrue(db.save_state({"balance": 42}))
+        put.assert_called_once_with(db._broker_url + "/state", headers=db._broker_headers,
+                                    json={"state": {"balance": 42}}, timeout=8)
+
+    @patch.object(db.requests, "post")
+    def test_trade_uses_instance_scoped_broker(self, post):
+        db._broker_url = "http://localhost/internal/kryptotron"
+        db._broker_headers = {"Authorization": "Bearer scoped"}
         db.log_trade("BTCUSDC", 10, 11, 1, 1, "WIN")
-        inserts = [call[2] for call in self.client.calls if call[:2] == ("bot_trades", "insert")]
-        self.assertEqual(inserts[0]["instance_id"], "usr_alpha")
+        self.assertEqual(post.call_args.args[0], db._broker_url + "/trades")
+        self.assertEqual(post.call_args.kwargs["headers"], db._broker_headers)
+        self.assertNotIn("instance_id", post.call_args.kwargs["json"])
+
+    @patch.object(db.requests, "get", side_effect=db.requests.Timeout())
+    def test_unavailable_remote_state_never_falls_back_to_empty_state(self, get):
+        db._broker_url = "http://localhost/internal/kryptotron"
+        with self.assertRaises(RuntimeError):
+            db.load_state()
+
+    @patch.object(db, "INSTANCE_ID", "main")
+    def test_legacy_standalone_start_is_rejected(self):
+        with self.assertRaises(RuntimeError):
+            db.init()
 
     @patch.object(db.requests, "get")
     def test_broker_load_uses_scoped_headers(self, get):

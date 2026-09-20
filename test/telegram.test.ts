@@ -69,6 +69,7 @@ test("linked member can resume trading from Telegram", async (t) => {
   const app = buildApp(config, db);
   const registration = await app.inject({ method: "POST", url: "/api/auth/register", payload: { username: "captain", password: "safe password" } });
   const userId = registration.json().user.id as string;
+  db.prepare("UPDATE kryptotron_instances SET remote_state_key = id, status = 'connected' WHERE user_id = ?").run(userId);
   db.prepare("INSERT INTO telegram_connections (user_id, chat_id) VALUES (?, '77')").run(userId);
 
   const messages: string[] = [];
