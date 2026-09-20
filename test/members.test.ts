@@ -147,7 +147,7 @@ test("owner can drill into a connected member's live Kryptotron detail", async (
   assert.equal(kryptotron.status, "running");
   assert.equal(kryptotron.entriesPaused, true);
   assert.equal(kryptotron.position, null);
-  assert.deepEqual(kryptotron.balance, { amount: 73.93, asset: "USDC" });
+  assert.deepEqual(kryptotron.balance, { amount: 73.93, asset: "USDC", updatedAt: null, error: null });
   await app.close();
 });
 

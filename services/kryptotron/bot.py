@@ -33,7 +33,7 @@ from config.settings import (
 )
 from strategy import get_cross_data
 from utils import (
-    get_balance, get_symbol_filters,
+    get_balance, get_symbol_filters, refresh_account_balance,
     portfolio_snapshot_due, read_portfolio_snapshot, round_price, round_step,
 )
 from order_safety import apply_filled_buy, classify_order, new_buy_intent
@@ -644,6 +644,7 @@ def maybe_send_scheduled_summaries(client, state, pair_filters, market_client=No
     maybe_send_daily_summary(state)
     maybe_run_weekly_dca(client, state, pair_filters)
     maybe_send_weekly_summary(state)
+    refresh_account_balance(client, state, QUOTE_ASSET)
 
 
 def sleep_until_next_4h_candle(client, state, pair_filters, cycle_errors, market_client=None):
@@ -769,7 +770,7 @@ def run():
             )
             log.warning("Binance připojení není dostupné; další pokus za 5 minut")
             time.sleep(300)
-    state.update(account_balance=balance, quote_asset=QUOTE_ASSET)
+    state.update(account_balance=balance, account_balance_at=now_utc().isoformat(), account_balance_error=None, quote_asset=QUOTE_ASSET)
     try:
         state["portfolio_snapshot"] = read_portfolio_snapshot(client, QUOTE_ASSET)
     except Exception as exc:
@@ -968,7 +969,7 @@ def run():
 
             # ── BALANCE LOG ──────────────────────────────────────────────────
             balance   = get_balance(client, QUOTE_ASSET, raise_on_error=True)
-            state.update(account_balance=balance, quote_asset=QUOTE_ASSET)
+            state.update(account_balance=balance, account_balance_at=now_utc().isoformat(), account_balance_error=None, quote_asset=QUOTE_ASSET)
             try:
                 state["portfolio_snapshot"] = read_portfolio_snapshot(client, QUOTE_ASSET)
             except Exception as exc:

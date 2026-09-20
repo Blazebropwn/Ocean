@@ -495,6 +495,13 @@ async function loadKryptotron() {
     $("#bot-balance").textContent = kryptotron.balance.amount === null
       ? "—"
       : `${new Intl.NumberFormat("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(kryptotron.balance.amount)} ${kryptotron.balance.asset}`;
+    const balanceAt = Date.parse(kryptotron.balance.updatedAt);
+    const balanceStale = !Number.isFinite(balanceAt) || Date.now() - balanceAt > 180_000 || balanceAt > Date.now() + 60_000;
+    $("#bot-balance-updated").textContent = kryptotron.balance.error
+      ? "Zůstatek se nedaří obnovit · zobrazená částka nemusí být aktuální"
+      : balanceStale
+        ? "Čekám na aktuální zůstatek · zobrazená částka nemusí být aktuální"
+        : `Ověřeno ${formatDate(kryptotron.balance.updatedAt)} · obnova přibližně každou minutu`;
     $("#bot-position").textContent = open ? `${open.symbol} · v pozici` : "Bez otevřené pozice";
     dcaEnabled = kryptotron.dca.enabled;
     const dcaTest = $("#dca-test");
@@ -502,7 +509,7 @@ async function loadKryptotron() {
     dcaTest.classList.toggle("hidden", kryptotron.environment !== "testnet");
     dcaTest.disabled = dcaTestPending;
     dcaTest.textContent = dcaTestPending ? "Zpracovávám…" : kryptotron.dca.testStatus === "completed" ? "Otestovat znovu" : "Otestovat nákup";
-    $("#dca-status").textContent = dcaEnabled ? (kryptotron.dca.completedWeek ? "Tento týden provedeno" : "Čeká na neděli") : "Pozastaveno";
+    $("#dca-status").textContent = kryptotron.dca.statusText;
     $("#dca-control").textContent = dcaEnabled ? "Vypnout" : "Zapnout";
     $("#dca-control").classList.toggle("enabled", dcaEnabled);
     $("#dca-control").setAttribute("aria-checked", String(dcaEnabled));

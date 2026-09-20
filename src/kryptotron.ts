@@ -22,8 +22,8 @@ export type KryptotronSnapshot = {
   updatedAt: string | null;
   entriesPaused: boolean;
   events: Array<{ type: string; message: string; at: string }>;
-  balance: { amount: number | null; asset: string };
-  dca: { enabled: boolean; amount: number; symbols: string[]; completedWeek: string | null; totalInvested: number; purchaseCount: number; testStatus: string | null; progress: Array<{ symbol: string; asset: string; quantity: number; target: number; percentage: number }>; lastRun: Array<{ symbol: string; status: string; amount: number | null; reason: string | null }> };
+  balance: { amount: number | null; asset: string; updatedAt: string | null; error: string | null };
+  dca: { enabled: boolean; amount: number; symbols: string[]; completedWeek: string | null; statusText: string; totalInvested: number; purchaseCount: number; testStatus: string | null; progress: Array<{ symbol: string; asset: string; quantity: number; target: number; percentage: number }>; lastRun: Array<{ symbol: string; status: string; amount: number | null; reason: string | null }> };
   streak: { enabled: boolean; paperMode: boolean; rUsdc: number; status: string; streak: number; trades: number; wins: number; losses: number; netPnl: number; sessionDate: string | null; lockReason: string | null };
   positions: Array<{
     symbol: string;
@@ -43,6 +43,26 @@ export type KryptotronSnapshot = {
 };
 
 type OctoSource = Pick<KryptotronSnapshot, "status" | "lastError" | "entriesPaused" | "positions" | "lastTrade" | "nextCheckAt" | "lastMarketCheckAt" | "balance">;
+
+export function dcaStatusText(dca: Record<string, unknown>, now = new Date()): string {
+  if (dca.enabled !== true) return "Pozastaveno";
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Prague", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
+  const part = (type: string) => Number(parts.find((item) => item.type === type)?.value);
+  const thursday = new Date(Date.UTC(part("year"), part("month") - 1, part("day")));
+  thursday.setUTCDate(thursday.getUTCDate() + 4 - (thursday.getUTCDay() || 7));
+  const year = thursday.getUTCFullYear();
+  const week = Math.ceil(((thursday.getTime() - Date.UTC(year, 0, 1)) / 86_400_000 + 1) / 7);
+  const currentWeek = `${year}-W${String(week).padStart(2, "0")}`;
+  if (dca.completed_week !== currentWeek) return "Termín: neděle v 8:00";
+  const results = Array.isArray(dca.last_results) ? dca.last_results.filter((item) => item && typeof item === "object") : [];
+  if (results.length && results.every((item) => item.status === "skipped")) {
+    return results.every((item) => item.reason === "nedostatečný balance")
+      ? "Přeskočeno: nedostatek prostředků · další termín v neděli"
+      : "Nákupy přeskočeny · další termín v neděli";
+  }
+  if (results.some((item) => item.status !== "filled")) return "Část nákupů neproběhla · další termín v neděli";
+  return results.length ? "Nákupy dokončeny · další termín v neděli" : "Týden vyhodnocen · další termín v neděli";
+}
 
 export function deriveKryptotronOcto(source: OctoSource, now = Date.now()): KryptotronOctoPresentation {
   const open = source.positions.find((position) => position.inPosition);
@@ -345,12 +365,15 @@ export async function loadKryptotronSnapshot(url: string, key: string, stateKey 
     balance: {
       amount: finiteNumberOrNull(data.account_balance),
       asset: typeof data.quote_asset === "string" ? data.quote_asset : "USDC",
+      updatedAt: stringOrNull(data.account_balance_at),
+      error: stringOrNull(data.account_balance_error),
     },
     dca: {
       enabled: rawDca.enabled === true,
       amount: Number(rawDca.amount ?? 5),
       symbols: dcaSymbols,
       completedWeek: stringOrNull(rawDca.completed_week),
+      statusText: dcaStatusText(rawDca),
       totalInvested: dcaPurchases.reduce((sum, purchase) => sum + (finiteNumberOrNull(purchase.amount) ?? 0), 0),
       purchaseCount: dcaPurchases.length,
       testStatus: rawDca.test_request && typeof rawDca.test_request === "object"

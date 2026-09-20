@@ -41,6 +41,28 @@ def get_balance(client, asset="USDT", raise_on_error=False):
         return 0.0
 
 
+def refresh_account_balance(client, state, quote_asset="USDC"):
+    """Refresh spendable Spot funds independently of the trading schedule.
+
+    Preserve the last successful value and its timestamp on failure so the UI
+    can mark it as stale instead of showing a fabricated zero or fresh balance.
+    """
+    try:
+        amount = get_balance(client, quote_asset, raise_on_error=True)
+        if not math.isfinite(amount) or amount < 0:
+            raise ValueError("Invalid balance")
+    except Exception:
+        state["account_balance_error"] = "Zůstatek se nepodařilo obnovit"
+        return False
+    state.update(
+        account_balance=amount,
+        account_balance_at=datetime.now(timezone.utc).isoformat(),
+        account_balance_error=None,
+        quote_asset=quote_asset,
+    )
+    return True
+
+
 def read_portfolio_snapshot(client, quote_asset="USDC"):
     """Return a bounded, credential-free portfolio view safe to persist in Ocean state."""
     account = client.get_account()

@@ -137,8 +137,9 @@
                   <button class="connection-disconnect hidden" id="disconnect-binance" type="button">Odpojit Binance</button>
                 </div>
                 <div class="balance-block">
-                  <small>Dostupný balance</small
+                  <small>Volný zůstatek na Spotu</small
                   ><strong id="bot-balance">—</strong>
+                  <small id="bot-balance-updated" role="status">Čekám na ověření zůstatku</small>
                 </div>
                 <div class="automation-modules">
                   <section class="dca-module">
@@ -160,7 +161,7 @@
                       <button type="button" data-amount="5">5</button><button type="button" data-amount="10">10</button><button type="button" data-amount="20">20</button><button type="button" data-amount="50">50</button><button type="button" data-amount="100">100</button><button type="button" data-amount="200">200</button><button type="button" data-amount="500">500</button><button type="button" data-amount="1000">1000</button><span>USDC / asset</span>
                     </div>
                     <div class="dca-progress" id="dca-progress"></div>
-                    <div class="dca-footer"><span><small>Další nákup</small><strong id="dca-status">—</strong></span><span><small>Celkem investováno</small><strong id="dca-invested">—</strong></span></div>
+                    <div class="dca-footer"><span><small>Stav týdenního nákupu</small><strong id="dca-status">—</strong></span><span><small>Celkem investováno</small><strong id="dca-invested">—</strong></span></div>
                     <button class="dca-test hidden" id="dca-test" type="button">Otestovat nákup</button>
                   </section>
                   <section class="streak-module">

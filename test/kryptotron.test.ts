@@ -1,6 +1,28 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { deriveKryptotronOcto, initializeKryptotronInstance, loadKryptotronSnapshot, requestTestDca, setDcaAmount, setDcaEnabled, setKryptotronEntriesPaused } from "../src/kryptotron.js";
+import { dcaStatusText, deriveKryptotronOcto, initializeKryptotronInstance, loadKryptotronSnapshot, requestTestDca, setDcaAmount, setDcaEnabled, setKryptotronEntriesPaused } from "../src/kryptotron.js";
+
+test("DCA does not label insufficient-funds skips as completed purchases", () => {
+  const now = new Date("2026-09-20T16:00:00Z");
+  const dca = { enabled: true, completed_week: "2026-W38", last_results: [{ status: "skipped", reason: "nedostatečný balance" }] };
+  assert.match(dcaStatusText(dca, now), /Přeskočeno: nedostatek prostředků/);
+  assert.match(dcaStatusText({ ...dca, last_results: [{ status: "filled" }] }, now), /Nákupy dokončeny/);
+  assert.match(dcaStatusText({ ...dca, last_results: [{ status: "filled" }, { status: "failed" }] }, now), /Část nákupů neproběhla/);
+  assert.equal(dcaStatusText({ ...dca, enabled: false }, now), "Pozastaveno");
+  assert.equal(dcaStatusText(dca, new Date("2026-09-20T22:01:00Z")), "Termín: neděle v 8:00");
+  assert.match(dcaStatusText({ ...dca, completed_week: "2026-W53" }, new Date("2027-01-03T10:00:00Z")), /Přeskočeno/);
+});
+
+test("balance freshness comes from the account read, never the worker heartbeat", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async (input) => new Response(JSON.stringify(String(input).includes("bot_state") ? [{ data: {
+    account_balance: 89.01516835, quote_asset: "USDC", account_balance_at: "2026-09-20T16:35:00Z",
+    account_balance_error: "Zůstatek se nepodařilo obnovit", last_heartbeat_at: new Date().toISOString(),
+  } }] : []), { status: 200 });
+  const snapshot = await loadKryptotronSnapshot("https://example.supabase.co", "key");
+  assert.deepEqual(snapshot.balance, { amount: 89.01516835, asset: "USDC", updatedAt: "2026-09-20T16:35:00Z", error: "Zůstatek se nepodařilo obnovit" });
+});
 
 const octoSource = (overrides: Partial<Parameters<typeof deriveKryptotronOcto>[0]> = {}): Parameters<typeof deriveKryptotronOcto>[0] => ({
   status: "waiting",
@@ -10,7 +32,7 @@ const octoSource = (overrides: Partial<Parameters<typeof deriveKryptotronOcto>[0
   lastTrade: null,
   nextCheckAt: "2026-09-06T10:00:00Z",
   lastMarketCheckAt: null,
-  balance: { amount: 73.93, asset: "USDC" },
+  balance: { amount: 73.93, asset: "USDC", updatedAt: null, error: null },
   ...overrides,
 });
 
@@ -109,7 +131,7 @@ test("maps Kryptotron state and latest trade into the Ocean contract", async (t)
   assert.equal(snapshot.entriesPaused, true);
   assert.deepEqual(snapshot.events[0], { type: "MARKET", message: "Trh zkontrolován", at: "2026-08-22T08:00:00Z" });
   assert.equal(snapshot.nextCheckAt, "2026-08-22T12:00:00Z");
-  assert.deepEqual(snapshot.balance, { amount: 73.93, asset: "USDC" });
+  assert.deepEqual(snapshot.balance, { amount: 73.93, asset: "USDC", updatedAt: null, error: null });
   assert.equal(snapshot.dca.enabled, true);
   assert.equal(snapshot.dca.totalInvested, 10);
   assert.equal(snapshot.dca.purchaseCount, 2);
