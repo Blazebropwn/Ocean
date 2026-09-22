@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildApp } from "../src/app.js";
 import { openDatabase } from "../src/db.js";
-import { agentRunNotificationText, processTelegramMessage, sendAgentRunTelegramNotification } from "../src/telegram.js";
+import { agentRunNotificationText, processTelegramMessage, sendAgentRunTelegramNotification, sendOwnerTelegramAlert } from "../src/telegram.js";
 import { createPortfolioRiskReport } from "../src/agents/risk-report.js";
 import { completePortfolioSnapshotFixture, portfolioFixtureNow } from "./fixtures/portfolio.js";
 
@@ -105,6 +105,29 @@ test("scheduled Risk Agent notification goes only to the linked user's chat", as
   assert.doesNotMatch(sent[0]?.text ?? "", /Riziko:/);
   assert.match(sent[0]?.text ?? "", /https:\/\/ocean\.example\/#dashboard/);
   assert.equal(await sendAgentRunTelegramNotification(config, db, "usr_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", run, async () => { throw new Error("must not send"); }), false);
+  db.close();
+});
+
+test("ops alert reaches the owner's chat, not a member's", async () => {
+  const db = openDatabase(":memory:");
+  db.prepare("INSERT INTO users (id, email, username, password_hash, role) VALUES ('usr_owner', 'owner@example.com', 'owner', 'hash', 'owner')").run();
+  db.prepare("INSERT INTO users (id, email, username, password_hash, role) VALUES ('usr_member', 'member@example.com', 'member', 'hash', 'member')").run();
+  db.prepare("INSERT INTO telegram_connections (user_id, chat_id) VALUES ('usr_owner', '1001')").run();
+  db.prepare("INSERT INTO telegram_connections (user_id, chat_id) VALUES ('usr_member', '2002')").run();
+  const config = { port: 0, host: "127.0.0.1", databasePath: ":memory:", appOrigin: "https://ocean.example", isProduction: false, telegramBotToken: "token" };
+
+  const sent: Array<{ chatId: string; text: string }> = [];
+  assert.equal(await sendOwnerTelegramAlert(config, db, "🚨 problém", async (chatId, text) => { sent.push({ chatId, text }); }), true);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0]?.chatId, "1001");
+  db.close();
+});
+
+test("ops alert is a no-op when the owner has no linked Telegram chat", async () => {
+  const db = openDatabase(":memory:");
+  db.prepare("INSERT INTO users (id, email, username, password_hash, role) VALUES ('usr_owner', 'owner@example.com', 'owner', 'hash', 'owner')").run();
+  const config = { port: 0, host: "127.0.0.1", databasePath: ":memory:", appOrigin: "https://ocean.example", isProduction: false, telegramBotToken: "token" };
+  assert.equal(await sendOwnerTelegramAlert(config, db, "🚨 problém", async () => { throw new Error("must not send"); }), false);
   db.close();
 });
 

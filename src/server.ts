@@ -9,6 +9,7 @@ import { startOffsiteBackupScheduler } from "./offsite-scheduler.js";
 import { startMaintenance } from "./maintenance.js";
 import { createDefaultPortfolioProvider } from "./portfolio/default-provider.js";
 import { startAgentScheduler } from "./agent-scheduler.js";
+import { startOpsMonitor } from "./ops-monitor.js";
 
 const config = loadConfig();
 const db = openDatabase(config.databasePath);
@@ -20,6 +21,7 @@ let supervisor: ReturnType<typeof startKryptotronSupervisor> | undefined;
 let telegram: ReturnType<typeof startTelegramBot> | undefined;
 let offsiteBackupScheduler: ReturnType<typeof startOffsiteBackupScheduler> | undefined;
 let agentScheduler: ReturnType<typeof startAgentScheduler> | undefined;
+let opsMonitor: ReturnType<typeof startOpsMonitor> | undefined;
 
 try {
   await app.listen({ port: config.port, host: config.host });
@@ -27,6 +29,7 @@ try {
   telegram = startTelegramBot(config, db, app.log);
   offsiteBackupScheduler = startOffsiteBackupScheduler(config, app.log);
   agentScheduler = startAgentScheduler(config, db, portfolioProvider, app.log);
+  opsMonitor = startOpsMonitor(config, db, app.log);
 } catch (error) {
   supervisor?.stop();
   mailer.stop();
@@ -34,6 +37,7 @@ try {
   telegram?.stop();
   offsiteBackupScheduler?.stop();
   agentScheduler?.stop();
+  opsMonitor?.stop();
   app.log.error(error);
   process.exit(1);
 }
@@ -46,6 +50,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     telegram?.stop();
     offsiteBackupScheduler?.stop();
     agentScheduler?.stop();
+    opsMonitor?.stop();
     await app.close();
     process.exit(0);
   });

@@ -185,6 +185,30 @@ export async function sendAgentRunTelegramNotification(
   return true;
 }
 
+export async function sendOwnerTelegramAlert(
+  config: Config,
+  db: OceanDatabase,
+  text: string,
+  send: (chatId: string, text: string) => Promise<void> = async (chatId, alertText) => {
+    if (!config.telegramBotToken) return;
+    const response = await telegramCall(config.telegramBotToken, "sendMessage", {
+      chat_id: chatId,
+      text: alertText,
+      disable_web_page_preview: true,
+    });
+    if (!response.ok) throw new Error("Telegram zprávu odmítl.");
+  },
+) {
+  if (!config.telegramBotToken) return false;
+  const owner = db.prepare("SELECT id FROM users WHERE role = 'owner' LIMIT 1").get() as { id: string } | undefined;
+  if (!owner) return false;
+  const connection = db.prepare("SELECT chat_id FROM telegram_connections WHERE user_id = ?")
+    .get(owner.id) as { chat_id: string } | undefined;
+  if (!connection) return false;
+  await send(connection.chat_id, text);
+  return true;
+}
+
 export function startTelegramBot(config: Config, db: OceanDatabase, logger: TelegramLogger) {
   if (!config.telegramBotToken) {
     logger.info({}, "Ocean Telegram není nastaven");

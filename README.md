@@ -136,6 +136,12 @@ Volitelné vzdálené zálohy se před odesláním šifrují samostatným klíč
 
 Provozní kontrola je dostupná na `/api/ready`. HTTP 200 znamená, že databáze prošla kontrolou integrity a povinné integrace mají konfiguraci; HTTP 503 znamená, že instance nemá přijímat provoz. `/api/health` zůstává jednoduchý liveness endpoint.
 
+### Provozní monitoring
+
+`OCEAN_OPS_MONITOR_ENABLED=true` zapne vnitřní kontrolu (každých 15 minut): stejné problémy jako `/api/ready`, plus Kryptotron instance zaseklé ve stavu `error` déle než 30 minut (supervisor je zkouší restartovat, ale sám o tom nikoho neinformuje). Při nálezu pošle vlastníkovi zprávu na Telegram — ihned při vzniku problému, pak nejvýš jednou za hodinu dokud trvá, a zprávu o vyřešení, jakmile zmizí. Vyžaduje nastaveného `OCEAN_TELEGRAM_BOT_TOKEN` a vlastníka propojeného s Telegramem.
+
+Tahle kontrola běží uvnitř Oceanu, takže nic nezjistí, pokud proces nebo celý kontejner úplně spadne. Na to je potřeba nezávislá vnější kontrola: bezplatná uptime služba (např. UptimeRobot, Healthchecks.io) namířená na veřejné `/api/health` s upozorněním na e-mail nebo webhook.
+
 ## Bezpečnostní základy
 
 - hesla jsou hashována pomocí Argon2id,
