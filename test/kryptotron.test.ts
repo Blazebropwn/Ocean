@@ -103,6 +103,9 @@ test("new Kryptotron instances receive an isolated paused state", async (t) => {
     assert.equal(payload.key, "kry_0123456789abcdef0123456789abcdef");
     assert.equal(payload.data.environment, "testnet");
     assert.equal(payload.data.entries_paused, true);
+    // ignore-duplicates, not merge-duplicates: reconnecting an instance that already has open
+    // positions and protection state must never reset it back to these defaults.
+    assert.equal((init?.headers as Record<string, string>)?.Prefer, "resolution=ignore-duplicates,return=minimal");
     return new Response(null, { status: 201 });
   };
   assert.equal(

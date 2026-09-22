@@ -23,6 +23,9 @@ test("invited member can verify and securely stage a personal Binance connection
     }
     assert.equal(String(input), "https://example.supabase.co/rest/v1/bot_state?on_conflict=key");
     assert.equal(init?.method, "POST");
+    // A reconnect (rotating Binance keys, recovering from an error) must never reset an
+    // instance's already-stored trading state — only a genuinely new instance gets it fresh.
+    assert.equal((init?.headers as Record<string, string>)?.Prefer, "resolution=ignore-duplicates,return=minimal");
     const provisioned = JSON.parse(String(init?.body)) as { key: string; data: Record<string, unknown> };
     assert.match(provisioned.key, /^kry_[a-f0-9]{32}$/);
     assert.equal(provisioned.data.runtime_status, "provisioning");

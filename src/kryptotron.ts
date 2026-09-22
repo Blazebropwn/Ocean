@@ -190,13 +190,17 @@ export async function logKryptotronTrade(url: string, key: string, stateKey: str
 export async function initializeKryptotronInstance(url: string, key: string, stateKey: string, environment: "testnet" | "mainnet") {
   if (!/^kry_[a-f0-9]{32}$/.test(stateKey)) throw new Error("Neplatný identifikátor instance");
   const now = new Date().toISOString();
+  // ignore-duplicates, not merge-duplicates: reconnecting Binance credentials for an instance
+  // that already has trading state (open positions, protection, risk limits) must never reset
+  // it. This only ever creates the row for a genuinely new instance; an existing row is left
+  // completely untouched.
   const response = await fetch(`${url}/rest/v1/bot_state?on_conflict=key`, {
     method: "POST",
     headers: {
       apikey: key,
       Authorization: `Bearer ${key}`,
       "Content-Type": "application/json",
-      Prefer: "resolution=merge-duplicates,return=minimal",
+      Prefer: "resolution=ignore-duplicates,return=minimal",
     },
     body: JSON.stringify({
       key: stateKey,
