@@ -16,5 +16,6 @@ export function createDefaultPortfolioProvider(db: OceanDatabase, config: Config
       }
       return await loadKryptotronState(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, stateKey);
     },
+    config.credentialsEncryptionKeyPrevious,
   );
 }

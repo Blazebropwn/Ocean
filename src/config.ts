@@ -9,6 +9,7 @@ export type Config = {
   kryptotronSupabaseUrl?: string;
   kryptotronSupabaseKey?: string;
   credentialsEncryptionKey?: string;
+  credentialsEncryptionKeyPrevious?: string;
   kryptotronSupervisorEnabled?: boolean;
   kryptotronPython?: string;
   trustedProxies?: string[];
@@ -45,6 +46,7 @@ export function loadConfig(env = process.env): Config {
     kryptotronSupabaseUrl: env.KRYPTOTRON_SUPABASE_URL,
     kryptotronSupabaseKey: env.KRYPTOTRON_SUPABASE_KEY,
     credentialsEncryptionKey: env.OCEAN_CREDENTIALS_KEY,
+    credentialsEncryptionKeyPrevious: env.OCEAN_CREDENTIALS_KEY_PREVIOUS,
     kryptotronSupervisorEnabled: env.KRYPTOTRON_SUPERVISOR_ENABLED === "true",
     kryptotronPython: env.KRYPTOTRON_PYTHON ?? "python",
     trustedProxies: env.TRUST_PROXY?.split(",").map((value) => value.trim()).filter(Boolean),

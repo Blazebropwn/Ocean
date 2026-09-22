@@ -89,6 +89,13 @@ openssl rand -base64 32
 
 Výsledek vložte jako `OCEAN_CREDENTIALS_KEY`. Jeho ztráta znemožní rozšifrovat uložená Binance připojení; jeho změna vyžaduje řízenou rotaci klíčů.
 
+**Rotace `OCEAN_CREDENTIALS_KEY`:**
+
+1. Vygenerujte nový klíč (`openssl rand -base64 32`).
+2. Nastavte `OCEAN_CREDENTIALS_KEY` na novou hodnotu a `OCEAN_CREDENTIALS_KEY_PREVIOUS` na starou, a nasaďte. Server i workeři nově čtou přednostně nový klíč a starý používají jen jako záložní pro dosud nepřešifrovaná připojení — provoz se nepřeruší.
+3. Spusťte `npm run rotate:credentials-key` ve stejném prostředí. Přešifruje všechna uložená Binance připojení na nový klíč a vypíše přehled; lze bezpečně spustit opakovaně, dosud přešifrovaná připojení přeskočí.
+4. Po potvrzení, že výstup neobsahuje žádné selhání, odeberte `OCEAN_CREDENTIALS_KEY_PREVIOUS` a znovu nasaďte. Starý klíč bezpečně zahoďte.
+
 Člen může své Testnet Binance připojení odpojit přímo v Přehledu. Ocean odstraní šifrované API údaje, zneplatní přístup osobního workeru a vrátí instanci do stavu `unconfigured`. Nové připojení pak slouží jako bezpečná výměna klíčů. Zpětně kompatibilní vlastnická instance `main` je před tímto postupem chráněná.
 
 ## Telegram

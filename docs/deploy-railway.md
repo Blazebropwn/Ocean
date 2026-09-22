@@ -46,7 +46,7 @@ RESEND_API_KEY=...
 EMAIL_FROM=Ocean <ocean@vase-domena.cz>
 ```
 
-`KRYPTOTRON_SUPABASE_KEY`, `OCEAN_CREDENTIALS_KEY`, `OCEAN_BACKUP_KEY`, přístupové údaje k úložišti, Telegram token ani Binance klíče nesmí být součástí repozitáře nebo veřejných proměnných frontendu. Hodnotu `OCEAN_CREDENTIALS_KEY` po vytvoření neměňte bez řízené rotace a samostatné zálohy.
+`KRYPTOTRON_SUPABASE_KEY`, `OCEAN_CREDENTIALS_KEY`, `OCEAN_BACKUP_KEY`, přístupové údaje k úložišti, Telegram token ani Binance klíče nesmí být součástí repozitáře nebo veřejných proměnných frontendu. Hodnotu `OCEAN_CREDENTIALS_KEY` po vytvoření neměňte bez řízené rotace (postup a `npm run rotate:credentials-key` popisuje README) a samostatné zálohy.
 
 Telegram long polling smí běžet jen v jedné instanci. Produkční služba má `OCEAN_TELEGRAM_POLLING_ENABLED=true`; lokální `.env` ponechte na `false`, pokud používá stejný bot token.
 

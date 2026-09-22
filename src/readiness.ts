@@ -1,5 +1,5 @@
 import type { Config } from "./config.js";
-import { credentialsKey } from "./credentials.js";
+import { credentialsKeys } from "./credentials.js";
 import type { OceanDatabase } from "./db.js";
 import { backupEncryptionKey } from "./offsite-backup-lib.js";
 import { offsiteStoreConfigFromApp } from "./offsite-store.js";
@@ -13,7 +13,7 @@ export function readinessIssues(config: Config, db: OceanDatabase) {
 
   const credentials = (db.prepare("SELECT COUNT(*) AS count FROM kryptotron_credentials").get() as { count: number }).count;
   if (credentials > 0) {
-    try { credentialsKey(config.credentialsEncryptionKey); }
+    try { credentialsKeys(config); }
     catch { issues.push("Nelze otevřít uložená Binance připojení."); }
   }
   if (config.kryptotronSupervisorEnabled && (!config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey)) {

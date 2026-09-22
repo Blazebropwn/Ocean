@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { FastifyBaseLogger } from "fastify";
 import type { Config } from "./config.js";
-import { credentialsKey, decryptCredential } from "./credentials.js";
+import { credentialsKey, credentialsKeys, decryptCredentialWithKeys } from "./credentials.js";
 import type { OceanDatabase } from "./db.js";
 import { workerAccessToken } from "./worker-auth.js";
 
@@ -93,8 +93,10 @@ export function startKryptotronSupervisor(config: Config, db: OceanDatabase, log
   }
 
   let encryptionKey: Buffer;
+  let decryptionKeys: Buffer[];
   try {
     encryptionKey = credentialsKey(config.credentialsEncryptionKey);
+    decryptionKeys = credentialsKeys(config);
   } catch (error) {
     logger.error({ err: error }, "Kryptotron supervisor nemá platný šifrovací klíč");
     return { stop() {} };
@@ -137,8 +139,8 @@ export function startKryptotronSupervisor(config: Config, db: OceanDatabase, log
       if (failure && failure.retryAt > Date.now()) continue;
       try {
         const context = `${instance.user_id}:${instance.id}`;
-        const apiKey = decryptCredential({ ciphertext: instance.api_key_ciphertext, iv: instance.api_key_iv, tag: instance.api_key_tag }, encryptionKey, `${context}:api-key`);
-        const apiSecret = decryptCredential({ ciphertext: instance.api_secret_ciphertext, iv: instance.api_secret_iv, tag: instance.api_secret_tag }, encryptionKey, `${context}:api-secret`);
+        const apiKey = decryptCredentialWithKeys({ ciphertext: instance.api_key_ciphertext, iv: instance.api_key_iv, tag: instance.api_key_tag }, decryptionKeys, `${context}:api-key`);
+        const apiSecret = decryptCredentialWithKeys({ ciphertext: instance.api_secret_ciphertext, iv: instance.api_secret_iv, tag: instance.api_secret_tag }, decryptionKeys, `${context}:api-secret`);
         const workingDirectory = resolve(dirname(config.databasePath), "instances", instance.id);
         mkdirSync(join(workingDirectory, "logs"), { recursive: true, mode: 0o700 });
         const script = resolve(process.cwd(), "services", "kryptotron", "bot.py");

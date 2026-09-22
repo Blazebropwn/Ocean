@@ -14,6 +14,7 @@
     "restore": "node dist/src/restore.js",
     "restore:offsite": "node dist/src/offsite-restore.js",
     "restore:drill": "node dist/src/restore-drill.js",
+    "rotate:credentials-key": "node dist/src/rotate-credentials-key.js",
     "verify": "npm run build && npm test && python3 -m pytest -q services/kryptotron/tests"
   },
   "dependencies": {

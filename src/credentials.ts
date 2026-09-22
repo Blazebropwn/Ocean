@@ -27,3 +27,27 @@ export function decryptCredential(value: EncryptedValue, key: Buffer, context: s
   decipher.setAuthTag(Buffer.from(value.tag, "base64"));
   return Buffer.concat([decipher.update(Buffer.from(value.ciphertext, "base64")), decipher.final()]).toString("utf8");
 }
+
+/**
+ * Keys currently valid for decrypting stored credentials: the active key used for all new
+ * writes, plus an optional previous key kept only to read rows not yet migrated by
+ * rotate-credentials-key. Both must already be validated Buffers (see credentialsKey).
+ */
+export function credentialsKeys(config: { credentialsEncryptionKey?: string; credentialsEncryptionKeyPrevious?: string }) {
+  const keys = [credentialsKey(config.credentialsEncryptionKey)];
+  if (config.credentialsEncryptionKeyPrevious) keys.push(credentialsKey(config.credentialsEncryptionKeyPrevious));
+  return keys;
+}
+
+/** Decrypts with the first key in `keys` that produces a valid, authenticated result. */
+export function decryptCredentialWithKeys(value: EncryptedValue, keys: Buffer[], context: string) {
+  let lastError: unknown;
+  for (const key of keys) {
+    try {
+      return decryptCredential(value, key, context);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Uložené údaje nelze rozšifrovat žádným nakonfigurovaným klíčem.");
+}

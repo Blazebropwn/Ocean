@@ -4,7 +4,7 @@ import {
   type BinanceEnvironment,
   type BinancePortfolioReadResult,
 } from "../binance.js";
-import { credentialsKey, decryptCredential } from "../credentials.js";
+import { credentialsKeys, decryptCredentialWithKeys } from "../credentials.js";
 import type { OceanDatabase } from "../db.js";
 import {
   validatePortfolioSnapshot,
@@ -50,6 +50,7 @@ export class BinancePortfolioProvider implements PortfolioProvider {
     private readonly now: () => Date = () => new Date(),
     private readonly createSnapshotId: () => string = () => `psn_${randomBytes(16).toString("hex")}`,
     private readonly legacyReader?: LegacyPortfolioReader,
+    private readonly previousEncryptionKeyValue?: string,
   ) {}
 
   async getSnapshot(input: PortfolioSnapshotRequest): Promise<PortfolioSnapshot> {
@@ -67,13 +68,13 @@ export class BinancePortfolioProvider implements PortfolioProvider {
     let portfolio: BinancePortfolioReadResult;
     if (connection.api_key_ciphertext && connection.api_key_iv && connection.api_key_tag
       && connection.api_secret_ciphertext && connection.api_secret_iv && connection.api_secret_tag) {
-      const key = credentialsKey(this.encryptionKeyValue);
+      const keys = credentialsKeys({ credentialsEncryptionKey: this.encryptionKeyValue, credentialsEncryptionKeyPrevious: this.previousEncryptionKeyValue });
       const context = `${connection.user_id}:${connection.id}`;
-      const apiKey = decryptCredential(
-        { ciphertext: connection.api_key_ciphertext, iv: connection.api_key_iv, tag: connection.api_key_tag }, key, `${context}:api-key`,
+      const apiKey = decryptCredentialWithKeys(
+        { ciphertext: connection.api_key_ciphertext, iv: connection.api_key_iv, tag: connection.api_key_tag }, keys, `${context}:api-key`,
       );
-      const apiSecret = decryptCredential(
-        { ciphertext: connection.api_secret_ciphertext, iv: connection.api_secret_iv, tag: connection.api_secret_tag }, key, `${context}:api-secret`,
+      const apiSecret = decryptCredentialWithKeys(
+        { ciphertext: connection.api_secret_ciphertext, iv: connection.api_secret_iv, tag: connection.api_secret_tag }, keys, `${context}:api-secret`,
       );
       portfolio = await this.reader(apiKey, apiSecret, connection.environment);
     } else {
