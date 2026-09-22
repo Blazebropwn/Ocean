@@ -13,7 +13,7 @@
 .ocean-ui .brand span { text-shadow:none; }
 .ocean-ui main { height:auto; min-height:calc(100dvh - 64px); }
 .ocean-ui .auth-screen { height:auto; min-height:calc(100dvh - 64px); padding-block:28px; }
-.ocean-ui :is(.auth-card,.standalone-form,.invite-shell,.admin-section,.mail,.ocean-module,.agent-card,.agent-dialog,.profile-menu,.octo-bubble) { background:var(--panel); border-color:var(--line); box-shadow:none; }
+.ocean-ui :is(.auth-card,.standalone-form,.invite-shell,.admin-section,.mail,.ocean-module,.agent-card,.agent-dialog,.profile-menu) { background:var(--panel); border-color:var(--line); box-shadow:none; }
 .ocean-ui :is(.auth-card,.standalone-form,.invite-shell,.admin-section) { border-radius:15px; }
 .ocean-ui .auth-card { padding:32px; }
 .ocean-ui :is(h1,h2,h3) { font-weight:550; }
@@ -31,7 +31,7 @@
 .ocean-ui .tabs { background:var(--deep); border-radius:9px; }
 .ocean-ui .tab { font-size:13px; border-radius:6px; }
 .ocean-ui .tab.active { color:var(--ink); background:#34413f; box-shadow:none; font-weight:550; }
-.ocean-ui :is(.profile-menu,.agent-dialog,.octo-bubble) { border-color:#35434b; box-shadow:0 18px 60px #0005; }
+.ocean-ui :is(.profile-menu,.agent-dialog) { border-color:#35434b; box-shadow:0 18px 60px #0005; }
 .ocean-ui .profile-menu::before { display:none; }
 .ocean-ui .profile-button span { background:#253d39; color:var(--cyan); border-color:var(--line-hot); border-radius:50%; box-shadow:none; }
 .ocean-ui :is(.telegram-code,.member-detail,.connection-panel,.game-canvas-wrap,.agent-summary,.agent-report,.agent-ledger li) { background:var(--deep); border-color:var(--line); box-shadow:none; }
@@ -47,9 +47,6 @@
 .ocean-ui .agent-dialog::backdrop { background:#03080bb0; backdrop-filter:blur(8px); }
 .ocean-ui .agent-dialog button { box-shadow:none; }
 .ocean-ui .agent-card button.primary { background:var(--cyan); }
-.ocean-ui .octo-avatar { animation:none; }
-.ocean-ui .octo-avatar-button:hover { transform:none; filter:none; }
-.ocean-ui .octo-avatar-button > i { box-shadow:none; animation:none; }
 .ocean-ui .message { line-height:1.5; }
 .ocean-ui .message:empty { min-height:0; margin:0; }
 .ocean-ui .invite-list article strong,.ocean-ui .member-detail-row span { overflow-wrap:anywhere; }
@@ -67,24 +64,3 @@
 @media (prefers-reduced-motion:reduce) {
  .ocean-ui *, .ocean-ui *::before, .ocean-ui *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
 }
-
-/* Compact status panel replaces the decorative mascot. */
-.status-center { display:flex; align-items:center; }
-.status-trigger { position:relative; display:grid; place-items:center; width:36px; height:36px; padding:0; border:1px solid transparent; border-radius:9px; background:transparent; color:var(--muted); cursor:pointer; }
-.status-trigger svg { width:19px; height:19px; }
-.status-trigger:hover,.status-trigger[aria-expanded=true] { background:var(--panel-2); border-color:var(--line); color:var(--ink); }
-.status-trigger > i { position:absolute; right:6px; top:5px; width:5px; height:5px; border-radius:50%; background:var(--cyan); box-shadow:0 0 0 2px var(--deep); }
-.status-center.critical .status-trigger { color:var(--danger); }
-.status-center.critical .status-trigger > i { background:var(--danger); }
-.status-popover { position:absolute; z-index:60; right:0; top:calc(100% + 12px); width:min(340px,calc(100vw - 32px)); max-height:calc(100dvh - 88px); overflow:auto; padding:20px; border:1px solid #35434b; border-radius:14px; color:var(--ink-soft); background:var(--panel); box-shadow:0 18px 60px #0005; }
-.status-popover[hidden] { display:none; }
-.status-popover header { display:flex; justify-content:space-between; align-items:center; gap:12px; }
-.status-popover header strong { color:var(--ink); font-size:14px; font-weight:550; }
-.status-popover header button { display:grid; place-items:center; width:26px; height:26px; padding:0; border:0; border-radius:50%; background:transparent; color:var(--muted); font-size:21px; cursor:pointer; }
-.status-popover header button:hover { background:var(--panel-3); color:var(--ink); }
-.status-label { display:inline-block; margin-top:14px; font-size:11px; color:var(--cyan); }
-.status-center.critical .status-label { color:var(--danger); }
-.status-popover p { font-size:13px; line-height:1.6; margin:8px 0; }
-.status-meta { color:var(--muted); font-size:11px; line-height:1.5; }
-.status-activity { display:flex; align-items:center; justify-content:space-between; width:100%; margin-top:18px; padding:14px 0 0; border:0; border-top:1px solid var(--line); background:transparent; color:var(--ink-soft); font-size:12px; cursor:pointer; }
-.status-activity:hover { color:var(--cyan); }

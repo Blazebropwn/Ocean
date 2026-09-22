@@ -11,71 +11,14 @@ let dcaSaving = false;
 let streakEnabled = false;
 let arcadeState = null;
 let arcadeFrame = null;
-let octoLastEventKey = null;
 let agentLastRunId = null;
 let vaultSnapshot = null;
 let vaultPage = 0;
 let selectedPositionSymbol = null;
 
-const octoLabels = {
-  idle: "Čeká na signál",
-  scanning: "Kontroluje trh",
-  calculating: "Vyhodnocuje",
-  trade_open: "V pozici",
-  profit: "Uzavřeno se ziskem",
-  loss: "Uzavřeno se ztrátou",
-  error: "Vyžaduje pozornost",
-  sleep: "Pozastaveno",
-};
-const octoStates = Object.keys(octoLabels);
-
-function setOctoOpen(open) {
-  $("#octo-bubble").hidden = !open;
-  $("#octo-toggle").setAttribute("aria-expanded", String(open));
-}
-
 function setProfileOpen(open) {
   $("#profile-menu").classList.toggle("hidden", !open);
   $("#profile-button").setAttribute("aria-expanded", String(open));
-  if (open) setOctoOpen(false);
-}
-
-function initializeOcto() {
-  $("#octo-assistant").classList.remove("hidden");
-}
-
-function renderOcto(presentation) {
-  initializeOcto();
-  const assistant = $("#octo-assistant");
-  const state = octoStates.includes(presentation?.state) ? presentation.state : "idle";
-  const message = presentation?.message || "Klid. Čekám na další signál.";
-  const eventKey = presentation?.eventKey || `runtime:${state}`;
-  const changed = eventKey !== octoLastEventKey;
-  octoLastEventKey = eventKey;
-  assistant.dataset.state = state;
-  assistant.classList.toggle("critical", presentation?.critical === true);
-  $("#octo-state-label").textContent = octoLabels[state];
-  $("#octo-message").textContent = message;
-  $("#octo-toggle").setAttribute("aria-label", `Stav systému: ${message}`);
-  $("#octo-bubble").setAttribute("aria-live", presentation?.critical ? "assertive" : "polite");
-  const meta = $("#octo-meta");
-  meta.textContent = presentation?.meta || "";
-  meta.classList.toggle("hidden", !presentation?.meta);
-
-  // Routine status stays behind the bell; critical events remain visible.
-  const profileOpen = !$("#profile-menu").classList.contains("hidden");
-  if (changed && presentation?.critical === true && !profileOpen) setOctoOpen(true);
-}
-
-function renderDisconnectedOcto() {
-  renderOcto({
-    state: "sleep",
-    message: "Binance zatím není připojená.",
-    meta: null,
-    eventKey: "connection:missing",
-    autoOpen: false,
-    critical: false,
-  });
 }
 
 function setLoading(form, loading) {
@@ -127,13 +70,11 @@ function showUser(user) {
   clearInterval(kryptotronRefresh);
   clearInterval(approvalRefresh);
   if (!accessApproved) {
-    $("#octo-assistant").classList.add("hidden");
     approvalRefresh = setInterval(() => request("/api/me").then(({ user: refreshedUser }) => {
       if (refreshedUser.accessApproved) showUser(refreshedUser);
     }).catch(() => {}), 10_000);
     return;
   }
-  initializeOcto();
   initializeKryptotron();
   loadAgentCard();
   kryptotronRefresh = setInterval(initializeKryptotron, 60_000);
@@ -265,7 +206,6 @@ function showAppView(view, activeLink = null) {
     cancelAnimationFrame(arcadeFrame);
     if (arcadeState) arcadeState.active = false;
   }
-  if (selected !== "overview") setOctoOpen(false);
   document.querySelectorAll(".app-view").forEach((panel) => panel.classList.toggle("hidden", panel.id !== `${selected}-view`));
   document.querySelectorAll(".side-link[data-view]").forEach((link) => {
     const active = activeLink ? link === activeLink : link.dataset.view === selected;
@@ -667,7 +607,6 @@ async function loadKryptotron() {
     $("#bot-control").classList.toggle("resume", entriesPaused);
     updatePositionDetail();
     renderEvents(kryptotron.events);
-    renderOcto(kryptotron.octo);
   } catch (error) {
     setSystemState("Data nejsou dostupná", true);
     setVaultUnavailable("Historii se nepodařilo obnovit. Zobrazené údaje mohou být neaktuální.");
@@ -675,12 +614,10 @@ async function loadKryptotron() {
       $("#kryptotron-degraded").classList.remove("hidden");
       $("#kryptotron-status").lastChild.textContent = " Data mimo dosah";
       $("#kryptotron-status").classList.add("warning");
-      renderOcto({ state: "sleep", message: "Stav Kryptotronu je teď mimo dosah. Zkouším to znovu.", meta: "Bot běží dál", eventKey: "data:unavailable", autoOpen: false, critical: false });
     } else {
       $("#kryptotron-degraded").classList.add("hidden");
       $("#kryptotron-status").lastChild.textContent = " Nepřipojeno";
       $("#bot-position").textContent = error.message;
-      renderOcto({ state: "error", message: "Stav Kryptotronu se nepodařilo načíst.", meta: "Zkouším spojení obnovit", eventKey: `load:${error.message}`, autoOpen: true, critical: true });
     }
   }
 }
@@ -704,7 +641,6 @@ async function initializeKryptotron() {
       await loadKryptotron();
       return;
     }
-    renderDisconnectedOcto();
     setSystemState(connection.status === "provisioning" ? "Připojuji Binance" : "Binance nepřipojena", false);
     vaultSnapshot = null;
     $("#vault-purchases").replaceChildren();
@@ -730,7 +666,6 @@ async function initializeKryptotron() {
     setSystemState("Připojení neověřeno", true);
     setVaultUnavailable("Připojení se nepodařilo ověřit. Zobrazená historie může být neaktuální.");
     $("#kryptotron-status").lastChild.textContent = " Nepřipojeno";
-    renderOcto({ state: "error", message: "Spojení se nepodařilo ověřit.", meta: "Zkusím to znovu automaticky", eventKey: "connection:error", autoOpen: true, critical: true });
   }
 }
 
@@ -957,26 +892,6 @@ function formatQuantity(value) {
 function formatBips(value) {
   return value ? `trail ${(value / 100).toLocaleString("cs-CZ", { maximumFractionDigits: 2 })} %` : "trail";
 }
-
-$("#octo-toggle").addEventListener("click", () => {
-  const open = $("#octo-bubble").hidden;
-  if (open) setProfileOpen(false);
-  setOctoOpen(open);
-});
-$("#octo-close").addEventListener("click", () => {
-  setOctoOpen(false);
-  $("#octo-toggle").focus();
-});
-$(".status-activity").addEventListener("click", () => setOctoOpen(false));
-document.addEventListener("pointerdown", (event) => {
-  if (!$("#octo-assistant").contains(event.target)) setOctoOpen(false);
-});
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !$("#octo-bubble").hidden) {
-    setOctoOpen(false);
-    $("#octo-toggle").focus();
-  }
-});
 
 $("#profile-button").addEventListener("click", () => {
   setProfileOpen($("#profile-menu").classList.contains("hidden"));

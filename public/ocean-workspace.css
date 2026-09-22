@@ -101,8 +101,6 @@
 .workspace-dialog .logbook ol { height:auto; max-height:none; }
 .workspace-dialog .logbook li { padding:12px; line-height:1.5; }
 .workspace-dialog .connection-disconnect { margin-top:12px; }
-.ocean-workspace .octo-dock { bottom:18px; left:18px; width:100px; height:100px; }
-.ocean-workspace .octo-avatar-button { width:100px; height:100px; }
 .ocean-workspace .vault-view { width:100%; min-height:0; flex:1; display:flex; flex-direction:column; gap:14px; place-items:normal; }
 .vault-intro { display:none; }
 .vault-notice { color:var(--muted); font-size:11px; margin:0; }
@@ -145,7 +143,6 @@
  .ocean-workspace .dashboard { grid-template-columns:64px minmax(0,1fr); }
  .ocean-workspace .side-link b { display:none; }
  .ocean-workspace .side-link { justify-content:center; }
- .ocean-workspace .octo-dock { display:none !important; }
  .position-row { gap:8px; }
  .goals-card header > span { display:none; }
 }
