@@ -11,33 +11,25 @@ let dcaSaving = false;
 let streakEnabled = false;
 let arcadeState = null;
 let arcadeFrame = null;
-let octoCloseTimer = null;
 let octoLastEventKey = null;
-let octoMuted = false;
 let agentLastRunId = null;
 let vaultSnapshot = null;
 let vaultPage = 0;
 let selectedPositionSymbol = null;
 
 const octoLabels = {
-  idle: "ČEKÁM",
-  scanning: "SKENUJI",
-  calculating: "POČÍTÁM",
-  trade_open: "V POZICI",
-  profit: "ZISK",
-  loss: "ZTRÁTA",
-  error: "POZOR",
-  sleep: "KLID",
+  idle: "Čeká na signál",
+  scanning: "Kontroluje trh",
+  calculating: "Vyhodnocuje",
+  trade_open: "V pozici",
+  profit: "Uzavřeno se ziskem",
+  loss: "Uzavřeno se ztrátou",
+  error: "Vyžaduje pozornost",
+  sleep: "Pozastaveno",
 };
 const octoStates = Object.keys(octoLabels);
 
-function readOctoMuted() {
-  try { return localStorage.getItem("ocean-octo-muted") === "1"; } catch { return false; }
-}
-
 function setOctoOpen(open) {
-  clearTimeout(octoCloseTimer);
-  octoCloseTimer = null;
   $("#octo-bubble").hidden = !open;
   $("#octo-toggle").setAttribute("aria-expanded", String(open));
 }
@@ -49,17 +41,7 @@ function setProfileOpen(open) {
 }
 
 function initializeOcto() {
-  const assistant = $("#octo-assistant");
-  assistant.classList.remove("hidden");
-  if (assistant.dataset.ready === "true") return;
-  assistant.dataset.ready = "true";
-  octoMuted = readOctoMuted();
-  $("#octo-mute").textContent = octoMuted ? "Povolit automatické zprávy" : "Ztišit automatické zprávy";
-  for (const state of octoStates) {
-    if (state === "idle") continue;
-    const image = new Image();
-    image.src = `/kryptotron-octo/${state}.webp`;
-  }
+  $("#octo-assistant").classList.remove("hidden");
 }
 
 function renderOcto(presentation) {
@@ -74,25 +56,15 @@ function renderOcto(presentation) {
   assistant.classList.toggle("critical", presentation?.critical === true);
   $("#octo-state-label").textContent = octoLabels[state];
   $("#octo-message").textContent = message;
-  $("#octo-toggle").setAttribute("aria-label", `Kryptotron: ${message}`);
+  $("#octo-toggle").setAttribute("aria-label", `Stav systému: ${message}`);
   $("#octo-bubble").setAttribute("aria-live", presentation?.critical ? "assertive" : "polite");
   const meta = $("#octo-meta");
   meta.textContent = presentation?.meta || "";
   meta.classList.toggle("hidden", !presentation?.meta);
 
-  const avatar = $("#octo-avatar");
-  const nextSource = `/kryptotron-octo/${state}.webp`;
-  if (!avatar.getAttribute("src").endsWith(nextSource)) {
-    avatar.classList.add("changing");
-    avatar.src = nextSource;
-    avatar.addEventListener("load", () => avatar.classList.remove("changing"), { once: true });
-  }
-
+  // Routine status stays behind the bell; critical events remain visible.
   const profileOpen = !$("#profile-menu").classList.contains("hidden");
-  if (changed && presentation?.autoOpen && !octoMuted && !profileOpen) {
-    setOctoOpen(true);
-    if (!presentation.critical) octoCloseTimer = setTimeout(() => setOctoOpen(false), 5600);
-  }
+  if (changed && presentation?.critical === true && !profileOpen) setOctoOpen(true);
 }
 
 function renderDisconnectedOcto() {
@@ -991,11 +963,19 @@ $("#octo-toggle").addEventListener("click", () => {
   if (open) setProfileOpen(false);
   setOctoOpen(open);
 });
-$("#octo-close").addEventListener("click", () => setOctoOpen(false));
-$("#octo-mute").addEventListener("click", () => {
-  octoMuted = !octoMuted;
-  try { localStorage.setItem("ocean-octo-muted", octoMuted ? "1" : "0"); } catch {}
-  $("#octo-mute").textContent = octoMuted ? "Povolit automatické zprávy" : "Ztišit automatické zprávy";
+$("#octo-close").addEventListener("click", () => {
+  setOctoOpen(false);
+  $("#octo-toggle").focus();
+});
+$(".status-activity").addEventListener("click", () => setOctoOpen(false));
+document.addEventListener("pointerdown", (event) => {
+  if (!$("#octo-assistant").contains(event.target)) setOctoOpen(false);
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !$("#octo-bubble").hidden) {
+    setOctoOpen(false);
+    $("#octo-toggle").focus();
+  }
 });
 
 $("#profile-button").addEventListener("click", () => {

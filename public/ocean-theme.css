@@ -67,3 +67,24 @@
 @media (prefers-reduced-motion:reduce) {
  .ocean-ui *, .ocean-ui *::before, .ocean-ui *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
 }
+
+/* Compact status panel replaces the decorative mascot. */
+.status-center { display:flex; align-items:center; }
+.status-trigger { position:relative; display:grid; place-items:center; width:36px; height:36px; padding:0; border:1px solid transparent; border-radius:9px; background:transparent; color:var(--muted); cursor:pointer; }
+.status-trigger svg { width:19px; height:19px; }
+.status-trigger:hover,.status-trigger[aria-expanded=true] { background:var(--panel-2); border-color:var(--line); color:var(--ink); }
+.status-trigger > i { position:absolute; right:6px; top:5px; width:5px; height:5px; border-radius:50%; background:var(--cyan); box-shadow:0 0 0 2px var(--deep); }
+.status-center.critical .status-trigger { color:var(--danger); }
+.status-center.critical .status-trigger > i { background:var(--danger); }
+.status-popover { position:absolute; z-index:60; right:0; top:calc(100% + 12px); width:min(340px,calc(100vw - 32px)); max-height:calc(100dvh - 88px); overflow:auto; padding:20px; border:1px solid #35434b; border-radius:14px; color:var(--ink-soft); background:var(--panel); box-shadow:0 18px 60px #0005; }
+.status-popover[hidden] { display:none; }
+.status-popover header { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.status-popover header strong { color:var(--ink); font-size:14px; font-weight:550; }
+.status-popover header button { display:grid; place-items:center; width:26px; height:26px; padding:0; border:0; border-radius:50%; background:transparent; color:var(--muted); font-size:21px; cursor:pointer; }
+.status-popover header button:hover { background:var(--panel-3); color:var(--ink); }
+.status-label { display:inline-block; margin-top:14px; font-size:11px; color:var(--cyan); }
+.status-center.critical .status-label { color:var(--danger); }
+.status-popover p { font-size:13px; line-height:1.6; margin:8px 0; }
+.status-meta { color:var(--muted); font-size:11px; line-height:1.5; }
+.status-activity { display:flex; align-items:center; justify-content:space-between; width:100%; margin-top:18px; padding:14px 0 0; border:0; border-top:1px solid var(--line); background:transparent; color:var(--ink-soft); font-size:12px; cursor:pointer; }
+.status-activity:hover { color:var(--cyan); }
