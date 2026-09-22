@@ -8,7 +8,6 @@
 .ocean-workspace main { height:calc(100dvh - 64px); min-height:0; }
 .ocean-workspace .dashboard { height:100%; min-height:0; grid-template-columns:168px minmax(0,1fr); }
 .ocean-workspace .side-nav { padding:28px 12px; background:#10151a; }
-.nav-caption { display:block; padding:0 12px 20px; color:var(--muted); font-size:9px; letter-spacing:.1em; }
 .ocean-workspace .side-link { gap:12px; min-height:44px; padding:0 12px; margin-bottom:8px; font-size:13px; border-radius:8px; }
 .side-link svg { width:18px; height:18px; flex:none; }
 .ocean-workspace .side-link.active { color:#b5edde; background:#20352f; border-color:transparent; box-shadow:none; }
@@ -102,7 +101,8 @@
 .workspace-dialog .logbook ol { height:auto; max-height:none; }
 .workspace-dialog .logbook li { padding:12px; line-height:1.5; }
 .workspace-dialog .connection-disconnect { margin-top:12px; }
-.ocean-workspace .octo-dock { bottom:15px; left:15px; transform:scale(.68); transform-origin:bottom left; }
+.ocean-workspace .octo-dock { bottom:18px; left:18px; width:100px; height:100px; }
+.ocean-workspace .octo-avatar-button { width:100px; height:100px; }
 .ocean-workspace .vault-view { width:100%; min-height:0; flex:1; display:flex; flex-direction:column; gap:14px; place-items:normal; }
 .vault-intro { display:none; }
 .vault-notice { color:var(--muted); font-size:11px; margin:0; }
@@ -133,7 +133,6 @@
 .vault-footnote { color:var(--muted); font-size:10px; line-height:1.5; margin:0; max-width:950px; }
 @media (max-width:1200px) {
  .ocean-workspace .dashboard { grid-template-columns:132px minmax(0,1fr); }
- .nav-caption { display:none; }
  .ocean-workspace .side-nav { padding-inline:8px; }
  .ocean-workspace .side-link { font-size:12px; padding-inline:10px; gap:8px; }
  .ocean-workspace .workspace { padding:22px; gap:16px; }
