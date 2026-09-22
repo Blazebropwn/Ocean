@@ -1,0 +1,69 @@
+/* Shared Ocean palette and controls, used by every page. Layout lives separately. */
+:root {
+  --abyss:#0c1014; --deep:#10161b; --panel:#151c22; --panel-2:#1b242b; --panel-3:#243039;
+  --ink:#eff3f5; --ink-soft:#b9c4cd; --muted:#91a0ad; --line:#293139; --line-hot:#42655f;
+  --cyan:#77d8c4; --cyan-2:#77d8c4; --blue:#aecbf4; --good:#84d7af; --warn:#e4c18b;
+  --danger:#eca5aa; --shadow:none; --cut:15px;
+}
+.ocean-ui { background:var(--abyss); height:auto; min-height:100dvh; overflow-x:hidden; overflow-y:auto; }
+.ocean-ui::before,.ocean-ui .nav::after,.ocean-ui .auth-screen::before,.ocean-ui .auth-screen::after,
+.ocean-ui .auth-card::before,.ocean-ui .standalone-form::before,.ocean-ui .invite-shell::before { display:none; }
+.ocean-ui .nav { height:64px; padding-inline:28px; background:var(--deep); backdrop-filter:none; }
+.ocean-ui .brand { font-size:18px; letter-spacing:.16em; }
+.ocean-ui .brand span { text-shadow:none; }
+.ocean-ui main { height:auto; min-height:calc(100dvh - 64px); }
+.ocean-ui .auth-screen { height:auto; min-height:calc(100dvh - 64px); padding-block:28px; }
+.ocean-ui :is(.auth-card,.standalone-form,.invite-shell,.admin-section,.mail,.ocean-module,.agent-card,.agent-dialog,.profile-menu,.octo-bubble) { background:var(--panel); border-color:var(--line); box-shadow:none; }
+.ocean-ui :is(.auth-card,.standalone-form,.invite-shell,.admin-section) { border-radius:15px; }
+.ocean-ui .auth-card { padding:32px; }
+.ocean-ui :is(h1,h2,h3) { font-weight:550; }
+.ocean-ui :is(.form-page,.result-page,.mailbox) { height:auto; overflow:visible; padding-block:44px; }
+.ocean-ui :is(.form-page,.result-page,.mailbox) h1,.ocean-ui .admin-heading h1 { font-size:30px; letter-spacing:-.035em; }
+.ocean-ui .invite-page { height:auto; overflow:visible; }
+.ocean-ui label { font-weight:500; }
+.ocean-ui :is(input,select,textarea) { color:var(--ink); background:var(--deep); border-color:var(--line); border-radius:8px; }
+.ocean-ui input:focus { background:var(--deep); border-color:var(--cyan); box-shadow:none; }
+.ocean-ui :is(button,input,select,textarea) { font-family:inherit; }
+.ocean-ui :is(button,a,input,select,textarea):focus-visible { outline:2px solid var(--cyan); outline-offset:3px; }
+.ocean-ui .primary { background:var(--cyan); border-color:var(--cyan); color:#122b25; border-radius:8px; font-weight:600; box-shadow:none; }
+.ocean-ui .primary:hover { background:#91e2d1; filter:none; box-shadow:none; transform:none; }
+.ocean-ui .primary:disabled { opacity:.45; }
+.ocean-ui .tabs { background:var(--deep); border-radius:9px; }
+.ocean-ui .tab { font-size:13px; border-radius:6px; }
+.ocean-ui .tab.active { color:var(--ink); background:#34413f; box-shadow:none; font-weight:550; }
+.ocean-ui :is(.profile-menu,.agent-dialog,.octo-bubble) { border-color:#35434b; box-shadow:0 18px 60px #0005; }
+.ocean-ui .profile-menu::before { display:none; }
+.ocean-ui .profile-button span { background:#253d39; color:var(--cyan); border-color:var(--line-hot); border-radius:50%; box-shadow:none; }
+.ocean-ui :is(.telegram-code,.member-detail,.connection-panel,.game-canvas-wrap,.agent-summary,.agent-report,.agent-ledger li) { background:var(--deep); border-color:var(--line); box-shadow:none; }
+.ocean-ui :is(.utility-identity,.admin-heading,.section-heading) small { color:var(--muted); font-family:inherit; font-size:10px; font-weight:500; letter-spacing:.06em; }
+.ocean-ui .admin-heading > span { display:none; }
+.ocean-ui :is(.utility-identity > span,.bot-status,.invite-status) { font-family:inherit; font-size:10px; font-weight:500; letter-spacing:0; }
+.ocean-ui .utility-mark { background:#20352f; border-color:var(--line); }
+.ocean-ui :is(.telegram-mark i,.connection-state > i,.game-score strong) { box-shadow:none; text-shadow:none; }
+.ocean-ui .game-canvas-wrap::before,.ocean-ui .game-canvas-wrap::after { display:none; }
+.ocean-ui .game-canvas-wrap button { background:var(--cyan); color:#122b25; box-shadow:none; font-weight:600; letter-spacing:0; }
+.ocean-ui .game-score strong { font-family:inherit; font-weight:500; }
+.ocean-ui .game-bottom { line-height:1.5; }
+.ocean-ui .agent-dialog::backdrop { background:#03080bb0; backdrop-filter:blur(8px); }
+.ocean-ui .agent-dialog button { box-shadow:none; }
+.ocean-ui .agent-card button.primary { background:var(--cyan); }
+.ocean-ui .octo-avatar { animation:none; }
+.ocean-ui .octo-avatar-button:hover { transform:none; filter:none; }
+.ocean-ui .octo-avatar-button > i { box-shadow:none; animation:none; }
+.ocean-ui .message { line-height:1.5; }
+.ocean-ui .message:empty { min-height:0; margin:0; }
+.ocean-ui .invite-list article strong,.ocean-ui .member-detail-row span { overflow-wrap:anywhere; }
+.ocean-ui .member-detail-row span { min-width:0; }
+@media (max-width:560px) {
+ .ocean-ui .nav { height:56px; padding-inline:18px; }
+ .ocean-ui main,.ocean-ui .auth-screen { min-height:calc(100dvh - 56px); }
+ .ocean-ui .auth-card { padding:24px; }
+ .ocean-ui :is(.form-page,.result-page,.mailbox) { padding:28px 18px; }
+ .ocean-ui .standalone-form { padding:22px; }
+ .ocean-ui .game-bottom { flex-wrap:wrap; gap:8px; font-size:11px; }
+ .ocean-ui .utility-identity { gap:12px; }
+ .ocean-ui .utility-identity h1 { font-size:25px; }
+}
+@media (prefers-reduced-motion:reduce) {
+ .ocean-ui *, .ocean-ui *::before, .ocean-ui *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
+}

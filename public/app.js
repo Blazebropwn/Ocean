@@ -6,6 +6,8 @@ let kryptotronRefresh;
 let approvalRefresh;
 let entriesPaused = false;
 let dcaEnabled = false;
+let dcaDraftAmount = null;
+let dcaSaving = false;
 let streakEnabled = false;
 let arcadeState = null;
 let arcadeFrame = null;
@@ -13,6 +15,9 @@ let octoCloseTimer = null;
 let octoLastEventKey = null;
 let octoMuted = false;
 let agentLastRunId = null;
+let vaultSnapshot = null;
+let vaultPage = 0;
+let selectedPositionSymbol = null;
 
 const octoLabels = {
   idle: "ČEKÁM",
@@ -297,6 +302,9 @@ function showAppView(view, activeLink = null) {
     else link.removeAttribute("aria-current");
   });
   $("#workspace-title").textContent = selected === "overview" ? "Přehled" : selected === "arcade" ? "Arcade" : "Vault";
+  $("#workspace-subtitle").textContent = selected === "vault"
+    ? "Tvoje pravidelné nákupy a jejich historie."
+    : selected === "arcade" ? "Malá pauza pod hladinou." : "Peníze, strategie a poslední dění. Na jednom místě.";
   if (selected === "arcade") openArcade();
 }
 
@@ -335,9 +343,9 @@ function openArcade() {
 
 function drawArcadeSurface(ctx, width, height, now = 0) {
   const background = ctx.createLinearGradient(0, 0, width, height);
-  background.addColorStop(0, "#061d26");
-  background.addColorStop(.55, "#082832");
-  background.addColorStop(1, "#03151c");
+  background.addColorStop(0, "#151c22");
+  background.addColorStop(.55, "#151c22");
+  background.addColorStop(1, "#10161b");
   ctx.fillStyle = background;
   ctx.fillRect(0, 0, width, height);
 
@@ -356,7 +364,7 @@ function drawArcadeSurface(ctx, width, height, now = 0) {
   }
   ctx.stroke();
 
-  ctx.fillStyle = "rgba(84, 238, 226, .16)";
+  ctx.fillStyle = "rgba(119, 216, 196, .16)";
   for (let index = 0; index < 16; index += 1) {
     const x = ((index * .173 + now / 90000) % 1) * width;
     const y = ((index * .311 + now / 140000) % 1) * height;
@@ -379,14 +387,14 @@ function drawArcadeIdle() {
   drawArcadeSurface(ctx, width, height);
   const centerX = width / 2;
   const centerY = height / 2;
-  ctx.strokeStyle = "rgba(84, 238, 226, .34)";
+  ctx.strokeStyle = "rgba(119, 216, 196, .34)";
   ctx.lineWidth = 2;
   for (const radius of [.08, .17, .27]) {
     ctx.beginPath();
     ctx.arc(centerX, centerY, Math.min(width, height) * radius, 0, Math.PI * 2);
     ctx.stroke();
   }
-  ctx.fillStyle = "#54eee2";
+  ctx.fillStyle = "#77d8c4";
   ctx.beginPath();
   ctx.arc(centerX, centerY, 5, 0, Math.PI * 2);
   ctx.fill();
@@ -443,7 +451,7 @@ function drawSonar(ctx, width, height, now, delta) {
   const radius = Math.min(width, height) * .36;
   ctx.save();
   ctx.translate(x, y);
-  ctx.strokeStyle = "rgba(84, 238, 226, .13)";
+  ctx.strokeStyle = "rgba(119, 216, 196, .13)";
   ctx.lineWidth = Math.max(1, width / 1100);
   for (const ring of [.25, .5, .75, 1]) { ctx.beginPath(); ctx.arc(0, 0, radius * ring, 0, Math.PI * 2); ctx.stroke(); }
   for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 4) { ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius); ctx.stroke(); }
@@ -453,12 +461,12 @@ function drawSonar(ctx, width, height, now, delta) {
   ctx.lineWidth = Math.max(8, width / 100);
   ctx.beginPath(); ctx.arc(0, 0, radius, state.target - state.targetWidth / 2, state.target + state.targetWidth / 2); ctx.stroke();
   const sweep = ctx.createLinearGradient(0, 0, Math.cos(state.angle) * radius, Math.sin(state.angle) * radius);
-  sweep.addColorStop(0, "rgba(84,238,226,.12)"); sweep.addColorStop(1, "#54eee2");
-  ctx.shadowColor = "rgba(84, 238, 226, .8)";
+  sweep.addColorStop(0, "rgba(84,238,226,.12)"); sweep.addColorStop(1, "#77d8c4");
+  ctx.shadowColor = "rgba(119, 216, 196, .8)";
   ctx.lineWidth = Math.max(2, width / 650);
   ctx.strokeStyle = sweep;
   ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(state.angle) * radius, Math.sin(state.angle) * radius); ctx.stroke();
-  ctx.fillStyle = now < state.flashUntil ? "#ffffff" : "#54eee2";
+  ctx.fillStyle = now < state.flashUntil ? "#ffffff" : "#77d8c4";
   ctx.beginPath(); ctx.arc(0, 0, Math.max(5, width / 290), 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 }
@@ -482,6 +490,144 @@ window.addEventListener("resize", () => {
   if (!arcadeState?.active && !$("#arcade-game").classList.contains("hidden")) requestAnimationFrame(drawArcadeIdle);
 });
 
+function setSystemState(message, warning) {
+  $("#system-state-text").textContent = message;
+  $("#system-state").classList.toggle("warning", warning);
+}
+
+function setVaultUnavailable(message) {
+  $("#vault-notice").textContent = message;
+  $("#vault-notice").classList.add("warning");
+}
+
+function renderVault(snapshot) {
+  vaultSnapshot = snapshot;
+  const dca = snapshot.dca;
+  $("#vault-invested").textContent = formatPrice(dca.totalInvested, snapshot.balance.asset);
+  $("#vault-count").textContent = String(dca.purchaseCount);
+  $("#vault-amount").textContent = `${formatPrice(dca.amount, snapshot.balance.asset)} / aktivum`;
+  $("#vault-schedule").textContent = dca.enabled ? dca.statusText : "Pravidelné nákupy jsou pozastavené";
+  $("#vault-notice").textContent = `Historie načtena ${formatDate(snapshot.updatedAt)} · ${snapshot.environment === "mainnet" ? "ostrý provoz" : snapshot.environment === "testnet" ? "zkušební provoz" : "režim neověřen"}`;
+  $("#vault-notice").classList.remove("warning");
+  const filter = $("#vault-filter");
+  const selected = filter.value;
+  const all = document.createElement("option");
+  all.value = "all"; all.textContent = "Všechna aktiva";
+  filter.replaceChildren(all);
+  for (const symbol of [...new Set((dca.purchases || []).map((purchase) => purchase.symbol))].sort()) {
+    const option = document.createElement("option");
+    option.value = symbol; option.textContent = symbol.replace(snapshot.balance.asset, "");
+    filter.append(option);
+  }
+  filter.value = [...filter.options].some((option) => option.value === selected) ? selected : "all";
+  renderVaultPurchases();
+}
+
+function renderVaultPurchases() {
+  const table = $("#vault-purchases");
+  table.replaceChildren();
+  if (!vaultSnapshot) return;
+  const asset = vaultSnapshot.balance.asset;
+  const selected = $("#vault-filter").value;
+  const allPurchases = (vaultSnapshot.dca.purchases || []).filter((item) => selected === "all" || item.symbol === selected);
+  const pageSize = innerWidth <= 760 ? (innerHeight < 740 ? 2 : 3) : (innerHeight < 850 ? 4 : 6);
+  const pages = Math.max(1, Math.ceil(allPurchases.length / pageSize));
+  vaultPage = Math.min(vaultPage, pages - 1);
+  const purchases = allPurchases.slice(vaultPage * pageSize, (vaultPage + 1) * pageSize);
+  $("#vault-page").textContent = `${vaultPage + 1} / ${pages}`;
+  $("#vault-prev").disabled = vaultPage === 0;
+  $("#vault-next").disabled = vaultPage >= pages - 1;
+  $("#vault-empty").classList.toggle("hidden", purchases.length > 0);
+  $("#vault-empty").textContent = selected === "all" ? "Zatím nemáš evidovaný žádný DCA nákup. Po prvním provedeném nákupu se objeví tady." : "Pro toto aktivum nejsou evidované nákupy.";
+  for (const purchase of purchases) {
+    const row = document.createElement("tr");
+    const symbol = purchase.symbol.replace(asset, "");
+    const assetCell = document.createElement("td");
+    const label = document.createElement("span"); label.className = "vault-asset";
+    const icon = document.createElement("i"); icon.textContent = symbol.slice(0, 1); icon.setAttribute("aria-hidden", "true");
+    const name = document.createElement("strong"); name.textContent = symbol;
+    label.append(icon, name); assetCell.append(label); row.append(assetCell);
+    const at = Number.isFinite(Date.parse(purchase.at)) ? formatDate(purchase.at) : "Datum neevidováno";
+    for (const value of [at, `${formatQuantity(purchase.quantity)} ${symbol}`, formatPrice(purchase.amount, asset)]) {
+      const cell = document.createElement("td"); cell.textContent = value; row.append(cell);
+    }
+    table.append(row);
+  }
+}
+$("#vault-filter").addEventListener("change", () => { vaultPage = 0; renderVaultPurchases(); });
+$("#vault-prev").addEventListener("click", () => { vaultPage = Math.max(0, vaultPage - 1); renderVaultPurchases(); });
+$("#vault-next").addEventListener("click", () => { vaultPage += 1; renderVaultPurchases(); });
+window.addEventListener("resize", renderVaultPurchases);
+
+function node(tag, className, text) {
+  const element = document.createElement(tag);
+  if (className) element.className = className;
+  if (text !== undefined) element.textContent = text;
+  return element;
+}
+
+function renderPortfolio(snapshot) {
+  const symbols = { USDC: "$", BTC: "₿", ETH: "Ξ", SOL: "◎" };
+  const assets = snapshot.holdings?.assets || [];
+  const grid = $("#asset-grid"); grid.replaceChildren();
+  for (const symbol of ["USDC", "BTC", "ETH", "SOL"]) {
+    const holding = assets.find((item) => item.asset === symbol);
+    const amount = symbol === "USDC" ? snapshot.balance.amount : holding?.quantity;
+    const card = node("article", "asset-card");
+    card.classList.toggle("stale", symbol === "USDC" ? Boolean(snapshot.balance.error) || !Number.isFinite(Date.parse(snapshot.balance.updatedAt)) || Date.now() - Date.parse(snapshot.balance.updatedAt) > 180_000 : !snapshot.holdings || snapshot.holdings.stale);
+    const heading = node("div", "asset-heading");
+    heading.append(node("i", `asset-icon ${symbol.toLowerCase()}`, symbols[symbol]), node("span", "", symbol));
+    card.append(heading, node("strong", "", amount == null ? "—" : symbol === "USDC" ? new Intl.NumberFormat("cs-CZ", {minimumFractionDigits:2,maximumFractionDigits:2}).format(amount) : formatQuantity(amount)));
+    const subtitle = symbol === "USDC" ? "K dispozici" : snapshot.holdings?.stale ? "Čekám na aktualizaci" : holding?.value == null ? (amount === 0 ? "0,00 USDC" : "Ocenění nedostupné") : `≈ ${formatPrice(holding.value, "USDC")}`;
+    card.append(node("small", "", subtitle));
+    card.title = symbol === "USDC" ? "Volné USDC pro obchodování" : "Celkové množství na Spotu, včetně prostředků v otevřených objednávkách";
+    grid.append(card);
+  }
+  renderDcaPortfolio(snapshot);
+  const list = $("#positions-list"); list.replaceChildren();
+  const positions = snapshot.positions.filter((position) => position.inPosition);
+  $("#position-count").textContent = String(positions.length);
+  list.classList.toggle("compact", positions.length >= 3);
+  if (!positions.length) list.append(node("p", "positions-empty", snapshot.entriesPaused ? "Nové obchody jsou pozastavené." : "Žádná otevřená pozice. Čekám na signál."));
+  for (const position of positions) {
+    const asset = position.symbol.replace(snapshot.balance.asset, "");
+    const holding = assets.find((item) => item.asset === asset);
+    const price = snapshot.holdings?.stale ? null : holding?.price;
+    const pnl = price == null ? null : (price - position.entryPrice) * position.quantity;
+    const row = node("button", "position-row"); row.type = "button";
+    const info = node("span"); info.append(node("strong", "", asset), node("small", "", `${formatQuantity(position.quantity)} ${asset}`));
+    const result = node("span", "position-result");
+    result.append(node("strong", pnl == null ? "" : pnl >= 0 ? "positive" : "negative", pnl == null ? "—" : `${pnl >= 0 ? "+" : ""}${formatPrice(pnl, snapshot.balance.asset)}`), node("small", position.protectionActive ? "" : "unprotected", position.protectionActive ? "Ochrana aktivní" : "Ověř ochranu"));
+    result.title = pnl == null ? "Aktuální ocenění není dostupné" : `Orientační výsledek bez poplatků. Cena z ${formatDate(snapshot.holdings.capturedAt)}.`;
+    row.append(node("i", `asset-icon ${asset.toLowerCase()}`, symbols[asset] || asset.slice(0,1)), info, result, node("b", "", "›"));
+    row.setAttribute("aria-label", `Detail pozice ${asset}`);
+    row.addEventListener("click", () => { selectedPositionSymbol = position.symbol; updatePositionDetail(); $("#position-dialog").showModal(); });
+    list.append(row);
+  }
+  $("#next-check-short").textContent = snapshot.nextCheckAt ? `Další kontrola ${new Intl.DateTimeFormat("cs-CZ",{hour:"2-digit",minute:"2-digit",timeZone:"Europe/Prague"}).format(new Date(snapshot.nextCheckAt))}` : "Čekám na kontrolu";
+}
+
+function updatePositionDetail() {
+  if (!vaultSnapshot) return;
+  const position = vaultSnapshot.positions.find((item) => item.symbol === selectedPositionSymbol && item.inPosition);
+  if (!selectedPositionSymbol) return;
+  $("#bot-position").textContent = selectedPositionSymbol.replace(vaultSnapshot.balance.asset, "") + (position ? " · otevřená pozice" : " · pozice uzavřená");
+  $("#position-symbol").textContent = selectedPositionSymbol;
+  $("#bot-entry-price").textContent = position ? formatPrice(position.entryPrice, vaultSnapshot.balance.asset) : "—";
+  $("#bot-quantity").textContent = position ? formatQuantity(position.quantity) : "—";
+  $("#bot-stop-price").textContent = position?.protectionPrice ? formatPrice(position.protectionPrice, vaultSnapshot.balance.asset) : "—";
+  $("#bot-trail-activation").textContent = position?.protectionActivationPrice ? `${formatPrice(position.protectionActivationPrice, vaultSnapshot.balance.asset)} · ${formatBips(position.protectionTrailingBips)}` : "—";
+  $("#bot-protection").textContent = !position ? "—" : position.protectionActive ? "Ochrana aktivní" : "Vyžaduje kontrolu";
+}
+
+for (const button of document.querySelectorAll("[data-dialog]")) button.addEventListener("click", () => $("#" + button.dataset.dialog).showModal());
+for (const button of document.querySelectorAll("[data-close-dialog]")) button.addEventListener("click", () => button.closest("dialog").close());
+for (const dialog of document.querySelectorAll(".workspace-dialog")) dialog.addEventListener("click", (event) => { if (event.target === dialog) { const bounds = dialog.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) dialog.close(); } });
+for (const button of document.querySelectorAll("[data-compact]")) button.addEventListener("click", () => {
+  $(".portfolio-surface").dataset.compactView = button.dataset.compact;
+  for (const item of document.querySelectorAll("[data-compact]")) item.setAttribute("aria-pressed", String(item === button));
+});
+
 async function loadKryptotron() {
   try {
     const { kryptotron } = await request("/api/kryptotron");
@@ -489,19 +635,23 @@ async function loadKryptotron() {
     const statuses = { running: "Kontroluje trh", waiting: "Čeká na signál", degraded: "Vyžaduje pozornost", offline: "Nedostupný", unknown: "Propojeno" };
     const open = kryptotron.positions.find((position) => position.inPosition);
     entriesPaused = kryptotron.entriesPaused;
+    $("#bot-environment").textContent = kryptotron.environment === "mainnet" ? "Ostrý provoz" : kryptotron.environment === "testnet" ? "Zkušební provoz" : "Režim neověřen";
+    $("#position-symbol").textContent = open ? open.symbol.replace(kryptotron.balance.asset, "") : "Bez pozice";
+    const needsAttention = Boolean(kryptotron.lastError) || ["degraded", "offline", "unknown"].includes(kryptotron.status);
+    setSystemState(needsAttention ? "Vyžaduje pozornost" : "Spojení aktivní", needsAttention);
+    renderVault(kryptotron);
     const status = entriesPaused ? "Pozastaveno" : open ? "V pozici" : (statuses[kryptotron.status] || "Propojeno");
     $("#kryptotron-status").lastChild.textContent = ` ${status}`;
     $("#kryptotron-status").classList.toggle("warning", kryptotron.status === "degraded" || kryptotron.status === "offline");
-    $("#bot-balance").textContent = kryptotron.balance.amount === null
-      ? "—"
-      : `${new Intl.NumberFormat("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(kryptotron.balance.amount)} ${kryptotron.balance.asset}`;
     const balanceAt = Date.parse(kryptotron.balance.updatedAt);
     const balanceStale = !Number.isFinite(balanceAt) || Date.now() - balanceAt > 180_000 || balanceAt > Date.now() + 60_000;
-    $("#bot-balance-updated").textContent = kryptotron.balance.error
-      ? "Zůstatek se nedaří obnovit · zobrazená částka nemusí být aktuální"
-      : balanceStale
-        ? "Čekám na aktuální zůstatek · zobrazená částka nemusí být aktuální"
-        : `Ověřeno ${formatDate(kryptotron.balance.updatedAt)} · obnova přibližně každou minutu`;
+    const holdingsStale = !kryptotron.holdings || kryptotron.holdings.stale;
+    if (balanceStale || kryptotron.balance.error || holdingsStale) setSystemState("Zůstatky nejsou aktuální", true);
+    const captured = kryptotron.holdings?.capturedAt || kryptotron.balance.updatedAt;
+    $("#bot-balance-updated").textContent = captured && Number.isFinite(Date.parse(captured))
+      ? new Intl.DateTimeFormat("cs-CZ", {hour:"2-digit",minute:"2-digit",timeZone:"Europe/Prague"}).format(new Date(captured)) : "—";
+    $("#bot-balance-updated").title = captured ? `Zůstatky a ocenění portfolia: ${formatDate(captured)}. USDC: ${formatDate(kryptotron.balance.updatedAt)}.` : "Čekám na data";
+    renderPortfolio(kryptotron);
     $("#bot-position").textContent = open ? `${open.symbol} · v pozici` : "Bez otevřené pozice";
     dcaEnabled = kryptotron.dca.enabled;
     const dcaTest = $("#dca-test");
@@ -509,13 +659,13 @@ async function loadKryptotron() {
     dcaTest.classList.toggle("hidden", kryptotron.environment !== "testnet");
     dcaTest.disabled = dcaTestPending;
     dcaTest.textContent = dcaTestPending ? "Zpracovávám…" : kryptotron.dca.testStatus === "completed" ? "Otestovat znovu" : "Otestovat nákup";
-    $("#dca-status").textContent = kryptotron.dca.statusText;
-    $("#dca-control").textContent = dcaEnabled ? "Vypnout" : "Zapnout";
+    $("#dca-control").disabled = false;
+    $("#dca-settings-open").disabled = false;
+    $("#dca-toggle-status").textContent = dcaEnabled ? (kryptotron.entriesPaused ? "Čeká na obnovení" : "Zapnuto") : "Vypnuto";
+    $("#dca-amount-value").textContent = `${formatQuantity(kryptotron.dca.amount)} ${kryptotron.balance.asset}`;
     $("#dca-control").classList.toggle("enabled", dcaEnabled);
     $("#dca-control").setAttribute("aria-checked", String(dcaEnabled));
-    $("#dca-invested").textContent = `${new Intl.NumberFormat("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(kryptotron.dca.totalInvested)} ${kryptotron.balance.asset}`;
-    document.querySelectorAll("#dca-presets button").forEach((button) => button.classList.toggle("active", Number(button.dataset.amount) === kryptotron.dca.amount));
-    renderDcaProgress(kryptotron.dca.progress);
+    if (!$("#dca-dialog").open) dcaDraftAmount = kryptotron.dca.amount;
     streakEnabled = kryptotron.streak.enabled;
     $("#streak-control").textContent = streakEnabled ? "Vypnout" : "Zapnout";
     $("#streak-control").classList.toggle("enabled", streakEnabled);
@@ -541,11 +691,14 @@ async function loadKryptotron() {
     $("#bot-next-check").textContent = formatDate(kryptotron.nextCheckAt);
     $("#bot-error-wrap").classList.toggle("hidden", !kryptotron.lastError);
     $("#bot-error").textContent = kryptotron.lastError || "";
-    $("#bot-control").textContent = entriesPaused ? "Obnovit automatizaci" : "Pozastavit nové obchody";
+    $("#bot-control").textContent = entriesPaused ? "Obnovit" : "Pozastavit";
     $("#bot-control").classList.toggle("resume", entriesPaused);
+    updatePositionDetail();
     renderEvents(kryptotron.events);
     renderOcto(kryptotron.octo);
   } catch (error) {
+    setSystemState("Data nejsou dostupná", true);
+    setVaultUnavailable("Historii se nepodařilo obnovit. Zobrazené údaje mohou být neaktuální.");
     if (error.status === 502 || error.status === 503) {
       $("#kryptotron-degraded").classList.remove("hidden");
       $("#kryptotron-status").lastChild.textContent = " Data mimo dosah";
@@ -580,6 +733,13 @@ async function initializeKryptotron() {
       return;
     }
     renderDisconnectedOcto();
+    setSystemState(connection.status === "provisioning" ? "Připojuji Binance" : "Binance nepřipojena", false);
+    vaultSnapshot = null;
+    $("#vault-purchases").replaceChildren();
+    for (const id of ["vault-invested", "vault-count", "vault-amount"]) $("#" + id).textContent = "—";
+    $("#vault-empty").classList.remove("hidden");
+    $("#vault-schedule").textContent = "Nastavení se načte po připojení";
+    setVaultUnavailable("Připoj Binance v Přehledu a načti historii nákupů.");
     disconnect.classList.add("hidden");
     panel.classList.remove("hidden");
     $("#kryptotron").classList.add("connection-active");
@@ -595,6 +755,8 @@ async function initializeKryptotron() {
       $("#connection-message").textContent = "";
     }
   } catch (error) {
+    setSystemState("Připojení neověřeno", true);
+    setVaultUnavailable("Připojení se nepodařilo ověřit. Zobrazená historie může být neaktuální.");
     $("#kryptotron-status").lastChild.textContent = " Nepřipojeno";
     renderOcto({ state: "error", message: "Spojení se nepodařilo ověřit.", meta: "Zkusím to znovu automaticky", eventKey: "connection:error", autoOpen: true, critical: true });
   }
@@ -636,21 +798,45 @@ $("#disconnect-binance").addEventListener("click", async (event) => {
   }
 });
 
-function renderDcaProgress(progress) {
-  const container = $("#dca-progress");
-  container.replaceChildren();
-  for (const item of progress) {
-    const row = document.createElement("div");
-    const label = document.createElement("strong");
-    const track = document.createElement("span");
-    const fill = document.createElement("i");
-    const value = document.createElement("small");
-    label.textContent = item.asset;
-    fill.style.width = `${item.percentage}%`;
-    value.textContent = `${item.percentage.toFixed(2)} %`;
-    track.append(fill);
-    row.append(label, track, value);
-    container.append(row);
+function renderDcaPortfolio(snapshot) {
+  // Cost, goals and valuation all use the same bounded DCA purchase ledger.
+  const purchases = snapshot.dca.purchases || [];
+  const quantities = new Map();
+  let invested = 0;
+  for (const purchase of purchases) {
+    invested += purchase.amount;
+    const asset = purchase.symbol.replace(/USDC$/, "");
+    quantities.set(asset, (quantities.get(asset) || 0) + purchase.quantity);
+  }
+  let value = 0;
+  for (const [asset, quantity] of quantities) {
+    if (quantity === 0) continue;
+    const price = snapshot.holdings?.assets.find((holding) => holding.asset === asset)?.price;
+    if (snapshot.holdings?.stale || !Number.isFinite(price) || price <= 0) { value = null; break; }
+    value += quantity * price;
+  }
+  const scope = "Z evidované historie DCA, nejvýše 156 posledních nákupů.";
+  $("#dca-invested").textContent = formatPrice(invested, snapshot.balance.asset);
+  $("#dca-invested").title = scope;
+  const valuation = $("#dca-current-value");
+  valuation.textContent = value === null ? "—" : `${value > 0 ? "≈ " : ""}${formatPrice(value, snapshot.balance.asset)}`;
+  valuation.title = value === null ? "Čekám na aktuální ceny všech nakoupených aktiv." : `${scope} Nakoupené množství oceněné posledními dostupnými cenami (${formatDate(snapshot.holdings?.capturedAt)}). Nezohledňuje pozdější prodeje, převody ani poplatky.`;
+  valuation.classList.toggle("positive", value !== null && value > invested);
+  valuation.classList.toggle("negative", value !== null && value < invested);
+  const goals = $("#holdings-goals"); goals.replaceChildren();
+  for (const [asset, target] of [["BTC", 1], ["ETH", 10], ["SOL", 100]]) {
+    const quantity = quantities.get(asset) || 0;
+    const progress = Math.min(100, quantity / target * 100);
+    const row = node("div", "goal-row");
+    const percentage = progress > 0 && progress < 0.01 ? "< 0,01 %" : `${new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 2 }).format(progress)} %`;
+    row.append(node("strong", "", asset), node("small", "", percentage));
+    const track = node("div", "goal-track"); const fill = node("i"); fill.style.width = `${progress}%`;
+    track.setAttribute("role", "progressbar"); track.setAttribute("aria-label", `DCA cíl ${target} ${asset}`);
+    track.setAttribute("aria-valuemin", "0"); track.setAttribute("aria-valuemax", "100");
+    track.setAttribute("aria-valuenow", String(progress));
+    track.setAttribute("aria-valuetext", `${formatQuantity(quantity)} z ${target} ${asset}`);
+    row.title = `${formatQuantity(quantity)} / ${target} ${asset} · ${scope}`;
+    track.append(fill); row.append(track); goals.append(row);
   }
 }
 
@@ -720,20 +906,54 @@ $("#dca-test").addEventListener("click", async () => {
   }
 });
 
-document.querySelectorAll("#dca-presets button").forEach((button) => button.addEventListener("click", async () => {
-  const amount = Number(button.dataset.amount);
-  if (amount >= 100 && !confirm(`${amount} USDC se použije pro každý asset — až ${amount * 3} USDC za týden. Pokračovat?`)) return;
-  document.querySelectorAll("#dca-presets button").forEach((item) => { item.disabled = true; });
+function renderDcaDraft() {
+  const snapshot = vaultSnapshot;
+  if (!snapshot) return;
+  document.querySelectorAll("#dca-presets button").forEach((button) => {
+    const selected = Number(button.dataset.amount) === dcaDraftAmount;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  });
+  $("#dca-save").disabled = dcaSaving || dcaDraftAmount === snapshot.dca.amount;
+}
+
+$("#dca-settings-open").addEventListener("click", () => {
+  if (!vaultSnapshot || dcaSaving) return;
+  dcaDraftAmount = vaultSnapshot.dca.amount;
+  $("#dca-settings-error").textContent = "";
+  renderDcaDraft();
+  $("#dca-dialog").showModal();
+});
+
+document.querySelectorAll("#dca-presets button").forEach((button) => button.addEventListener("click", () => {
+  dcaDraftAmount = Number(button.dataset.amount);
+  $("#dca-settings-error").textContent = "";
+  renderDcaDraft();
+}));
+
+$("#dca-settings-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!vaultSnapshot || dcaSaving || dcaDraftAmount === vaultSnapshot.dca.amount) return;
+  const amount = dcaDraftAmount;
+  if (amount >= 100 && !confirm(`Uložit ${amount} USDC na každé aktivum pro příští DCA nákupy?`)) return;
+  dcaSaving = true;
+  $("#dca-save").disabled = true;
+  $("#dca-save").textContent = "Ukládám…";
+  document.querySelectorAll("#dca-presets button").forEach((button) => { button.disabled = true; });
   try {
     await request("/api/kryptotron/dca/amount", { method: "POST", body: JSON.stringify({ amount }) });
+    $("#dca-dialog").close();
     await loadKryptotron();
   } catch (error) {
-    $("#bot-error-wrap").classList.remove("hidden");
-    $("#bot-error").textContent = error.message;
+    $("#dca-settings-error").textContent = error.message;
+    if (!$("#dca-dialog").open) $("#dca-dialog").showModal();
   } finally {
-    document.querySelectorAll("#dca-presets button").forEach((item) => { item.disabled = false; });
+    dcaSaving = false;
+    $("#dca-save").textContent = "Uložit";
+    document.querySelectorAll("#dca-presets button").forEach((button) => { button.disabled = false; });
+    renderDcaDraft();
   }
-}));
+});
 
 $("#streak-control").addEventListener("click", async () => {
   const button = $("#streak-control");

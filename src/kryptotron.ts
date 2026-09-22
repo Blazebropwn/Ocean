@@ -1,3 +1,4 @@
+import { readHoldings } from "./holdings.js";
 type SupabaseRow = Record<string, unknown>;
 
 export type KryptotronOctoState = "idle" | "scanning" | "calculating" | "trade_open" | "profit" | "loss" | "error" | "sleep";
@@ -23,7 +24,8 @@ export type KryptotronSnapshot = {
   entriesPaused: boolean;
   events: Array<{ type: string; message: string; at: string }>;
   balance: { amount: number | null; asset: string; updatedAt: string | null; error: string | null };
-  dca: { enabled: boolean; amount: number; symbols: string[]; completedWeek: string | null; statusText: string; totalInvested: number; purchaseCount: number; testStatus: string | null; progress: Array<{ symbol: string; asset: string; quantity: number; target: number; percentage: number }>; lastRun: Array<{ symbol: string; status: string; amount: number | null; reason: string | null }> };
+  holdings: ReturnType<typeof readHoldings>;
+  dca: { enabled: boolean; amount: number; symbols: string[]; completedWeek: string | null; statusText: string; totalInvested: number; purchaseCount: number; purchases: Array<{ symbol: string; at: string | null; amount: number; quantity: number }>; testStatus: string | null; progress: Array<{ symbol: string; asset: string; quantity: number; target: number; percentage: number }>; lastRun: Array<{ symbol: string; status: string; amount: number | null; reason: string | null }> };
   streak: { enabled: boolean; paperMode: boolean; rUsdc: number; status: string; streak: number; trades: number; wins: number; losses: number; netPnl: number; sessionDate: string | null; lockReason: string | null };
   positions: Array<{
     symbol: string;
@@ -368,6 +370,7 @@ export async function loadKryptotronSnapshot(url: string, key: string, stateKey 
       updatedAt: stringOrNull(data.account_balance_at),
       error: stringOrNull(data.account_balance_error),
     },
+    holdings: readHoldings(data.portfolio_snapshot),
     dca: {
       enabled: rawDca.enabled === true,
       amount: Number(rawDca.amount ?? 5),
@@ -376,6 +379,12 @@ export async function loadKryptotronSnapshot(url: string, key: string, stateKey 
       statusText: dcaStatusText(rawDca),
       totalInvested: dcaPurchases.reduce((sum, purchase) => sum + (finiteNumberOrNull(purchase.amount) ?? 0), 0),
       purchaseCount: dcaPurchases.length,
+      purchases: dcaPurchases.flatMap((purchase) => {
+        const amount = finiteNumberOrNull(purchase.amount);
+        const quantity = finiteNumberOrNull(purchase.quantity);
+        if (typeof purchase.symbol !== "string" || amount === null || quantity === null || amount < 0 || quantity < 0) return [];
+        return [{ symbol: purchase.symbol, at: stringOrNull(purchase.at), amount, quantity }];
+      }).slice(-156).reverse(),
       testStatus: rawDca.test_request && typeof rawDca.test_request === "object"
         ? stringOrNull((rawDca.test_request as Record<string, unknown>).status)
         : null,
