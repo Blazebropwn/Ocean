@@ -21,7 +21,7 @@ ENV NODE_ENV=production \
     KRYPTOTRON_PYTHON=/opt/venv/bin/python
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl gosu python3 python3-venv \
+    && apt-get install -y --no-install-recommends ca-certificates curl gosu python3 python3-venv bubblewrap \
     && rm -rf /var/lib/apt/lists/* \
     && python3 -m venv /opt/venv
 

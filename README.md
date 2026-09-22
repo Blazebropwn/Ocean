@@ -71,6 +71,19 @@ historii i notifikace předává internímu API Oceanu. Nedostává Supabase
 ani Telegram klíč a bez brokeru se nespustí. Supabase `bot_state.key`
 a `bot_trades.instance_id` oddělují účty; přístup má jen server Oceanu.
 
+Všichni workeři nicméně běží pod stejným OS uživatelem ve stejném
+kontejneru. `KRYPTOTRON_SANDBOX_ENABLED=true` každého z nich navíc
+spustí v `bubblewrap` sandboxu (vlastní PID namespace, vlastní
+`/tmp`, a filesystem omezený jen na Python runtime, kód Kryptotronu
+a jeho vlastní pracovní adresář) — worker tak nemůže přečíst
+adresář jiné instance ani vidět ostatní procesy. Síť zůstává sdílená
+s hostitelem, protože worker potřebuje dosáhnout na `127.0.0.1`
+(interní API Oceanu) i na Binance. Vyžaduje balíček `bubblewrap` a
+jádro s podporou unprivileged user namespaces (výchozí na Debianu,
+ne nutně na všech hostovaných platformách) — před nasazením na
+ostrý účet ověřte na testnet instanci, že se workeři s tímto
+přepínačem vůbec spustí.
+
 Původní `main` je pouze migrační identifikátor. Převod na osobní instanci
 popisuje [sjednocení Kryptotronu](docs/kryptotron-consolidation.md).
 Neprovádějte ho prostým připojením stejného Binance účtu podruhé.

@@ -35,6 +35,7 @@ export type Config = {
   agentTelegramNotificationsEnabled?: boolean;
   kryptotronMainnetEnabled?: boolean;
   opsMonitorEnabled?: boolean;
+  kryptotronSandboxEnabled?: boolean;
 };
 
 export function loadConfig(env = process.env): Config {
@@ -75,5 +76,6 @@ export function loadConfig(env = process.env): Config {
     agentTelegramNotificationsEnabled: env.OCEAN_AGENT_TELEGRAM_NOTIFICATIONS_ENABLED === "true",
     kryptotronMainnetEnabled: env.KRYPTOTRON_MAINNET_ENABLED === "true",
     opsMonitorEnabled: env.OCEAN_OPS_MONITOR_ENABLED === "true",
+    kryptotronSandboxEnabled: env.KRYPTOTRON_SANDBOX_ENABLED === "true",
   };
 }

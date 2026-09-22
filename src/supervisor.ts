@@ -5,6 +5,7 @@ import type { FastifyBaseLogger } from "fastify";
 import type { Config } from "./config.js";
 import { credentialsKey, credentialsKeys, decryptCredentialWithKeys } from "./credentials.js";
 import type { OceanDatabase } from "./db.js";
+import { sandboxedSpawn } from "./sandbox.js";
 import { workerAccessToken } from "./worker-auth.js";
 
 type RunnableInstance = {
@@ -144,7 +145,11 @@ export function startKryptotronSupervisor(config: Config, db: OceanDatabase, log
         const workingDirectory = resolve(dirname(config.databasePath), "instances", instance.id);
         mkdirSync(join(workingDirectory, "logs"), { recursive: true, mode: 0o700 });
         const script = resolve(process.cwd(), "services", "kryptotron", "bot.py");
-        const child = spawn(config.kryptotronPython ?? "python", [script], {
+        const pythonPath = config.kryptotronPython ?? "python";
+        const { command, args } = config.kryptotronSandboxEnabled
+          ? sandboxedSpawn(pythonPath, script, workingDirectory)
+          : { command: pythonPath, args: [script] };
+        const child = spawn(command, args, {
           cwd: workingDirectory,
           env: workerEnvironment(process.env, instance, apiKey, apiSecret, config, workerAccessToken(encryptionKey, instance.id)),
           stdio: ["ignore", "pipe", "pipe"],
