@@ -87,6 +87,7 @@ DEFAULT_PAIR_STATE = {
     "protection_stop_price": None,
     "protection_activation_price": None,
     "protection_trailing_bips": None,
+    "protection_failures": 0,
 }
 
 DEFAULT_STATE = {
@@ -185,10 +186,19 @@ def reconcile_pending_order(client, state):
         return state
     if intent.get("side") != "BUY":
         raise RuntimeError("Neznámý nedokončený typ objednávky")
-    order = client.get_order(
-        symbol=intent["symbol"],
-        origClientOrderId=intent["client_order_id"],
-    )
+    try:
+        order = client.get_order(
+            symbol=intent["symbol"],
+            origClientOrderId=intent["client_order_id"],
+        )
+    except BinanceAPIException as exc:
+        if exc.code != -2013:
+            raise
+        state["pending_order"] = None
+        if not save_state(state):
+            raise RuntimeError("Ztracenou objednávku se nepodařilo bezpečně uložit")
+        log.warning(f"[{intent['symbol']}] Objednávka na Binance nikdy nevznikla, stav vyčištěn")
+        return state
     outcome = classify_order(order)
     if outcome == "filled":
         apply_filled_buy(state, intent, order)
@@ -273,6 +283,42 @@ def reconcile_pending_protection(client, state):
         raise RuntimeError("Obnovenou OCO ochranu se nepodařilo bezpečně uložit")
     log.warning(f"[{symbol}] Obnovena OCO ochrana po restartu")
     return state
+
+
+MAX_PROTECTION_FAILURES = 2
+
+
+def secure_protection_or_exit(client, state, symbol, ps, base, step_size, tick_size, trailing_bounds):
+    """Umístí OCO ochranu; po opakovaném selhání pozici nouzově uzavře market prodejem
+    místo aby ji nechala bez ochrany na burze čekat na další cyklus."""
+    request = protection_request(
+        symbol, ps, get_balance(client, base, raise_on_error=True),
+        step_size, tick_size, trailing_bounds,
+    )
+    try:
+        place_protection(client, state, symbol, request)
+    except Exception as exc:
+        ps["protection_failures"] = ps.get("protection_failures", 0) + 1
+        failures = ps["protection_failures"]
+        if not save_state(state):
+            raise RuntimeError("Počet neúspěšných pokusů o ochranu se nepodařilo bezpečně uložit") from exc
+        if failures < MAX_PROTECTION_FAILURES:
+            raise
+        log.error(f"[{symbol}] Ochranu se nepodařilo nastavit {failures}x — nouzový market exit")
+        exit_price = sell_market(client, ps, symbol, step_size)
+        state = record_close(state, symbol, exit_price, "PROTECTION_FAILURE")
+        ps["protection_failures"] = 0
+        if not save_state(state):
+            raise RuntimeError("Nouzový výstup se nepodařilo bezpečně uložit") from exc
+        tg_alert(
+            state, f"protection-exit:{symbol}",
+            f"🚨 <b>Nouzový výstup — {symbol}</b>\nOchranu se opakovaně nepodařilo aktivovat, "
+            f"pozice byla uzavřena market prodejem.\n{str(exc)[:200]}",
+        )
+        return False
+    ps["protection_failures"] = 0
+    log.info(f"[{symbol}] Burzovní OCO ochrana aktivována")
+    return True
 
 
 def sync_protection(client, state, symbol):
@@ -793,6 +839,8 @@ def run():
         log.info("OCEAN_HEARTBEAT")
         try:
             enforce_safe_api_permissions(client, state)
+            state     = reconcile_pending_order(client, state)
+            state     = reconcile_pending_protection(client, state)
             state     = reset_periods(state)
             pair_data = {}
 
@@ -818,12 +866,11 @@ def run():
                     # ── V POZICI ─────────────────────────────────────────────
                     if ps["in_position"]:
                         if not ps.get("protection_client_id"):
-                            request = protection_request(
-                                symbol, ps, get_balance(client, base, raise_on_error=True),
+                            if not secure_protection_or_exit(
+                                client, state, symbol, ps, base,
                                 step_size, tick_size, protection_filters[symbol]
-                            )
-                            place_protection(client, state, symbol, request)
-                            log.info(f"[{symbol}] Burzovní OCO ochrana aktivována")
+                            ):
+                                continue
 
                         protection = sync_protection(client, state, symbol)
                         if protection["status"] == "filled":
@@ -833,11 +880,11 @@ def run():
                             clear_protection(ps)
                             if not save_state(state):
                                 raise RuntimeError("Zrušenou ochranu se nepodařilo bezpečně uložit")
-                            request = protection_request(
-                                symbol, ps, get_balance(client, base, raise_on_error=True),
+                            if not secure_protection_or_exit(
+                                client, state, symbol, ps, base,
                                 step_size, tick_size, protection_filters[symbol]
-                            )
-                            place_protection(client, state, symbol, request)
+                            ):
+                                continue
                             protection = sync_protection(client, state, symbol)
                         if protection["status"] != "active":
                             raise RuntimeError("Pozice nemá aktivní burzovní ochranu")
@@ -925,24 +972,23 @@ def run():
                                         save_state(state)
                                         raise RuntimeError("Nákup proběhl, ale stav se nepodařilo potvrdit")
 
-                                    request = protection_request(
-                                        symbol, ps, get_balance(client, base, raise_on_error=True),
+                                    if secure_protection_or_exit(
+                                        client, state, symbol, ps, base,
                                         step_size, tick_size, protection_filters[symbol]
-                                    )
-                                    place_protection(client, state, symbol, request)
-                                    add_event(state, "TRADE", f"{symbol} · pozice otevřena @ {entry_price:.2f}")
-                                    save_state(state)
+                                    ):
+                                        add_event(state, "TRADE", f"{symbol} · pozice otevřena @ {entry_price:.2f}")
+                                        save_state(state)
 
-                                    log.info(f"[{symbol}] Nakoupeno a chráněno: {qty_filled} {base} @ {entry_price:.2f}")
-                                    tg(
-                                        f"📈 <b>Trend Entry (bull regime) — {symbol}</b>\n"
-                                        f"{DIVIDER}\n"
-                                        f"💵 Nakoupeno: <b>{qty_filled} {base}</b>\n"
-                                        f"📈 Cena vstupu: <b>{entry_price:.2f} {QUOTE_ASSET}</b>\n"
-                                        f"🎯 Strategie: drž do Death Cross\n"
-                                        f"🛡️ Nouzový SL: {entry_price * (1 - MAX_SL_PCT / 100):.2f} | "
-                                        f"Trail aktivace: +{TRAIL_ACTIVATE_PCT}%"
-                                    )
+                                        log.info(f"[{symbol}] Nakoupeno a chráněno: {qty_filled} {base} @ {entry_price:.2f}")
+                                        tg(
+                                            f"📈 <b>Trend Entry (bull regime) — {symbol}</b>\n"
+                                            f"{DIVIDER}\n"
+                                            f"💵 Nakoupeno: <b>{qty_filled} {base}</b>\n"
+                                            f"📈 Cena vstupu: <b>{entry_price:.2f} {QUOTE_ASSET}</b>\n"
+                                            f"🎯 Strategie: drž do Death Cross\n"
+                                            f"🛡️ Nouzový SL: {entry_price * (1 - MAX_SL_PCT / 100):.2f} | "
+                                            f"Trail aktivace: +{TRAIL_ACTIVATE_PCT}%"
+                                        )
                         else:
                             gap_pct   = (data["ema_slow"] - data["ema_fast"]) / data["ema_slow"] * 100
                             today_str = now_utc().strftime("%Y-%m-%d")
