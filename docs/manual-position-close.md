@@ -1,7 +1,8 @@
 # Ruční uzavření trendové pozice
 
-Vývojová větev `work/kryptotron-v1-validation`. Funkce není nasazená na
-produkčním mainnet workeru.
+Funkce je připravená pro produkční release z větve `main`; původně byla
+ověřena na `work/kryptotron-v1-validation`. Rozsah, preflight a postup rollout
+jsou v [release záznamu](releases/manual-close-2026-09-29.md).
 
 ## Chování
 
