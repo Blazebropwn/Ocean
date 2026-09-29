@@ -8,10 +8,10 @@ import { openDatabase } from "../src/db.js";
 import { migrateDatabase, type DatabaseMigration } from "../src/database/migrate.js";
 
 const expectedTables = [
-  "admin_audit_log", "agent_ledger_entries", "agent_runs", "agents", "email_verification_tokens", "invitations",
+  "admin_audit_log", "agent_ledger_entries", "agent_runs", "agents", "email_verification_tokens", "genesis_codes", "genesis_redemptions", "invitations",
   "kryptotron_credentials", "kryptotron_instances", "mail_outbox", "password_reset_tokens",
-  "schema_migrations", "security_events", "sessions", "telegram_bot_state",
-  "telegram_confirmations", "telegram_connections", "telegram_pairings", "users", "worker_notifications",
+  "schema_migrations", "security_events", "sessions", "slot_spins", "telegram_bot_state",
+  "telegram_confirmations", "telegram_connections", "telegram_pairings", "tide_ledger", "users", "worker_notifications",
 ];
 
 test("a new database receives the versioned Ocean schema exactly once", () => {
@@ -23,6 +23,7 @@ test("a new database receives the versioned Ocean schema exactly once", () => {
     { version: 2, name: "agent_001_foundation" },
     { version: 3, name: "admin_audit_log" },
     { version: 4, name: "worker_notifications" },
+    { version: 5, name: "tide_economy" },
   ]);
   assert.equal((db.pragma("foreign_keys", { simple: true }) as number), 1);
   db.close();
@@ -37,7 +38,7 @@ test("reopening a database is idempotent and preserves rows", () => {
 
   db = openDatabase(path);
   assert.equal((db.prepare("SELECT COUNT(*) AS count FROM users WHERE id = 'usr_preserved'").get() as { count: number }).count, 1);
-  assert.equal((db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get() as { count: number }).count, 4);
+  assert.equal((db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get() as { count: number }).count, 5);
   assert.equal(String(db.pragma("journal_mode", { simple: true })).toLowerCase(), "wal");
   db.close();
   rmSync(directory, { recursive: true, force: true });

@@ -64,7 +64,15 @@ kompatibilní reconciliation není bezpečný postup. Nepřepisovat stav starou
 zálohou a neopakovat vyplněný prodej. Případná další oprava musí zachovat
 evidenci skutečného plnění a zbytku.
 
-## Stav nasazení: blokováno platformou
+## Nasazení po obnovení Railway
+
+Railway později přijalo ověřený commit `7907ef4`. Deployment
+`a45ff00a-134e-4d76-b6ca-94232a83c75c` dosáhl stavu SUCCESS.
+Veřejné `/api/health` a `/api/ready` vrátily 200/OK; HTML, JS i CSS
+odpovídají obsahovým otiskům ověřené opravy. Nová TIDE ekonomika vzniká
+odděleně ve větvi `work/tide-genesis-slot` a není součástí tohoto buildu.
+
+### Historie původního zablokování
 
 K 2026-09-29 17:43 UTC je oprava commitnutá a pushnutá na `main`:
 `ee58b51` (funkční oprava) a `7907ef4` (CI runner). Kompletní
@@ -78,7 +86,7 @@ Produkční nasazení **dosud neproběhlo**. Railway odmítlo explicitní
 `Deploys have been paused temporarily`. Provozovatel hlásí
 [incident API / deployments](https://status.railway.com/incident/YYTG8I10).
 
-Nasazení a produkční ověření zůstávají nedokončené.
+V tomto okamžiku byly nasazení a produkční ověření nedokončené.
 
-Po obnovení Railway zbývá nasadit ověřený commit a provést výše uvedenou
-čtecí kontrolu obnovy. Nebyl spuštěný žádný automatický opakovací deploy job.
+Čekalo se na obnovení Railway; nebyl spuštěný žádný automatický opakovací
+deploy job. Následné úspěšné nasazení je zaznamenáno výše.

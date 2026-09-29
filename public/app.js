@@ -46,6 +46,7 @@ async function request(path, options = {}) {
 }
 
 function showUser(user) {
+  window.OceanEconomy.setUser(user);
   const accessApproved = user.accessApproved ?? user.emailVerified;
   document.body.classList.add("dashboard-active");
   document.body.classList.toggle("access-pending", !accessApproved);
@@ -67,7 +68,7 @@ function showUser(user) {
   $("#verify-banner-text").textContent = user.approvalMode === "owner" ? "Účet čeká na schválení vlastníkem." : "Ověřte svůj e-mail.";
   $("#verify-mailbox-link").classList.toggle("hidden", user.approvalMode === "owner");
   $("#resend-verification").classList.toggle("hidden", user.approvalMode === "owner");
-  const initialView = location.hash === "#arcade" ? "arcade" : location.hash === "#vault" ? "vault" : "overview";
+  const initialView = ["arcade", "vault", "gift", "slot"].includes(location.hash.slice(1)) ? location.hash.slice(1) : "overview";
   const initialLink = document.querySelector(`.side-link[href="${location.hash || "#dashboard"}"]`);
   showAppView(initialView, initialLink);
   clearInterval(kryptotronRefresh);
@@ -204,24 +205,32 @@ $("#agent-dialog").addEventListener("click", (event) => {
 });
 
 function showAppView(view, activeLink = null) {
-  const selected = ["overview", "arcade", "vault"].includes(view) ? view : "overview";
+  const selected = ["overview", "arcade", "vault", "gift", "slot"].includes(view) ? view : "overview";
+  document.body.classList.toggle("slot-mode", selected === "slot");
   if (selected !== "arcade") {
     cancelAnimationFrame(arcadeFrame);
     if (arcadeState) arcadeState.active = false;
   }
   document.querySelectorAll(".app-view").forEach((panel) => panel.classList.toggle("hidden", panel.id !== `${selected}-view`));
   document.querySelectorAll(".side-link[data-view]").forEach((link) => {
-    const active = activeLink ? link === activeLink : link.dataset.view === selected;
+    const active = activeLink ? link === activeLink : link.dataset.view === (selected === "slot" ? "arcade" : selected);
     link.classList.toggle("active", active);
     if (active) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   });
-  $("#workspace-title").textContent = selected === "overview" ? "Přehled" : selected === "arcade" ? "Arcade" : "Vault";
+  $("#workspace-title").textContent = { overview: "Přehled", arcade: "Arcade", slot: "Arcade", vault: "Vault", gift: "Gift" }[selected];
   $("#workspace-subtitle").textContent = selected === "vault"
     ? "Tvoje pravidelné nákupy a jejich historie."
     : selected === "arcade" ? "Malá pauza pod hladinou." : "Peníze, strategie a poslední dění. Na jednom místě.";
   if (selected === "arcade") openArcade();
+  window.OceanEconomy.open(selected);
 }
+
+document.querySelectorAll("[data-open-view]").forEach(link => link.addEventListener("click", event => {
+  event.preventDefault();
+  history.replaceState(null, "", `#${link.dataset.openView}`);
+  showAppView(link.dataset.openView);
+}));
 
 document.querySelectorAll(".side-link[data-view]").forEach((link) => link.addEventListener("click", (event) => {
   event.preventDefault();
@@ -400,7 +409,7 @@ function runArcade(now) {
 
 $("#game-tap").addEventListener("click", arcadeTap);
 $("#game-canvas").addEventListener("pointerdown", arcadeTap);
-window.addEventListener("keydown", (event) => { if (event.code === "Space" && !$("#arcade-game").classList.contains("hidden")) { event.preventDefault(); arcadeTap(); } });
+window.addEventListener("keydown", (event) => { if (event.code === "Space" && !$("#arcade-view").classList.contains("hidden") && !event.target.closest("button,a,input,textarea,select,dialog")) { event.preventDefault(); arcadeTap(); } });
 window.addEventListener("resize", () => {
   if (!arcadeState?.active && !$("#arcade-game").classList.contains("hidden")) requestAnimationFrame(drawArcadeIdle);
 });

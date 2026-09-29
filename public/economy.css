@@ -1,0 +1,70 @@
+.gift-view { display:grid; place-items:center; padding:30px 0; }
+.gift-card { width:min(100%,480px); text-align:center; padding:36px; border:1px solid var(--line); border-radius:22px; background:linear-gradient(145deg,#1b2d31,#121c23); }
+.gift-mark { display:block; font:64px Georgia,serif; color:var(--cyan); line-height:1; margin-bottom:26px; }
+.gift-card h2 { margin:16px 0; font-size:26px; letter-spacing:-.03em; }
+.gift-card p { color:var(--muted); line-height:1.7; }
+#genesis-form { text-align:left; margin:30px 0; display:grid; gap:12px; }
+#genesis-form label { color:var(--ink-soft); font-size:12px; }
+#genesis-code { width:100%; padding:16px; border:1px solid #385652; border-radius:9px; color:var(--ink); background:#0d191f; font:17px ui-monospace,monospace; letter-spacing:.08em; text-transform:uppercase; }
+#genesis-submit,.gift-result button { min-height:48px; border:1px solid #78c9b8; border-radius:9px; background:#a6dfcf; color:#112d28; font:inherit; cursor:pointer; padding:12px 20px; }
+.gift-result { display:grid; gap:18px; margin-top:30px; }
+.gift-result strong { color:var(--cyan); letter-spacing:.09em; }
+.gift-result span { color:var(--ink-soft); }
+.gift-card .tide-note,.tide-note { color:var(--muted); font-size:12px; line-height:1.7; }
+#genesis-message { min-height:24px; color:var(--cyan); }
+#genesis-message.error { color:var(--warn); }
+#profile-genesis { color:var(--cyan); letter-spacing:.1em; }
+.slot-entry { display:flex; align-items:center; gap:16px; padding:16px 22px; border:1px solid #36534d; border-radius:14px; background:linear-gradient(125deg,#1a3539,#132229); color:var(--ink); text-decoration:none; margin-bottom:22px; }
+.slot-entry span { display:grid; gap:6px; }.slot-entry small { color:var(--muted); }.slot-entry > b { margin-left:auto; color:var(--cyan); font-size:25px; }
+.ocean-workspace .arcade-view { overflow:visible; display:flex; flex-direction:column; gap:22px; }
+.arcade-view .slot-entry { margin-bottom:0; flex:none; }
+.arcade-view .arcade-game { height:auto; min-height:440px; flex:1; }
+.slot-mode .workspace-head { display:none; }
+.slot-view { display:grid; place-items:center; min-height:min(740px,100%); padding:24px 0; }
+.slot-machine { --cell:112px; width:min(100%,490px); padding:32px 30px 26px; position:relative; overflow:hidden; border-radius:26px; border:1px solid #526d69; background:linear-gradient(135deg,#3b5556,#152f36 22%,#0c212a 75%,#344d4e); box-shadow:0 24px 65px #0006,inset 0 1px #accab755,inset 0 0 0 5px #09202977; }
+.slot-machine::before,.slot-machine::after { content:'+'; position:absolute; top:10px; left:12px; font:14px monospace; color:#82978b; }
+.slot-machine::after { left:auto; right:12px; }
+.slot-monitor { border-radius:15px; background:#071b22; box-shadow:0 1px #66887c55; }
+.slot-reels { position:relative; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; border:7px solid #05151c; outline:1px solid #385b59; border-radius:13px; overflow:hidden; }
+.slot-reel { height:208px; position:relative; overflow:hidden; background:radial-gradient(ellipse,#17414a,#09232d 74%); }
+.slot-track { position:absolute; top:48px; inset-inline:0; will-change:transform; }
+.slot-cell { height:var(--cell); display:grid; place-items:center; }
+.slot-cell img { width:96px; height:96px; filter:drop-shadow(0 7px 7px #0006); }
+.slot-reels::after { content:''; position:absolute; inset:0; pointer-events:none; background:linear-gradient(#03131def,transparent 30%,transparent 69%,#03131def); box-shadow:inset 0 0 22px #0007; }
+.slot-payline { position:absolute; top:50%; inset-inline:0; border-top:1px solid #b8e7d220; z-index:2; }
+.slot-payline::before,.slot-payline::after { content:''; position:absolute; top:-4px; border:4px solid transparent; border-left-color:#a1d6ba; }
+.slot-payline::after { right:0; border-left-color:transparent; border-right-color:#a1d6ba; }
+#slot-message { margin:0; padding:14px 8px; min-height:48px; color:#a3c7be; text-align:center; font-size:12px; line-height:1.5; }
+.slot-paytable { display:grid; gap:4px; width:100%; max-width:302px; margin:22px auto; }
+.slot-payrow { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:34px; }
+.slot-payrow > span { display:flex; gap:3px; }.slot-payrow img { width:30px; height:30px; }
+.slot-payrow > strong { font:13px ui-monospace,monospace; color:#c2d9d2; font-weight:400; white-space:nowrap; }
+.slot-payrow.winner { border-radius:7px; background:#294d434d; box-shadow:0 0 20px #8fd5b511; }
+.slot-balance { border-top:1px solid #41605b88; padding-top:20px; text-align:center; font:26px ui-monospace,monospace; color:#cef3df; font-variant-numeric:tabular-nums; }
+.slot-balance small { font:12px system-ui,sans-serif; letter-spacing:.1em; }
+.slot-control { display:grid; justify-items:center; gap:10px; margin-top:20px; }
+#slot-spin { width:104px; height:70px; display:grid; place-items:center; border:1px solid #d8ffe4; border-radius:18px; color:#193c33; background:linear-gradient(#c5f2d5,#87c8ac); box-shadow:0 5px 0 #3c6b5b,0 8px 24px #0004,inset 0 1px #eefff1; cursor:pointer; }
+#slot-spin svg { width:51px; height:39px; }
+#slot-spin:active:not(:disabled) { transform:translateY(3px); box-shadow:0 2px 0 #3c6b5b; }
+#slot-spin:disabled { opacity:.48; cursor:default; }
+#slot-spin:focus-visible { outline:2px solid #cdf9de; outline-offset:7px; }
+#slot-cost { color:#8eb6ab; font-size:11px; letter-spacing:.09em; }
+.slot-machine.anticipating .slot-reels { box-shadow:0 0 28px #93e4bb25; }
+.slot-machine.won .slot-monitor { box-shadow:0 0 30px #80f3cd22; }
+.slot-machine.won #slot-message { color:#cefde2; font-size:17px; }
+#tide-history { padding:0; margin:22px 0; list-style:none; }
+#tide-history li { display:flex; justify-content:space-between; align-items:center; gap:18px; padding:14px 0; border-bottom:1px solid var(--line); }
+#tide-history li span { display:grid; gap:7px; font-size:13px; }
+#tide-history small { color:var(--muted); font-size:11px; }
+#tide-history strong { white-space:nowrap; font:14px ui-monospace,monospace; }
+#tide-history-more { background:var(--panel); border:1px solid var(--line); color:var(--ink); padding:12px 18px; border-radius:8px; cursor:pointer; }
+@media (max-width:600px) {
+ .gift-card { padding:26px 20px; }.gift-card h2 { font-size:23px; }
+ .slot-view { padding:8px 0 24px; min-height:0; }
+ .slot-machine { padding:25px 14px 24px; border-radius:20px; --cell:90px; }
+ .slot-reel { height:166px; }.slot-track { top:38px; }.slot-cell img { width:76px; height:76px; }
+ .slot-paytable { margin:18px auto; max-width:260px; }.slot-payrow img { width:27px; height:27px; }
+ .slot-balance { font-size:24px; }.slot-entry { padding:12px; }
+}
+@media (prefers-reduced-motion:reduce) { .slot-track { will-change:auto; } }
+@media (max-width:560px) { .ocean-workspace .side-nav { grid-template-columns:repeat(4,minmax(0,1fr)); } }

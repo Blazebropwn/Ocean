@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs>
+<linearGradient id="a" x2=".7" y2="1"><stop stop-color="#c9ffe6"/><stop offset=".45" stop-color="#5dd5c1"/><stop offset="1" stop-color="#167b90"/></linearGradient><linearGradient id="b" x2=".8" y2="1"><stop stop-color="#ffead4"/><stop offset=".45" stop-color="#e5b8b7"/><stop offset="1" stop-color="#977ca2"/></linearGradient><radialGradient id="c" cx=".35" cy=".3"><stop stop-color="#e6ffff"/><stop offset=".35" stop-color="#84f9df"/><stop offset=".8" stop-color="#178f9a"/><stop offset="1" stop-color="#0b4e6b"/></radialGradient>
+
+
+<symbol id="shell" viewBox="0 0 100 100"><path d="M39 78L17 48Q9 29 27 28Q30 11 44 20Q54 9 64 22Q82 16 85 33Q99 44 82 58L62 79Z" fill="url(#b)" stroke="#f1d8cd" stroke-width="1.4"/><path d="M50 73L27 31M51 73L43 24M54 73L62 26M56 74L79 36" stroke="#fff2e0" stroke-width="2" opacity=".65"/><path d="M37 78Q50 67 65 78L61 84H42Z" fill="#e0bfb9"/></symbol>
+
+
+</defs><use href="#shell"/></svg>
