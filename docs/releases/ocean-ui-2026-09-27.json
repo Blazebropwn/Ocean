@@ -1,0 +1,52 @@
+{
+  "baseCommit": "88d8383373c63e17e87edaed881c0267fd3111f5",
+  "previousDeployment": "16fc9acc-a28b-4473-b336-a73784f011e1",
+  "project": "ac07ade2-00bd-439f-9222-ee8521225b07",
+  "service": "fbda6d06-4998-4e60-86fe-8b8cc72b4a94",
+  "environment": "db50dd0a-365e-4389-8f76-3fea462d2f0c",
+  "url": "https://ocean-production-f479.up.railway.app",
+  "files": {
+    "public/index.html": "b7c490f53a0ccea1617722e82db4b4675980f4bc8ada9b90fa5445d6e023d8cb",
+    "public/ocean-workspace.css": "44dc20a3b2d7e757d9b3569caf1c6ae80e31bc7bc95d9b051d6328775d922f1a"
+  },
+  "validation": {
+    "nodeTestFiles": 28,
+    "pythonTests": 73,
+    "browserLayoutChecks": 18,
+    "browserViewportSizes": 6
+  },
+  "deploymentStatus": "SUCCESS",
+  "deploymentId": "23d4f7ce-fdf2-4cf4-9438-3c08e8412d68",
+  "productionVerification": {
+    "checkedAt": "2026-09-29T05:59:02.941Z",
+    "checks": [
+      {
+        "path": "/api/health",
+        "status": 200,
+        "body": {
+          "ok": true
+        }
+      },
+      {
+        "path": "/api/ready",
+        "status": 200,
+        "body": {
+          "ok": true,
+          "issues": 0
+        }
+      },
+      {
+        "path": "/",
+        "status": 200,
+        "sha256": "39ef5a366c185f9651253ad7233ceb17a0b80c23b65affd948c7bdd54c6dc251",
+        "matchesRelease": true
+      },
+      {
+        "path": "/ocean-workspace.css",
+        "status": 200,
+        "sha256": "44dc20a3b2d7e757d9b3569caf1c6ae80e31bc7bc95d9b051d6328775d922f1a",
+        "matchesRelease": true
+      }
+    ]
+  }
+}
