@@ -68,8 +68,11 @@ neprokazuje, že jiný proces nepoužívá stejné Binance credentials.
 
 ### Živý průchod
 
-Tento krok je připravený, zatím nebyl proveden. Vyžaduje samostatný
-testovací Ocean účet/instanci a Binance Spot Testnet credentials. Zachovej
+Celý přirozený strategický průchod zatím není dokončený. Startup a obnova
+izolované instance byly ověřené; dne 2026-09-29 navíc proběhl skutečný
+[řízený test ručního výstupu](manual-position-close.md) včetně OCO a pauzy.
+Následující širší průchod vyžaduje samostatný testovací Ocean účet/instanci
+a Binance Spot Testnet credentials. Zachovej
 `KRYPTOTRON_MAINNET_ENABLED=false`. Použij stávající supervisor a broker;
 nespouštěj druhého workera na stejném účtu. Testnet se resetuje — takový
 reset je mismatch k prověření, nikoliv důvod smazat interní historii.

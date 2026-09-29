@@ -1,4 +1,8 @@
 const reasons: Record<string, string> = {
+  MANUAL_CLOSE: "Uživatel ručně uzavřel pozici. Pro tento pár následuje hodinová pauza.",
+  AWAITING_STRATEGY_CHECK: "Pauza skončila. Čekám na další pravidelnou kontrolu strategie.",
+  PAIR_COOLDOWN: "Po ručním uzavření běží hodinová pauza pro tento pár.",
+  MANUAL_CLOSE_PENDING: "Ruční uzavření čeká na potvrzení burzou.",
   ENTRY_ALLOWED: "Býčí režim a dostupný rizikový rozpočet dovolují vstup.",
   BEAR_REGIME: "EMA50 není nad EMA200. Strategie čeká na býčí režim.",
   POSITION_ALREADY_OPEN: "Pozice je otevřená a má potvrzenou burzovní ochranu.",
@@ -38,12 +42,15 @@ export function readKryptotronTransparency(data: Record<string, unknown>, now = 
   const decisions = Object.entries(record(data.decisions)).flatMap(([symbol, value]) => {
     const item = record(value), at = date(item.checkedAt), risk = record(item.risk);
     if (!/^[A-Z0-9]{3,20}$/.test(symbol) || !at) return [];
-    const code = typeof item.reasonCode === "string" && reasons[item.reasonCode] ? item.reasonCode : "STALE_STATE";
+    let code = typeof item.reasonCode === "string" && reasons[item.reasonCode] ? item.reasonCode : "STALE_STATE";
+    const cooldown = date(record(data.pair_cooldowns)[symbol]);
+    if (cooldown && Date.parse(cooldown) > now) code = "PAIR_COOLDOWN";
+    else if (code === "PAIR_COOLDOWN") code = "AWAITING_STRATEGY_CHECK";
     return [{ symbol, checkedAt: at, stale: now - Date.parse(at) > 4 * 3_600_000 + 120_000 || Date.parse(at) > now + 30_000,
       marketRegime: item.marketRegime === "BULL" ? "BULL" : item.marketRegime === "BEAR" ? "BEAR" : "UNKNOWN",
       price: number(item.price), emaFast: number(item.emaFast), emaSlow: number(item.emaSlow),
-      positionState: item.positionState === "OPEN" ? "OPEN" : "FLAT",
-      decision: ["NO_ENTRY", "ENTRY_ALLOWED", "HOLD", "REVIEW", "EXIT_REQUIRED"].includes(String(item.decision)) ? String(item.decision) : "REVIEW",
+      positionState: code !== "PAIR_COOLDOWN" && item.positionState === "OPEN" ? "OPEN" : "FLAT",
+      decision: code === "PAIR_COOLDOWN" ? "NO_ENTRY" : ["NO_ENTRY", "ENTRY_ALLOWED", "HOLD", "REVIEW", "EXIT_REQUIRED"].includes(String(item.decision)) ? String(item.decision) : "REVIEW",
       reasonCode: code, reason: reasons[code]!, nextCheckAt: date(item.nextCheckAt),
       risk: { maxOrderQuote: number(risk.maxOrderQuote), positionPct: number(risk.positionPct),
         stopLossPct: number(risk.stopLossPct), dailyLossLimit: number(risk.dailyLossLimit), weeklyLossLimit: number(risk.weeklyLossLimit) },

@@ -6,9 +6,10 @@ from datetime import datetime
 import math
 
 from config import settings
+from manual_close import active_request
 
 
-def entry_permission(state, now, *, require_reconciliation=True):
+def entry_permission(state, now, *, require_reconciliation=True, symbol=None):
     if state.get("api_permissions_safe") is False:
         return "RECONCILIATION_REQUIRED", "Oprávnění API klíče nejsou bezpečně ověřená."
     if state.get("pending_trade_logs"):
@@ -17,6 +18,15 @@ def entry_permission(state, now, *, require_reconciliation=True):
         return "RECONCILIATION_REQUIRED", "Stav účtu vyžaduje ověření. Nové nákupy jsou zablokované."
     if state.get("entries_paused", True):
         return "ENTRIES_PAUSED", "Nové obchody jsou pozastavené uživatelem."
+    if active_request(state):
+        return "MANUAL_CLOSE_PENDING", "Ruční uzavření čeká na potvrzení burzou."
+    if symbol and state.get("pair_cooldowns", {}).get(symbol):
+        try:
+            until = datetime.fromisoformat(state["pair_cooldowns"][symbol])
+            if now < until:
+                return "PAIR_COOLDOWN", "Po ručním uzavření běží hodinová pauza pro tento pár."
+        except (TypeError, ValueError):
+            return "STALE_STATE", "Čas přestávky není platný."
     if state.get("pending_order") or state.get("pending_protection") or state.get("dca", {}).get("pending"):
         return "RECONCILIATION_REQUIRED", "Předchozí objednávka čeká na ověření na burze."
     if require_reconciliation:
@@ -49,7 +59,7 @@ def entry_permission(state, now, *, require_reconciliation=True):
             return "STALE_STATE", "Čas posledního obchodu je v budoucnosti."
         if state.get("consecutive_losses", 0) >= settings.MAX_CONSECUTIVE_LOSSES and elapsed < settings.COOLDOWN_AFTER_LOSS_HRS:
             return "COOLDOWN_ACTIVE", "Po sérii ztrát běží ochranná přestávka."
-        if state.get("last_trade_result") == "WIN" and elapsed < settings.COOLDOWN_AFTER_WIN_HRS:
+        if state.get("last_trade_result") == "WIN" and state.get("last_trade_reason") != "MANUAL_CLOSE" and elapsed < settings.COOLDOWN_AFTER_WIN_HRS:
             return "COOLDOWN_ACTIVE", "Po ziskovém obchodu běží přestávka."
     return "ENTRY_ALLOWED", "Býčí režim a dostupný rizikový rozpočet dovolují vstup."
 
@@ -62,7 +72,7 @@ def position_budget(free_quote):
 
 def decision_snapshot(state, symbol, data, now, *, minimum=0, free_quote=None):
     position = state.get("positions", {}).get(symbol, {})
-    code, reason = entry_permission(state, now)
+    code, reason = entry_permission(state, now, symbol=symbol)
     decision = "NO_ENTRY"
     if position.get("in_position"):
         if state.get("safe_mode"):

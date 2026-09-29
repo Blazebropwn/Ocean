@@ -42,6 +42,7 @@ from utils import (
 from order_safety import apply_filled_buy, classify_order, new_buy_intent, with_execution_fills
 from reconciliation import inspect_account
 from risk import entry_permission, position_budget, decision_snapshot
+from manual_close import active_request, position_id
 from events import add_event
 from dca import run_weekly_dca, settle_pending_dca
 from streak import can_trade as streak_can_trade, close_trade as streak_close_trade, ensure_session as ensure_streak_session, open_trade as streak_open_trade
@@ -205,7 +206,7 @@ def safety_failure(state, code, diagnostic):
 
 
 def reconcile_account(client, state, pair_filters):
-    """Recover known executions, then inspect the account without corrective trades."""
+    """Recover executions, fulfill explicit manual exits, then inspect the account."""
     try:
         reconcile_pending_order(client, state)
         reconcile_pending_protection(client, state)
@@ -215,6 +216,7 @@ def reconcile_account(client, state, pair_filters):
                 outcome = sync_protection(client, state, symbol)
                 if outcome["status"] == "filled":
                     close_from_protection(state, symbol, outcome)
+        process_manual_close(client, state, pair_filters)
         pairs = [{"symbol": symbol, "base": symbol.removesuffix(QUOTE_ASSET),
                   "step_size": filters[0]} for symbol, filters in pair_filters.items()]
         result = inspect_account(client, state, pairs, now=now_utc(), quote_asset=QUOTE_ASSET)
@@ -281,7 +283,20 @@ def reconcile_pending_order(client, state):
 def refresh_entries_control(state):
     remote_state = db.load_state()
     if remote_state is not None:
+        remote_close = remote_state.get("manual_close") or {}
+        pending = state.get("pending_order") or {}
+        # A completion PATCH can commit even when its HTTP response is lost.
+        # Reload that authoritative completion instead of recording the fill again.
+        if (pending.get("reason") == "MANUAL_CLOSE"
+                and remote_close.get("id") == pending.get("manual_request_id")
+                and remote_close.get("status") == "completed"
+                and not remote_state.get("pending_order")):
+            state.clear()
+            state.update(copy.deepcopy(remote_state))
         state["entries_paused"] = remote_state.get("entries_paused", True)
+        remote_close = remote_state.get("manual_close")
+        if remote_close and remote_close.get("id") != (state.get("manual_close") or {}).get("id"):
+            state["manual_close"] = copy.deepcopy(remote_close)
         remote_dca = remote_state.get("dca", {})
         if isinstance(remote_dca, dict) and "enabled" in remote_dca:
             state.setdefault("dca", {})["enabled"] = remote_dca["enabled"] is True
@@ -429,6 +444,69 @@ def cancel_protection_for_market_exit(client, state, symbol):
     return True
 
 
+def process_manual_close(client, state, pair_filters):
+    """Resume one durable exit. An ambiguous SELL is only queried, never resubmitted."""
+    request = active_request(state)
+    if not request:
+        return
+    symbol = request["symbol"]
+    ps = state.get("positions", {}).get(symbol, {})
+    if not ps.get("in_position") or position_id(ps) != request["position_id"]:
+        request.update(status="superseded", completed_at=now_utc().isoformat())
+        if not save_state(state):
+            raise RuntimeError("Výsledek ručního požadavku není uložený")
+        return
+    if state.get("pending_order") or state.get("pending_protection") or state.get("dca", {}).get("pending"):
+        raise RuntimeError("Ruční prodej čeká na ověření předchozí objednávky")
+    if state.get("api_permissions_safe") is not True or symbol not in pair_filters:
+        raise RuntimeError("Ruční prodej nemá ověřená oprávnění nebo filtry")
+    if request["status"] == "queued":
+        age = (now_utc() - datetime.fromisoformat(request["requested_at"])).total_seconds()
+        if not 0 <= age <= 300:
+            request.update(status="rejected", completed_at=now_utc().isoformat())
+            if not save_state(state):
+                raise RuntimeError("Odmítnutí zastaralého požadavku není uložené")
+            return
+        pairs = [{"symbol": s, "base": s.removesuffix(QUOTE_ASSET), "step_size": f[0]}
+                 for s, f in pair_filters.items()]
+        if inspect_account(client, state, pairs, now=now_utc(), quote_asset=QUOTE_ASSET)["status"] != "OK":
+            raise RuntimeError("Ruční prodej čeká na soulad účtu s burzou")
+        request["status"] = "cancelling"
+    if request["status"] == "cancelling":
+        # Re-save on resume too: the preceding attempt may have failed to persist.
+        if not save_state(state):
+            raise RuntimeError("Záměr zrušení ochrany není uložený")
+        # The original OCO identity survives a timeout or a crash during cancellation.
+        outcome = sync_protection(client, state, symbol)
+        if outcome["status"] == "active":
+            cancel_protection(client, symbol, ps["protection_client_id"])
+            outcome = sync_protection(client, state, symbol)
+        if outcome["status"] == "filled":
+            close_from_protection(state, symbol, outcome)
+            request.update(status="superseded", completed_at=now_utc().isoformat())
+            if not save_state(state):
+                raise RuntimeError("Uzavření ochranou není uložené")
+            return
+        if outcome["status"] != "cancelled":
+            raise RuntimeError("Zrušení ochrany není potvrzené; prodej čeká")
+        clear_protection(ps)
+        request["status"] = "ready"
+        if not save_state(state):
+            raise RuntimeError("Potvrzení zrušení ochrany není uložené")
+    if request["status"] == "ready":
+        # Re-check holdings after cancellation/restart. Only this position's
+        # intentionally removed protection may be absent; never sell external coins.
+        pairs = [{"symbol": s, "base": s.removesuffix(QUOTE_ASSET), "step_size": f[0]}
+                 for s, f in pair_filters.items()]
+        check = inspect_account(client, state, pairs, now=now_utc(), quote_asset=QUOTE_ASSET)
+        if any(issue.get("code") != "PROTECTION_ERROR" or issue.get("symbol") != symbol
+               for issue in check.get("issues", [])):
+            raise RuntimeError("Stav účtu po zrušení ochrany vyžaduje kontrolu")
+        execute_market_exit(client, state, symbol, pair_filters[symbol][0], "MANUAL_CLOSE")
+    elif request["status"] == "selling":
+        raise RuntimeError("Ruční prodej čeká na ověření uloženého záměru")
+
+
 def reset_periods(state):
     today = now_utc().strftime("%Y-%m-%d")
     if state["daily_loss_date"] != today:
@@ -439,8 +517,8 @@ def reset_periods(state):
     return state
 
 
-def can_trade(state):
-    code, reason = entry_permission(state, now_utc())
+def can_trade(state, symbol=None):
+    code, reason = entry_permission(state, now_utc(), symbol=symbol)
     return code == "ENTRY_ALLOWED", reason
 
 
@@ -454,9 +532,26 @@ def finalize_market_exit(state, intent, order):
     ps = state.get("positions", {}).get(intent["symbol"], {})
     if not ps.get("in_position") or abs(ps.get("position_qty", 0)-quantity) > intent.get("step_size", 1e-12):
         raise RuntimeError("Potvrzený prodej nepokrývá evidovanou pozici")
+    request = state.get("manual_close") or {}
+    if intent["reason"] == "MANUAL_CLOSE" and (
+        request.get("id") != intent.get("manual_request_id") or request.get("status") != "selling"
+        or request.get("symbol") != intent["symbol"] or request.get("position_id") != position_id(ps)
+    ):
+        raise RuntimeError("Ruční prodej neodpovídá uloženému požadavku")
     before = copy.deepcopy(state)
     record_close(state, intent["symbol"], quote / quantity, intent["reason"])
     state["pending_order"] = None
+    if intent["reason"] == "MANUAL_CLOSE":
+        # Start after confirmation, even when a fill is recovered after a restart.
+        confirmed = now_utc()
+        until = (confirmed + timedelta(hours=1)).isoformat()
+        state.setdefault("pair_cooldowns", {})[intent["symbol"]] = until
+        request.update(status="completed", completed_at=confirmed.isoformat(), cooldown_until=until)
+        if intent["symbol"] in state.get("decisions", {}):
+            state["decisions"][intent["symbol"]].update(
+                positionState="FLAT", decision="NO_ENTRY", reasonCode="PAIR_COOLDOWN")
+        # Keep risk limits/loss streaks, but a manual WIN must not pause other pairs.
+        state["last_trade_reason"] = "MANUAL_CLOSE"
     if not save_state(state):
         state.clear()
         state.update(before)
@@ -476,6 +571,12 @@ def execute_market_exit(client, state, symbol, step_size, reason):
               "created_at": now_utc().isoformat(), "reason": reason, "step_size": step_size}
     if intent["quantity"] <= 0:
         raise RuntimeError("Množství prodeje nesplňuje burzovní filtr")
+    if reason == "MANUAL_CLOSE":
+        request = active_request(state)
+        if not request or request["status"] != "ready" or request["symbol"] != symbol or request["position_id"] != position_id(ps):
+            raise RuntimeError("Ruční prodej nemá platný potvrzený požadavek")
+        intent["manual_request_id"] = request["id"]
+        request["status"] = "selling"
     state["pending_order"] = intent
     if not save_state(state):
         raise RuntimeError("Záměr prodeje není uložený; příkaz nebyl odeslaný")
@@ -546,6 +647,7 @@ def record_close(state, symbol, exit_price, reason):
     )
     clear_protection(ps)
     state["last_trade_time"] = now_utc().isoformat()
+    state["last_trade_reason"] = reason
     add_event(state, "TRADE", f"{symbol} · pozice uzavřena · {pnl:+.2f} {QUOTE_ASSET}")
     return state
 
@@ -883,6 +985,7 @@ def run():
 
     db.init()
     state = load_state()
+    state["manual_close_version"] = 1
 
     current_ip = None
     try:
@@ -1006,6 +1109,8 @@ def run():
 
                     # ── V POZICI ─────────────────────────────────────────────
                     if ps["in_position"]:
+                        if (active_request(state) or {}).get("symbol") == symbol:
+                            continue
                         if not ps.get("protection_client_id"):
                             if not secure_protection_or_exit(
                                 client, state, symbol, ps, base,
@@ -1080,7 +1185,7 @@ def run():
                         if data["bull"]:
                             state = refresh_entries_control(state)
                             reconcile_account(client, state, pair_filters)
-                            allowed, reason = can_trade(state)
+                            allowed, reason = can_trade(state, symbol)
                             state["decisions"][symbol] = decision_snapshot(
                                 state, symbol, data, now_utc(), minimum=min_notional,
                                 free_quote=state.get("reconciliation", {}).get("available_quote"))

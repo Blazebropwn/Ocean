@@ -302,3 +302,22 @@
  .strategy-card { padding:18px; }
  .decision-grid { grid-template-columns:1fr; }
 }
+
+.position-with-actions { display:flex; align-items:center; gap:16px; border-bottom:1px solid var(--line); }
+.position-with-actions:last-child { border-bottom:0; }
+.position-with-actions .position-row { flex:1; min-width:0; border-bottom:0; }
+.position-close { flex-shrink:0; padding:9px 12px; border:1px solid #67484e; border-radius:8px; background:transparent; color:var(--ink); cursor:pointer; }
+.position-close:hover:not(:disabled) { background:#35292d; }
+.position-close:disabled { opacity:.5; cursor:default; }
+.position-cooldown { color:var(--muted); font-size:13px; line-height:1.6; }
+.close-estimate { display:grid; grid-template-columns:1fr auto; gap:12px; }
+.close-estimate dd { margin:0; font-variant-numeric:tabular-nums; }
+#close-position-dialog p { line-height:1.6; }
+#close-position-dialog .muted { color:var(--muted); font-size:13px; }
+@media (max-width:600px) {
+ .position-with-actions { flex-wrap:wrap; gap:0; padding-bottom:12px; }
+ .position-with-actions .position-row { flex-basis:100%; }
+ .position-close { margin-left:auto; }
+ .close-estimate { grid-template-columns:1fr; gap:5px; }
+ .close-estimate dd { margin-bottom:8px; }
+}

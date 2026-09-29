@@ -15,6 +15,9 @@ let agentLastRunId = null;
 let vaultSnapshot = null;
 let vaultPage = 0;
 let selectedPositionSymbol = null;
+let closePositionSelection = null;
+let closePositionSubmitting = false;
+let closePositionPoll = null;
 
 function setProfileOpen(open) {
   $("#profile-menu").classList.toggle("hidden", !open);
@@ -515,8 +518,25 @@ function renderPortfolio(snapshot) {
     row.append(node("i", `asset-icon ${asset.toLowerCase()}`, symbols[asset] || asset.slice(0,1)), info, result, node("b", "", "›"));
     row.setAttribute("aria-label", `Detail pozice ${asset}`);
     row.addEventListener("click", () => { selectedPositionSymbol = position.symbol; updatePositionDetail(); $("#position-dialog").showModal(); });
-    list.append(row);
+    const wrapper = node("div", "position-with-actions");
+    const close = node("button", "position-close", "Uzavřít"); close.type = "button";
+    close.setAttribute("aria-label", `Uzavřít pozici ${asset}`);
+    const pending = snapshot.manualClose?.request;
+    close.disabled = !snapshot.manualClose?.available || !position.positionId || !["BTCUSDC", "ETHUSDC"].includes(position.symbol) || !position.protectionActive || closePositionSubmitting;
+    if (pending?.positionId === position.positionId && ["queued", "cancelling", "ready", "selling"].includes(pending.status)) close.textContent = "Uzavírání…";
+    close.title = close.disabled ? "Uzavření čeká na ověřený stav nebo dokončení předchozího požadavku." : "Prodat tuto pozici a pozastavit pár na 60 minut";
+    close.addEventListener("click", () => openClosePosition(position, snapshot));
+    wrapper.append(row, close); list.append(wrapper);
   }
+  for (const cooldown of snapshot.manualClose?.cooldowns || []) {
+    list.append(node("p", "position-cooldown", `${cooldown.symbol.replace(snapshot.balance.asset, "")} · Pauza po ručním uzavření do ${formatDate(cooldown.until)}. ${snapshot.entriesPaused ? "Bot je dál celkově pozastavený." : "Poté rozhodne další pravidelná kontrola."}`));
+  }
+  const closeRequest = snapshot.manualClose?.request;
+  if (closeRequest && ["queued", "cancelling", "ready", "selling"].includes(closeRequest.status)) {
+    list.append(node("p", "position-cooldown", snapshot.transparency?.safeMode ? "Ruční uzavření čeká na ověření burzou. Nový prodej se neodesílá." : "Ruční uzavření se zpracovává. Potvrzení může trvat přibližně minutu."));
+    if (!closePositionPoll) closePositionPoll = setTimeout(() => { closePositionPoll = null; loadKryptotron(); }, 5000);
+  }
+  updateClosePositionStatus(snapshot);
   $("#next-check-short").textContent = snapshot.nextCheckAt ? `Další kontrola ${new Intl.DateTimeFormat("cs-CZ",{hour:"2-digit",minute:"2-digit",timeZone:"Europe/Prague"}).format(new Date(snapshot.nextCheckAt))}` : "Čekám na kontrolu";
 }
 
@@ -575,6 +595,53 @@ function renderStrategy(snapshot) {
     trades.append(item);
   }
 }
+
+function openClosePosition(position, snapshot) {
+  closePositionSelection = { symbol: position.symbol, positionId: position.positionId };
+  const asset = position.symbol.replace(snapshot.balance.asset, "");
+  $("#close-position-title").textContent = `Uzavřít pozici ${asset}`;
+  $("#close-position-quantity").textContent = `Prodat ${formatQuantity(position.quantity)} ${asset} · ${snapshot.environment === "testnet" ? "Zkušební provoz" : "Ostrý provoz"}`;
+  const holding = snapshot.holdings?.assets?.find(item => item.asset === asset);
+  const price = snapshot.holdings?.stale ? null : holding?.price;
+  $("#close-position-proceeds").textContent = price == null ? "Nedostupný" : `≈ ${formatPrice(price * position.quantity, snapshot.balance.asset)}`;
+  $("#close-position-pnl").textContent = price == null ? "Nedostupný" : `≈ ${formatPrice((price - position.entryPrice) * position.quantity, snapshot.balance.asset)}`;
+  $("#close-position-message").textContent = "";
+  $("#close-position-confirm").disabled = false;
+  $("#close-position-confirm").textContent = "Potvrdit prodej";
+  $("#close-position-dialog").showModal();
+}
+
+function updateClosePositionStatus(snapshot) {
+  if (!closePositionSelection || !$("#close-position-dialog").open || closePositionSubmitting) return;
+  const request = snapshot.manualClose?.request;
+  const button = $("#close-position-confirm");
+  if (request?.symbol === closePositionSelection.symbol && request.positionId === closePositionSelection.positionId) {
+    const messages = { queued: "Požadavek je uložený. Čekám na zpracování botem.", cancelling: "Ověřuji zrušení ochrany pozice.", ready: "Připravuji prodej.", selling: "Čekám na potvrzení prodeje burzou.", completed: "Pozice je uzavřená. Pro tento pár začala hodinová pauza.", superseded: "Původní pozice už není otevřená. Další prodej nebyl odeslán.", rejected: "Požadavek vypršel bez odeslání prodeje. Můžete jej znovu potvrdit." };
+    $("#close-position-message").textContent = messages[request.status] || "Čekám na ověření.";
+    button.disabled = request.status !== "rejected" || !snapshot.manualClose?.available;
+    button.textContent = request.status === "completed" ? "Prodáno" : request.status === "rejected" ? "Znovu potvrdit prodej" : "Požadavek uložen";
+  } else if (!snapshot.manualClose?.available || !snapshot.positions.some(p => p.inPosition && p.positionId === closePositionSelection.positionId && p.symbol === closePositionSelection.symbol)) {
+    button.disabled = true;
+    $("#close-position-message").textContent = "Stav se změnil. Zavřete dialog a zkontrolujte aktuální pozici.";
+  }
+}
+
+$("#close-position-confirm").addEventListener("click", async () => {
+  if (!closePositionSelection || closePositionSubmitting) return;
+  closePositionSubmitting = true;
+  $("#close-position-confirm").disabled = true;
+  $("#close-position-message").textContent = "Ukládám požadavek…";
+  try {
+    await request("/api/kryptotron/positions/close", { method: "POST", body: JSON.stringify({ ...closePositionSelection, confirmed: true }) });
+    $("#close-position-message").textContent = "Požadavek je uložený. Čekám na potvrzení prodeje.";
+  } catch (error) {
+    $("#close-position-message").textContent = `${error.message} Stav požadavku ověříme při obnovení přehledu.`;
+  } finally {
+    closePositionSubmitting = false;
+    // Keep confirmation disabled after an ambiguous response; server deduplicates retries.
+    await loadKryptotron();
+  }
+});
 
 function updatePositionDetail() {
   if (!vaultSnapshot) return;

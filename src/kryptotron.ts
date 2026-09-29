@@ -1,5 +1,6 @@
 import { readHoldings } from "./holdings.js";
 import { readKryptotronTransparency } from "./kryptotron-transparency.js";
+import { completedCloseWouldRewind, manualCloseView, mergeManualClose, positionId, queueManualClose } from "./manual-close.js";
 type SupabaseRow = Record<string, unknown>;
 
 export type KryptotronOctoState = "idle" | "scanning" | "calculating" | "trade_open" | "profit" | "loss" | "error" | "sleep";
@@ -14,6 +15,7 @@ export type KryptotronOctoPresentation = {
 };
 
 export type KryptotronSnapshot = {
+  manualClose?: ReturnType<typeof manualCloseView>;
   transparency?: ReturnType<typeof readKryptotronTransparency>;
   connected: boolean;
   environment: "testnet" | "mainnet" | null;
@@ -31,6 +33,7 @@ export type KryptotronSnapshot = {
   streak: { enabled: boolean; paperMode: boolean; rUsdc: number; status: string; streak: number; trades: number; wins: number; losses: number; netPnl: number; sessionDate: string | null; lockReason: string | null };
   positions: Array<{
     symbol: string;
+    positionId?: string | null;
     inPosition: boolean;
     entryPrice: number;
     quantity: number;
@@ -172,6 +175,9 @@ export async function loadKryptotronState(url: string, key: string, stateKey: st
 async function saveKryptotronStateUnlocked(url: string, key: string, stateKey: string, data: Record<string, unknown>) {
   const latest = await loadKryptotronState(url, key, stateKey);
   if (!latest) throw new Error("Stav instance neexistuje; zápis byl odmítnut");
+  if (completedCloseWouldRewind(data.manual_close, latest.manual_close)) {
+    throw new Error("Ruční prodej je již potvrzený; worker musí obnovit autoritativní stav");
+  }
   const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
   const dca = object(data.dca), savedDca = object(latest.dca);
   const request = object(dca.test_request), savedRequest = object(savedDca.test_request);
@@ -181,6 +187,7 @@ async function saveKryptotronStateUnlocked(url: string, key: string, stateKey: s
     .sort((a, b) => String(object(b).at).localeCompare(String(object(a).at))).slice(0, 20);
   data = { ...data, environment: latest.environment, entries_paused: latest.entries_paused !== false,
     events,
+    manual_close: mergeManualClose(data.manual_close, latest.manual_close),
     dca: { ...dca, enabled: savedDca.enabled === true, amount: savedDca.amount,
       test_request: savedRequest.id && savedRequest.id !== request.id ? savedRequest : dca.test_request },
     streak: { ...object(data.streak), enabled: object(latest.streak).enabled === true } };
@@ -360,6 +367,7 @@ export async function loadKryptotronSnapshot(url: string, key: string, stateKey 
   const rawPositions = data.positions && typeof data.positions === "object" ? data.positions as Record<string, Record<string, unknown>> : {};
   const positions = Object.entries(rawPositions).map(([symbol, position]) => ({
     symbol,
+    positionId: positionId(position),
     inPosition: position.in_position === true,
     entryPrice: Number(position.entry_price ?? 0),
     quantity: Number(position.position_qty ?? 0),
@@ -379,6 +387,7 @@ export async function loadKryptotronSnapshot(url: string, key: string, stateKey 
   const dcaSymbols = Array.isArray(rawDca.symbols) ? rawDca.symbols.filter((symbol): symbol is string => typeof symbol === "string") : [];
   const snapshot: Omit<KryptotronSnapshot, "octo"> = {
     transparency,
+    manualClose: manualCloseView(data),
     connected: Boolean(state),
     environment: data.environment === "testnet" || data.environment === "mainnet" ? data.environment : null,
     status: runtimeStatus(data.runtime_status, data.last_heartbeat_at),
@@ -506,3 +515,21 @@ export const setStreakEnabled = (...args: Parameters<typeof setStreakEnabledUnlo
   withStateLock(args[0], args[3] ?? "main", () => setStreakEnabledUnlocked(...args));
 export const logKryptotronTrade = (...args: Parameters<typeof logKryptotronTradeUnlocked>) =>
   withStateLock(args[0], args[2], () => logKryptotronTradeUnlocked(...args));
+
+export function requestManualClose(url: string, key: string, stateKey: string, symbol: string, position: string) {
+  return withStateLock(url, stateKey, async () => {
+    const data = await loadKryptotronState(url, key, stateKey);
+    if (!data) throw new Error("Stav instance není dostupný.");
+    const previous = data.manual_close;
+    const request = queueManualClose(data, symbol, position);
+    if (previous === request) return request;
+    // This is the user-command write, not the worker merge path.
+    const response = await fetch(`${url}/rest/v1/bot_state?key=eq.${encodeURIComponent(stateKey)}`, {
+      method: "PATCH",
+      headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify({ data, updated_at: new Date().toISOString() }), signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) throw new Error("Požadavek se nepodařilo uložit. Obnovte stav před dalším pokusem.");
+    return request;
+  });
+}

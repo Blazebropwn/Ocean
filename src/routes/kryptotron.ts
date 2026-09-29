@@ -1,10 +1,11 @@
+import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import type { Config } from "../config.js";
 import { type KryptotronInstanceRecord, type OceanDatabase } from "../db.js";
 import { binanceConnectionSchema, dcaAmountSchema, dcaControlSchema, kryptotronControlSchema, streakControlSchema } from "../schemas.js";
 import { verifyBinanceCredentials } from "../binance.js";
 import { credentialsKey, encryptCredential } from "../credentials.js";
-import { initializeKryptotronInstance, loadKryptotronSnapshot, requestTestDca, setDcaAmount, setDcaEnabled, setKryptotronEntriesPaused, setStreakEnabled } from "../kryptotron.js";
+import { initializeKryptotronInstance, loadKryptotronSnapshot, requestManualClose, requestTestDca, setDcaAmount, setDcaEnabled, setKryptotronEntriesPaused, setStreakEnabled } from "../kryptotron.js";
 import { currentUser, hasApprovedAccess, requestMeta } from "./shared.js";
 import { isMainnetEnabled } from "../supervisor.js";
 
@@ -124,6 +125,23 @@ export function registerKryptotronRoutes(app: FastifyInstance, db: OceanDatabase
       return { kryptotron: await loadKryptotronSnapshot(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, instance.remote_state_key!) };
     } catch {
       return reply.code(502).send({ error: "Stav Kryptotronu se nepodařilo načíst." });
+    }
+  });
+
+  app.post("/api/kryptotron/positions/close", { config: { rateLimit: { max: 20, timeWindow: "15 minutes" } } }, async (request, reply) => {
+    const user = currentUser(db, request);
+    if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
+    if (!hasApprovedAccess(user, config)) return reply.code(403).send({ error: "Účet ještě nebyl schválen." });
+    const instance = connectedKryptotronInstance(user.id);
+    if (!instance) return reply.code(404).send({ error: "Kryptotron není připojený." });
+    const parsed = z.object({ symbol: z.enum(["BTCUSDC", "ETHUSDC"]), positionId: z.string().min(1).max(128), confirmed: z.literal(true) }).strict().safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "Potvrďte konkrétní pozici k uzavření." });
+    if (!config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return reply.code(503).send({ error: "Úložiště není dostupné." });
+    try {
+      const result = await requestManualClose(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, instance.remote_state_key!, parsed.data.symbol, parsed.data.positionId);
+      return reply.code(202).send({ request: { id: result.id, status: result.status } });
+    } catch {
+      return reply.code(409).send({ error: "Uzavření nebylo potvrzeno. Obnovte stav: pozice se mohla změnit nebo připojení není ověřené." });
     }
   });
 
