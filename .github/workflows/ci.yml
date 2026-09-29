@@ -27,6 +27,24 @@ jobs:
 
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends bubblewrap
 
+      - name: Allow the isolation test to create user namespaces
+        shell: bash
+        run: |
+          # Ubuntu restricts unprivileged user namespaces through AppArmor.
+          # Give only bwrap the documented application exception on this runner.
+          # https://documentation.ubuntu.com/release-notes/24.04/
+          if [[ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]] &&
+             [[ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns)" == 1 ]]; then
+            sudo tee /etc/apparmor.d/bwrap >/dev/null <<'PROFILE'
+          abi <abi/4.0>,
+          include <tunables/global>
+          profile bwrap /usr/bin/bwrap flags=(unconfined) {
+            userns,
+          }
+          PROFILE
+            sudo apparmor_parser -r /etc/apparmor.d/bwrap
+          fi
+
       - run: npm ci
 
       - run: python -m pip install --no-cache-dir -r services/kryptotron/requirements.lock.txt pytest==8.3.5

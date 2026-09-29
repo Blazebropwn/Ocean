@@ -40,6 +40,13 @@ pozice kryté původními aktivními OCO objednávkami.
 - Chromium: šest rozměrů obrazovky, 18 kontrol rozložení, informační dialog,
   klávesnice/focus, potvrzení prodeje i zobrazení zbytku; bez JS chyb.
 
+Při pushi odhaleno dřívější selhávání CI: bubblewrap na Ubuntu runneru
+nemohl vytvořit mapování uživatele (`setting up uid map: Permission denied`).
+Workflow nyní nastaví aplikační AppArmor výjimku pro `/usr/bin/bwrap`, když
+runner omezuje neprivilegované user namespaces, podle
+[dokumentace Ubuntu](https://documentation.ubuntu.com/release-notes/24.04/#unprivileged-user-namespace-restrictions).
+Test izolace se nepřeskakuje. Změna se týká jen dočasného CI runneru.
+
 ## Nasazení a následná kontrola
 
 Výchozí produkční commit: `d869d6bfcb73ab540f08eff6fe3c624e03f5ee35`.
