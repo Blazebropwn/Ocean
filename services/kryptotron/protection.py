@@ -103,6 +103,8 @@ def protection_outcome(client, symbol, order_list):
     filled = []
     for item in order_list.get("orders", []):
         order = client.get_order(symbol=symbol, orderId=item["orderId"])
+        if order.get("status") != "FILLED" and Decimal(str(order.get("executedQty", "0"))) > 0:
+            raise RuntimeError("Částečně vyplněná ochrana vyžaduje rekonciliaci; pozice nebyla uzavřena")
         if order.get("status") == "FILLED":
             filled.append(order)
 
@@ -112,12 +114,14 @@ def protection_outcome(client, symbol, order_list):
         order = filled[0]
         quantity = Decimal(str(order.get("executedQty", "0")))
         quote = Decimal(str(order.get("cummulativeQuoteQty", "0")))
-        if quantity <= 0:
+        if not quantity.is_finite() or not quote.is_finite() or quantity <= 0 or quote <= 0:
             raise RuntimeError("Vyplněná ochranná objednávka nemá platné množství")
         client_id = order.get("clientOrderId", "")
         reason = "TRAILING_STOP" if client_id.startswith("ocean-trail-") else "EMERGENCY_STOP"
         return {
             "status": "filled",
+            "quantity": float(quantity),
+            "order_id": order.get("orderId"),
             "exit_price": float(quote / quantity),
             "reason": reason,
             "order": order,

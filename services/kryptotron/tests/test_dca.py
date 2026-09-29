@@ -22,6 +22,9 @@ class FakeClient:
     def get_order(self, **request):
         return {"status": "FILLED", "orderId": 99, "executedQty": "0.00005", "cummulativeQuoteQty": "5.00"}
 
+    def get_my_trades(self, **request):
+        return [{"qty": "0.00005", "commission": "0", "commissionAsset": "USDC"}]
+
 
 class DcaTests(unittest.TestCase):
     def test_due_sunday_at_eight_prague_only_once(self):

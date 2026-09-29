@@ -21,7 +21,7 @@
 .ocean-workspace .dashboard-grid { display:block; flex:1 0 auto; min-height:0; }
 .ocean-workspace .kryptotron-card { display:block; height:100%; min-height:0; border:0; border-radius:0; box-shadow:none; background:none; overflow:visible; }
 .ocean-workspace .kryptotron-card::before,.ocean-workspace .kryptotron-card::after { display:none; }
-.portfolio-surface { height:100%; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.12fr); grid-template-rows:minmax(156px,auto) minmax(390px,1fr) auto; gap:20px; grid-template-areas:"assets assets" "goals positions" "footer footer"; position:relative; }
+.portfolio-surface { height:100%; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.12fr); grid-template-rows:minmax(156px,auto) auto minmax(390px,1fr) auto; gap:20px; grid-template-areas:"assets assets" "strategy strategy" "goals positions" "footer footer"; position:relative; }
 .compact-tabs { display:none; }
 .asset-grid { grid-area:assets; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; }
 .asset-card,.goals-card,.positions-card { background:var(--panel); border:1px solid var(--line); border-radius:15px; min-width:0; }
@@ -139,7 +139,7 @@
  .ocean-workspace .side-nav { padding-inline:8px; }
  .ocean-workspace .side-link { font-size:12px; padding-inline:10px; gap:8px; }
  .ocean-workspace .workspace { padding:22px; gap:16px; }
- .portfolio-surface { gap:16px; grid-template-rows:minmax(144px,auto) minmax(390px,1fr) auto; }
+ .portfolio-surface { gap:16px; grid-template-rows:minmax(144px,auto) auto minmax(390px,1fr) auto; }
  .asset-card { padding:15px; }
  .asset-card > strong { font-size:28px; }
  .goals-card,.positions-card { padding:18px; }
@@ -152,7 +152,7 @@
  .goals-card header > span { display:none; }
 }
 @media (max-width:760px), (max-height:650px) {
- .portfolio-surface { grid-template-columns:minmax(0,1fr); grid-template-rows:auto auto minmax(230px,1fr) auto; gap:16px; grid-template-areas:"tabs" "assets" "goals" "footer"; }
+ .portfolio-surface { grid-template-columns:minmax(0,1fr); grid-template-rows:auto auto auto minmax(230px,1fr) auto; gap:16px; grid-template-areas:"tabs" "assets" "strategy" "goals" "footer"; }
  .compact-tabs { grid-area:tabs; display:flex; gap:3px; background:#191f25; border:1px solid var(--line); border-radius:8px; padding:3px; }
  .compact-tabs button { flex:1; min-height:44px; border:0; border-radius:5px; background:transparent; color:var(--ink-soft); font-size:13px; font-weight:500; cursor:pointer; }
  .compact-tabs button[aria-pressed=true] { background:#34413f; color:var(--ink); }
@@ -164,7 +164,7 @@
  .asset-card > small { font-size:12px; }
  .positions-card { display:none; }
  .portfolio-surface[data-compact-view=positions] { grid-template-rows:auto minmax(340px,1fr) auto; grid-template-areas:"tabs" "positions" "footer"; }
- .portfolio-surface[data-compact-view=automation] { grid-template-rows:auto minmax(390px,1fr) auto; grid-template-areas:"tabs" "automation" "footer"; }
+ .portfolio-surface[data-compact-view=automation] { grid-template-rows:auto minmax(390px,1fr) auto auto; grid-template-areas:"tabs" "automation" "footer"; }
  .portfolio-surface[data-compact-view=positions] :is(.asset-grid,.goals-card),.portfolio-surface[data-compact-view=automation] .asset-grid { display:none; }
  .portfolio-surface[data-compact-view=positions] .positions-card { display:flex; }
  .goals-card { padding:16px 18px; }
@@ -205,12 +205,12 @@
 }
 @media (max-height:730px) and (min-width:761px) {
  .ocean-workspace .workspace { padding-block:16px; gap:12px; }
- .portfolio-surface { grid-template-rows:minmax(132px,auto) minmax(390px,1fr) auto; gap:16px; }
+ .portfolio-surface { grid-template-rows:minmax(132px,auto) auto minmax(390px,1fr) auto; gap:16px; }
  .asset-card { padding:12px 18px; }
  .goals-card,.positions-card { padding:16px 20px; }
 }
 @media (max-height:650px) and (min-width:761px) {
- .portfolio-surface { grid-template-rows:auto auto minmax(230px,1fr) auto; grid-template-areas:"tabs" "assets" "goals" "footer"; }
+ .portfolio-surface { grid-template-rows:auto auto auto minmax(230px,1fr) auto; grid-template-areas:"tabs" "assets" "strategy" "goals" "footer"; }
  .asset-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
 }
 
@@ -273,6 +273,32 @@
 .dca-amount-control strong { display:flex; align-items:center; gap:12px; color:var(--ink); font-size:17px; font-weight:500; font-variant-numeric:tabular-nums; }
 .dca-settings-label { font-size:12px; color:var(--ink-soft); margin:0 0 14px; }
 
-
-/* Keep account warnings readable without covering controls. */
+/* Deterministic strategy evidence, alongside the existing account overview. */
+.strategy-card { grid-area:strategy; min-width:0; padding:24px; background:var(--panel); border:1px solid var(--line); border-radius:15px; }
+.strategy-card > header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; }
+.strategy-card h2 { margin:0; font-size:19px; font-weight:600; }
+#strategy-status { color:var(--ink-soft); font-size:13px; }
+#strategy-status.warning,.reconciliation-note.warning { color:var(--warn); }
+.reconciliation-note { margin:18px 0; color:var(--muted); font-size:13px; line-height:1.6; }
+.strategy-risk { display:flex; flex-wrap:wrap; gap:12px 24px; margin-bottom:20px; color:var(--ink-soft); font-size:12px; line-height:1.6; }
+.decision-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.decision-grid > p { color:var(--muted); font-size:13px; }
+.decision-card { min-width:0; padding:18px; border:1px solid var(--line); border-radius:10px; background:var(--deep); }
+.decision-card header { display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; }
+.decision-card h3 { margin:0; font-size:15px; }
+.decision-card header span { color:var(--ink-soft); font-size:12px; }
+.decision-card p { color:var(--ink-soft); font-size:13px; line-height:1.6; margin:14px 0; }
+.decision-card dl { display:grid; grid-template-columns:1fr auto; gap:8px; margin:0; font-size:12px; }
+.decision-card dt { color:var(--muted); }
+.decision-card dd { margin:0; text-align:right; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+.decision-card small { display:block; margin-top:16px; color:var(--muted); font-size:11px; line-height:1.5; }
+.trade-explanations { margin-top:20px; color:var(--ink-soft); font-size:13px; }
+.trade-explanations summary { padding:14px 0; min-height:44px; cursor:pointer; }
+#trade-explanations { display:grid; gap:12px; }
 .ocean-workspace .kryptotron-degraded,#bot-error-wrap { position:static; grid-column:1/-1; }
+@media (max-width:760px), (max-height:650px) {
+ .portfolio-surface[data-compact-view=positions] .strategy-card,.portfolio-surface[data-compact-view=automation] .strategy-card { display:none; }
+ .portfolio-surface[data-compact-view=automation] { grid-template-rows:auto minmax(390px,1fr) auto; }
+ .strategy-card { padding:18px; }
+ .decision-grid { grid-template-columns:1fr; }
+}

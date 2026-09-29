@@ -11,6 +11,9 @@ Kontrola každé 4 hodiny.
 import time
 import json
 import logging
+import copy
+import math
+from uuid import uuid4
 from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -36,9 +39,11 @@ from utils import (
     get_balance, get_symbol_filters, refresh_account_balance,
     portfolio_snapshot_due, read_portfolio_snapshot, round_price, round_step,
 )
-from order_safety import apply_filled_buy, classify_order, new_buy_intent
+from order_safety import apply_filled_buy, classify_order, new_buy_intent, with_execution_fills
+from reconciliation import inspect_account
+from risk import entry_permission, position_budget, decision_snapshot
 from events import add_event
-from dca import run_weekly_dca
+from dca import run_weekly_dca, settle_pending_dca
 from streak import can_trade as streak_can_trade, close_trade as streak_close_trade, ensure_session as ensure_streak_session, open_trade as streak_open_trade
 from streak_strategy import paper_close_result, size_paper_setup, trend_pullback_signal
 from binance_safety import require_safe_api_permissions
@@ -115,6 +120,9 @@ DEFAULT_STATE = {
     "quote_asset":          QUOTE_ASSET,
     "events":               [],
     "market_snapshot":      {},
+    "decisions":            {},
+    "reconciliation":       {"status": "UNRESOLVED", "issues": []},
+    "safe_mode":            True,
     "portfolio_snapshot":   None,
     "last_daily_summary_date": "",
     "dca":                    {},
@@ -166,13 +174,17 @@ def load_state():
     if not isinstance(state, dict):
         raise RuntimeError("Ocean neposkytl platný stav; worker se nespustí")
     for k, v in DEFAULT_STATE.items():
-        state.setdefault(k, v)
+        state.setdefault(k, copy.deepcopy(v))
     log.info("Stav načten z Oceanu")
     return state
 
 
 def save_state(state):
     remote_saved = db.save_state(state)
+    if not remote_saved:
+        state["safe_mode"] = True
+        state["runtime_status"] = "degraded"
+        state["last_error"] = "Zápis stavu selhal. Nové příkazy jsou zablokované."
     temporary = STATE_FILE.with_suffix(".tmp")
     with open(temporary, "w") as f:
         json.dump(state, f, indent=2, default=str)
@@ -180,11 +192,62 @@ def save_state(state):
     return remote_saved
 
 
+def safety_failure(state, code, diagnostic):
+    state["safe_mode"] = True
+    state["reconciliation"] = {"status": "UNRESOLVED", "checked_at": now_utc().isoformat(),
+                               "issues": [{"code": code, "symbol": None}]}
+    state["runtime_status"] = "degraded"
+    state["last_error"] = "Stav účtu nebo objednávek není ověřený. Nové nákupy jsou zablokované."
+    log.error("%s: %s", code, diagnostic)
+    save_state(state)
+    tg_alert(state, "reconciliation", "🚨 <b>Kryptotron: bezpečnostní režim</b>\n"
+             "Stav účtu nebo objednávek vyžaduje kontrolu. Nové nákupy jsou zablokované.")
+
+
+def reconcile_account(client, state, pair_filters):
+    """Recover known executions, then inspect the account without corrective trades."""
+    try:
+        reconcile_pending_order(client, state)
+        reconcile_pending_protection(client, state)
+        settle_pending_dca(client, state, save_state)
+        for symbol, ps in list(state["positions"].items()):
+            if ps.get("in_position") and ps.get("protection_client_id"):
+                outcome = sync_protection(client, state, symbol)
+                if outcome["status"] == "filled":
+                    close_from_protection(state, symbol, outcome)
+        pairs = [{"symbol": symbol, "base": symbol.removesuffix(QUOTE_ASSET),
+                  "step_size": filters[0]} for symbol, filters in pair_filters.items()]
+        result = inspect_account(client, state, pairs, now=now_utc(), quote_asset=QUOTE_ASSET)
+        if state.get("api_permissions_safe") is False:
+            result["status"] = "UNRESOLVED"
+            result["issues"].append({"code": "API_PERMISSIONS_UNVERIFIED", "symbol": None})
+        state["reconciliation"] = result
+        state["safe_mode"] = result["status"] != "OK" or state.get("api_permissions_safe") is False
+        state.update(account_balance=result["available_quote"], account_balance_at=result["checked_at"],
+                     account_balance_error=None)
+        if state["safe_mode"]:
+            state["runtime_status"] = "degraded"
+            state["last_error"] = "Stav účtu nesouhlasí s evidencí nebo chybí ověřená ochrana."
+        else:
+            state["last_error"] = None
+            if state.get("runtime_status") == "degraded":
+                state["runtime_status"] = "waiting"
+        if not save_state(state):
+            raise RuntimeError("Výsledek rekonciliace se nepodařilo uložit")
+        if state["safe_mode"]:
+            tg_alert(state, "reconciliation", "🚨 <b>Kryptotron: kontrola účtu vyžaduje pozornost</b>\n"
+                     "Nové nákupy jsou zablokované. Zkontroluj stav účtu a ochranných objednávek.")
+        return not state["safe_mode"]
+    except Exception as exc:
+        safety_failure(state, "RECONCILIATION_REQUIRED", str(exc))
+        return False
+
+
 def reconcile_pending_order(client, state):
     intent = state.get("pending_order")
     if not intent:
         return state
-    if intent.get("side") != "BUY":
+    if intent.get("side") not in {"BUY", "SELL"}:
         raise RuntimeError("Neznámý nedokončený typ objednávky")
     try:
         order = client.get_order(
@@ -194,20 +257,21 @@ def reconcile_pending_order(client, state):
     except BinanceAPIException as exc:
         if exc.code != -2013:
             raise
-        state["pending_order"] = None
-        if not save_state(state):
-            raise RuntimeError("Ztracenou objednávku se nepodařilo bezpečně uložit")
-        log.warning(f"[{intent['symbol']}] Objednávka na Binance nikdy nevznikla, stav vyčištěn")
-        return state
+        raise RuntimeError("Objednávka nebyla nalezena; záměr zůstává k ověření, nový příkaz je zakázán") from exc
     outcome = classify_order(order)
-    if outcome == "filled":
+    if intent["side"] == "SELL":
+        return finalize_market_exit(state, intent, order)
+    if outcome in {"filled", "settled_partial"}:
+        order = with_execution_fills(client, intent["symbol"], order)
         apply_filled_buy(state, intent, order)
         if not save_state(state):
+            state["pending_order"] = intent
             raise RuntimeError("Vyplněná objednávka nebyla bezpečně uložena")
         log.warning(f"[{intent['symbol']}] Obnovena vyplněná objednávka po restartu")
     elif outcome == "failed":
         state["pending_order"] = None
         if not save_state(state):
+            state["pending_order"] = intent
             raise RuntimeError("Zrušenou objednávku se nepodařilo bezpečně uložit")
     else:
         raise RuntimeError(f"Objednávka {intent['client_order_id']} stále čeká na dokončení")
@@ -232,6 +296,8 @@ def refresh_entries_control(state):
 
 
 def protection_request(symbol, ps, available_quantity, step_size, tick_size, trailing_bounds):
+    if available_quantity + step_size < ps["position_qty"]:
+        raise RuntimeError("Volné množství nepokrývá evidovanou pozici; ochranu nelze odhadovat")
     return build_protection_oco(
         symbol=symbol,
         quantity=round_step(min(ps["position_qty"], available_quantity), step_size),
@@ -275,7 +341,7 @@ def reconcile_pending_protection(client, state):
     except BinanceAPIException as exc:
         if exc.code != -2013:
             raise
-        response = client.create_oco_order(**request)
+        raise RuntimeError("OCO nebyla nalezena; nejednoznačný záměr vyžaduje kontrolu") from exc
     store_protection(ps, response, request)
     state["pending_protection"] = None
     if not save_state(state):
@@ -289,8 +355,16 @@ MAX_PROTECTION_FAILURES = 2
 
 
 def secure_protection_or_exit(client, state, symbol, ps, base, step_size, tick_size, trailing_bounds):
-    """Umístí OCO ochranu; po opakovaném selhání pozici nouzově uzavře market prodejem
-    místo aby ji nechala bez ochrany na burze čekat na další cyklus."""
+    """Protect a known fill; uncertainty blocks execution instead of guessing a sell."""
+    if state.get("pending_protection"):
+        raise RuntimeError("Předchozí OCO čeká na ověření; další příkaz je zakázán")
+    if state.get("safe_mode"):
+        check = state.get("reconciliation", {})
+        issues = check.get("issues", [])
+        if check.get("status") != "UNRESOLVED" or not issues or any(
+            issue.get("code") != "PROTECTION_ERROR" or issue.get("symbol") != symbol for issue in issues
+        ):
+            raise RuntimeError("Neověřený účet blokuje nový ochranný příkaz")
     request = protection_request(
         symbol, ps, get_balance(client, base, raise_on_error=True),
         step_size, tick_size, trailing_bounds,
@@ -299,23 +373,10 @@ def secure_protection_or_exit(client, state, symbol, ps, base, step_size, tick_s
         place_protection(client, state, symbol, request)
     except Exception as exc:
         ps["protection_failures"] = ps.get("protection_failures", 0) + 1
-        failures = ps["protection_failures"]
         if not save_state(state):
             raise RuntimeError("Počet neúspěšných pokusů o ochranu se nepodařilo bezpečně uložit") from exc
-        if failures < MAX_PROTECTION_FAILURES:
-            raise
-        log.error(f"[{symbol}] Ochranu se nepodařilo nastavit {failures}x — nouzový market exit")
-        exit_price = sell_market(client, ps, symbol, step_size)
-        state = record_close(state, symbol, exit_price, "PROTECTION_FAILURE")
-        ps["protection_failures"] = 0
-        if not save_state(state):
-            raise RuntimeError("Nouzový výstup se nepodařilo bezpečně uložit") from exc
-        tg_alert(
-            state, f"protection-exit:{symbol}",
-            f"🚨 <b>Nouzový výstup — {symbol}</b>\nOchranu se opakovaně nepodařilo aktivovat, "
-            f"pozice byla uzavřena market prodejem.\n{str(exc)[:200]}",
-        )
-        return False
+        safety_failure(state, "PROTECTION_ERROR", f"{symbol}: {exc}")
+        raise
     ps["protection_failures"] = 0
     log.info(f"[{symbol}] Burzovní OCO ochrana aktivována")
     return True
@@ -333,8 +394,15 @@ def sync_protection(client, state, symbol):
 
 
 def close_from_protection(state, symbol, outcome):
+    ps = get_pair_state(state, symbol)
+    if not math.isclose(outcome["quantity"], ps["position_qty"], rel_tol=1e-8, abs_tol=1e-12):
+        raise RuntimeError("Vyplněná ochrana nepokrývá evidované množství; nutná kontrola")
+    before = copy.deepcopy(state)
     state = record_close(state, symbol, outcome["exit_price"], outcome["reason"])
     if not save_state(state):
+        state.clear()
+        state.update(before)
+        state["safe_mode"] = True
         raise RuntimeError("Vyplněnou ochranu se nepodařilo bezpečně uložit")
     return state
 
@@ -372,44 +440,64 @@ def reset_periods(state):
 
 
 def can_trade(state):
-    if state.get("entries_paused"):
-        return False, "Nové obchody jsou pozastavené uživatelem"
+    code, reason = entry_permission(state, now_utc())
+    return code == "ENTRY_ALLOWED", reason
+
+
+def finalize_market_exit(state, intent, order):
+    quantity = float(order.get("executedQty", 0))
+    quote = float(order.get("cummulativeQuoteQty", 0))
+    if order.get("status") != "FILLED" or not all(math.isfinite(v) and v > 0 for v in (quantity, quote)):
+        raise RuntimeError("Prodej není plně potvrzený; záměr a evidence pozice zůstávají k ověření")
+    if not math.isclose(quantity, intent["quantity"], rel_tol=1e-8, abs_tol=1e-12):
+        raise RuntimeError("Množství prodeje nesouhlasí se záměrem")
+    ps = state.get("positions", {}).get(intent["symbol"], {})
+    if not ps.get("in_position") or abs(ps.get("position_qty", 0)-quantity) > intent.get("step_size", 1e-12):
+        raise RuntimeError("Potvrzený prodej nepokrývá evidovanou pozici")
+    before = copy.deepcopy(state)
+    record_close(state, intent["symbol"], quote / quantity, intent["reason"])
+    state["pending_order"] = None
+    if not save_state(state):
+        state.clear()
+        state.update(before)
+        state["safe_mode"] = True
+        raise RuntimeError("Prodej proběhl, ale potvrzení není bezpečně uložené")
+    return state
+
+
+def execute_market_exit(client, state, symbol, step_size, reason):
     if state.get("pending_order") or state.get("pending_protection"):
-        return False, "Předchozí objednávka čeká na bezpečné ověření"
-    if state["daily_loss"] >= MAX_DAILY_LOSS_USDT:
-        return False, f"Denní ztráta: -{state['daily_loss']:.2f} {QUOTE_ASSET}"
-    if state["weekly_loss"] >= MAX_WEEKLY_LOSS_USDT:
-        return False, f"Týdenní ztráta: -{state['weekly_loss']:.2f} {QUOTE_ASSET}"
-    if state["trades_today"] >= MAX_TRADES_PER_DAY:
-        return False, f"Max obchodů/den ({MAX_TRADES_PER_DAY}) dosaženo"
-    if state["trades_week"] >= MAX_TRADES_PER_WEEK:
-        return False, f"Max obchodů/týden ({MAX_TRADES_PER_WEEK}) dosaženo"
-    if state["last_trade_time"]:
-        last    = datetime.fromisoformat(state["last_trade_time"])
-        elapsed = (now_utc() - last).total_seconds() / 3600
-        if state["consecutive_losses"] >= MAX_CONSECUTIVE_LOSSES and elapsed < COOLDOWN_AFTER_LOSS_HRS:
-            return False, f"Cooldown po ztrátách: {COOLDOWN_AFTER_LOSS_HRS - elapsed:.1f}h zbývá"
-        if state["last_trade_result"] == "WIN" and elapsed < COOLDOWN_AFTER_WIN_HRS:
-            return False, f"Cooldown po zisku: {COOLDOWN_AFTER_WIN_HRS - elapsed:.1f}h zbývá"
-    return True, "OK"
-
-
-def sell_market(client, ps, symbol, step_size):
-    qty   = str(round_step(ps["position_qty"], step_size))
-    order = client.order_market_sell(symbol=symbol, quantity=qty)
-    fills = order.get("fills", [])
-    if fills:
-        total_qty   = sum(float(f["qty"]) for f in fills)
-        total_quote = sum(float(f["qty"]) * float(f["price"]) for f in fills)
-        return total_quote / total_qty
-    return ps["entry_price"]
+        raise RuntimeError("Neuzavřený záměr blokuje další prodej")
+    ps = state["positions"][symbol]
+    if not ps.get("in_position"):
+        raise RuntimeError("Nelze odeslat nový prodej bez evidované pozice")
+    intent = {"side": "SELL", "symbol": symbol, "quantity": round_step(ps["position_qty"], step_size),
+              "client_order_id": f"ocean-sell-{uuid4().hex[:20]}",
+              "created_at": now_utc().isoformat(), "reason": reason, "step_size": step_size}
+    if intent["quantity"] <= 0:
+        raise RuntimeError("Množství prodeje nesplňuje burzovní filtr")
+    state["pending_order"] = intent
+    if not save_state(state):
+        raise RuntimeError("Záměr prodeje není uložený; příkaz nebyl odeslaný")
+    order = client.order_market_sell(symbol=symbol, quantity=str(intent["quantity"]),
+                                     newClientOrderId=intent["client_order_id"])
+    return finalize_market_exit(state, intent, order)
 
 
 def record_close(state, symbol, exit_price, reason):
     ps      = state["positions"][symbol]
+    if not ps.get("in_position"):
+        return state
     pnl     = (exit_price - ps["entry_price"]) * ps["position_qty"]
     pnl_pct = (exit_price - ps["entry_price"]) / ps["entry_price"] * 100
     result  = "WIN" if pnl >= 0 else "LOSS"
+    evidence = {"symbol": symbol, "at": now_utc().isoformat(), "decision": "POSITION_CLOSED",
+                "entryPrice": ps["entry_price"], "exitPrice": exit_price, "quantity": ps["position_qty"],
+                "grossPnl": pnl, "reasonCode": reason,
+                "entryOrderId": ps.get("entry_order_id"), "entryFees": ps.get("entry_fees", {}),
+                "pnlBasis": "gross_before_fees", "entryDecision": ps.get("entry_decision")}
+    state.setdefault("trade_explanations", []).append(evidence)
+    state["trade_explanations"] = state["trade_explanations"][-100:]
 
     duration_str = ""
     if ps.get("entry_time"):
@@ -446,8 +534,11 @@ def record_close(state, symbol, exit_price, reason):
         state["daily_loss"]         += abs(pnl)
         state["weekly_loss"]        += abs(pnl)
 
-    db.log_trade(symbol, ps["entry_price"], exit_price, ps["position_qty"],
-                 pnl, result, reason=reason, entry_time=ps.get("entry_time"))
+    state.setdefault("pending_trade_logs", []).append({
+        "symbol": symbol, "entry_price": ps["entry_price"], "exit_price": exit_price,
+        "qty": ps["position_qty"], "pnl": pnl, "result": result,
+        "reason": reason, "entry_time": ps.get("entry_time"), "exit_time": evidence["at"],
+    })
 
     ps.update(
         in_position=False, position_qty=0.0, entry_price=0.0, entry_time=None,
@@ -612,7 +703,7 @@ def maybe_run_weekly_dca(client, state, pair_filters):
     if not weekly_summary_due(state):
         return
     refresh_entries_control(state)
-    if state.get("entries_paused"):
+    if entry_permission(state, now_utc())[0] != "ENTRY_ALLOWED":
         return
     if not state.get("dca", {}).get("enabled", False):
         return
@@ -623,6 +714,9 @@ def maybe_run_weekly_dca(client, state, pair_filters):
     results = run_weekly_dca(
         client, state, DCA_SYMBOLS, dca_amount, min_notionals,
         save_state, lambda binance: get_balance(binance, QUOTE_ASSET, raise_on_error=True),
+        before_order=lambda: entry_ready(client, state, pair_filters)
+            and state.get("dca", {}).get("enabled") is True
+            and state.get("dca", {}).get("amount", DCA_AMOUNT_USDC) == dca_amount,
     )
     filled = [item for item in results if item["status"] == "filled"]
     skipped = [item for item in results if item["status"] != "filled"]
@@ -643,13 +737,18 @@ def maybe_run_test_dca(client, state, pair_filters):
         request.update(status="rejected", error="Testovací DCA je povoleno pouze na Testnetu")
         save_state(state)
         return
+    if entry_permission(state, now_utc())[0] != "ENTRY_ALLOWED":
+        request.update(status="rejected", error="Nákup blokuje pauza, rizikový limit nebo neověřený stav účtu")
+        save_state(state)
+        return
     request_id = request.get("id")
     if not isinstance(request_id, str) or not request_id.startswith("test-"):
         request.update(status="rejected", error="Neplatný požadavek")
         save_state(state)
         return
     request["status"] = "processing"
-    save_state(state)
+    if not save_state(state):
+        return
     try:
         amount = float(state.get("dca", {}).get("amount", DCA_AMOUNT_USDC))
         min_notionals = {symbol: pair_filters[symbol][2] for symbol in DCA_SYMBOLS}
@@ -657,14 +756,23 @@ def maybe_run_test_dca(client, state, pair_filters):
             client, state, DCA_SYMBOLS, amount, min_notionals,
             save_state, lambda binance: get_balance(binance, QUOTE_ASSET, raise_on_error=True),
             run_key=request_id,
+            before_order=lambda: entry_ready(client, state, pair_filters),
         )
+        request = state.get("dca", {}).get("test_request", request)
         request.update(status="completed", completed_at=now_utc().isoformat(), results=results)
         add_event(state, "DCA", "Testovací DCA dokončeno")
         state["account_balance"] = get_balance(client, QUOTE_ASSET, raise_on_error=True)
     except Exception as exc:
+        request = state.get("dca", {}).get("test_request", request)
         request.update(status="failed", completed_at=now_utc().isoformat(), error=str(exc)[:180])
         add_event(state, "DCA", "Testovací DCA selhalo")
     save_state(state)
+
+
+def entry_ready(client, state, pair_filters):
+    refresh_entries_control(state)
+    reset_periods(state)
+    return enforce_safe_api_permissions(client, state) and reconcile_account(client, state, pair_filters) and can_trade(state)[0]
 
 
 def maybe_send_weekly_summary(state):
@@ -684,6 +792,21 @@ def maybe_refresh_portfolio_snapshot(client, state):
 def maybe_send_scheduled_summaries(client, state, pair_filters, market_client=None):
     market_client = market_client or client
     refresh_entries_control(state)
+    reconcile_account(client, state, pair_filters)
+    if state.get("pending_trade_logs"):
+        # The outbox is durable before its first delivery; retain failures.
+        if not save_state(state):
+            return
+        remaining = []
+        for trade in state["pending_trade_logs"]:
+            if not db.log_trade(**trade):
+                remaining.append(trade)
+        state["pending_trade_logs"] = remaining
+        if not save_state(state):
+            return
+        if remaining:
+            tg_alert(state, "trade-persistence", "🚨 <b>Historie obchodů čeká na uložení</b>\n"
+                     "Potvrzené obchody zůstávají ve frontě workeru. Provoz vyžaduje kontrolu.")
     maybe_refresh_portfolio_snapshot(client, state)
     maybe_run_test_dca(client, state, pair_filters)
     maybe_run_streak_paper(market_client, state, pair_filters)
@@ -699,12 +822,14 @@ def sleep_until_next_4h_candle(client, state, pair_filters, cycle_errors, market
     secs_past  = h_in_block * 3600 + n.minute * 60 + n.second
     wait       = 4 * 3600 - secs_past + 30
     state.update(
-        runtime_status="degraded" if cycle_errors else "waiting",
+        runtime_status="degraded" if cycle_errors or state.get("safe_mode") else "waiting",
         last_heartbeat_at=n.isoformat(),
         last_market_check_at=n.isoformat(),
         next_check_at=(n + timedelta(seconds=wait)).isoformat(),
-        last_error=cycle_errors[-1] if cycle_errors else None,
+        last_error="Kontrola vyžaduje pozornost; nové nákupy jsou zablokované." if cycle_errors or state.get("safe_mode") else None,
     )
+    for decision in state.get("decisions", {}).values():
+        decision["nextCheckAt"] = state["next_check_at"]
     save_state(state)
     log.info(f"Čekám {wait // 3600}h {(wait % 3600) // 60}m na další 4h svíčku…")
     deadline = time.monotonic() + wait
@@ -712,7 +837,10 @@ def sleep_until_next_4h_candle(client, state, pair_filters, cycle_errors, market
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             break
-        maybe_send_scheduled_summaries(client, state, pair_filters, market_client)
+        try:
+            maybe_send_scheduled_summaries(client, state, pair_filters, market_client)
+        except Exception as exc:
+            safety_failure(state, "RUNTIME_CHECK_FAILED", str(exc))
         state["last_heartbeat_at"] = now_utc().isoformat()
         save_state(state)
         log.info("OCEAN_HEARTBEAT")
@@ -722,8 +850,11 @@ def sleep_until_next_4h_candle(client, state, pair_filters, cycle_errors, market
 def enforce_safe_api_permissions(client, state):
     try:
         require_safe_api_permissions(client, TESTNET)
+        state["api_permissions_safe"] = True
         return True
     except Exception as exc:
+        state["api_permissions_safe"] = False
+        state["safe_mode"] = True
         state["entries_paused"] = True
         state["last_error"] = str(exc)[:240]
         save_state(state)
@@ -800,7 +931,7 @@ def run():
             balance = get_balance(client, QUOTE_ASSET, raise_on_error=True)
             break
         except Exception as exc:
-            retry_at = now_utc() + timedelta(minutes=5)
+            retry_at = now_utc() + timedelta(minutes=1)
             state.update(
                 runtime_status="degraded",
                 last_heartbeat_at=now_utc().isoformat(),
@@ -814,9 +945,12 @@ def run():
                 f"🚨 <b>Kryptotron se nepřipojil k Binance</b>\n{str(exc)[:180]}{ip_hint}",
                 180,
             )
-            log.warning("Binance připojení není dostupné; další pokus za 5 minut")
-            time.sleep(300)
+            safety_failure(state, "STARTUP_RECONCILIATION", str(exc))
+            log.warning("Binance připojení není ověřené; další pokus za minutu")
+            log.info("OCEAN_HEARTBEAT")
+            time.sleep(60)
     state.update(account_balance=balance, account_balance_at=now_utc().isoformat(), account_balance_error=None, quote_asset=QUOTE_ASSET)
+    reconcile_account(client, state, pair_filters)
     try:
         state["portfolio_snapshot"] = read_portfolio_snapshot(client, QUOTE_ASSET)
     except Exception as exc:
@@ -842,6 +976,7 @@ def run():
             state     = reconcile_pending_order(client, state)
             state     = reconcile_pending_protection(client, state)
             state     = reset_periods(state)
+            reconcile_account(client, state, pair_filters)
             pair_data = {}
 
             for pair in PAIRS:
@@ -852,7 +987,13 @@ def run():
 
                 try:
                     data              = get_cross_data(market_client, symbol, EMA_FAST_PERIOD, EMA_SLOW_PERIOD)
+                    closed_at = data.get("closed_at_ms")
+                    if not isinstance(closed_at, (int, float)) or not 0 <= now_utc().timestamp()*1000-closed_at <= 4*3_600_000+90_000:
+                        raise RuntimeError("Poslední uzavřená svíčka není aktuální; trading byl zablokován")
                     pair_data[symbol] = data
+                    state.setdefault("decisions", {})[symbol] = decision_snapshot(
+                        state, symbol, data, now_utc(), minimum=min_notional,
+                        free_quote=state.get("reconciliation", {}).get("available_quote"))
                     trend_str         = "🟢 BULL" if data["bull"] else "🔴 BEAR"
                     cross_str         = " ⚡ GOLDEN CROSS!" if data["golden_cross"] else \
                                         " ☠️ DEATH CROSS!"  if data["death_cross"]  else ""
@@ -923,11 +1064,11 @@ def run():
                         )
 
                         if data["death_cross"]:
+                            if state.get("safe_mode"):
+                                raise RuntimeError("Neověřený stav blokuje market exit; existující ochrana zůstává na burze")
                             log.info(f"[{symbol}] Death Cross — prodávám")
                             if cancel_protection_for_market_exit(client, state, symbol):
-                                ep    = sell_market(client, ps, symbol, step_size)
-                                state = record_close(state, symbol, ep, "DEATH_CROSS")
-                                save_state(state)
+                                execute_market_exit(client, state, symbol, step_size, "DEATH_CROSS")
 
                     # ── BEZ POZICE ────────────────────────────────────────────
                     else:
@@ -938,18 +1079,23 @@ def run():
                         # Viz research/README.md a zamceny forward holdout.
                         if data["bull"]:
                             state = refresh_entries_control(state)
+                            reconcile_account(client, state, pair_filters)
                             allowed, reason = can_trade(state)
+                            state["decisions"][symbol] = decision_snapshot(
+                                state, symbol, data, now_utc(), minimum=min_notional,
+                                free_quote=state.get("reconciliation", {}).get("available_quote"))
                             if not allowed:
                                 log.info(f"[{symbol}] Bull regime ale trading pozastaven: {reason}")
-                                tg(f"⚠️ <b>Trend Entry — {symbol}</b>\nTrading pozastaven: {reason}")
                             else:
                                 balance = get_balance(client, QUOTE_ASSET, raise_on_error=True)
-                                spend   = min(balance * POSITION_PCT / 100, MAX_POSITION_USDT)
+                                spend   = position_budget(balance)
 
                                 if spend < min_notional:
                                     log.warning(f"[{symbol}] Nedostatečný balance: {balance:.2f} {QUOTE_ASSET}")
                                     tg(f"⚠️ <b>Trend Entry — {symbol}</b>\nNedostatečný balance: {balance:.2f} {QUOTE_ASSET}")
                                 else:
+                                    if get_pair_state(state, symbol)["in_position"]:
+                                        raise RuntimeError("Pozice už vznikla při rekonciliaci; další vstup je zakázán")
                                     log.info(f"[{symbol}] 📈 TREND ENTRY (bull regime) — Nakupuji za {spend:.2f} {QUOTE_ASSET}")
                                     intent = new_buy_intent(symbol, spend)
                                     state["pending_order"] = intent
@@ -964,6 +1110,7 @@ def run():
                                         newClientOrderId=intent["client_order_id"],
                                     )
                                     ps = apply_filled_buy(state, intent, order)
+                                    ps["entry_decision"] = copy.deepcopy(state["decisions"][symbol])
                                     qty_filled = ps["position_qty"]
                                     entry_price = ps["entry_price"]
 
@@ -977,6 +1124,18 @@ def run():
                                         step_size, tick_size, protection_filters[symbol]
                                     ):
                                         add_event(state, "TRADE", f"{symbol} · pozice otevřena @ {entry_price:.2f}")
+                                        state.setdefault("trade_explanations", []).append({
+                                            "symbol": symbol, "at": now_utc().isoformat(), "decision": "POSITION_OPENED",
+                                            "entryPrice": entry_price, "quantity": qty_filled, "reasonCode": "ENTRY_ALLOWED",
+                                            "entryOrderId": ps.get("entry_order_id"), "entryFees": ps.get("entry_fees", {}),
+                                            "entryDecision": ps.get("entry_decision"),
+                                            "nominalStopRiskQuote": qty_filled*entry_price*MAX_SL_PCT/100,
+                                            "stopPrice": ps.get("protection_stop_price"),
+                                            "trailingActivationPrice": ps.get("protection_activation_price"),
+                                            "trailingBips": ps.get("protection_trailing_bips"),
+                                            "protectionStatus": ps.get("protection_status"),
+                                        })
+                                        state["trade_explanations"] = state["trade_explanations"][-100:]
                                         save_state(state)
 
                                         log.info(f"[{symbol}] Nakoupeno a chráněno: {qty_filled} {base} @ {entry_price:.2f}")
@@ -1005,10 +1164,12 @@ def run():
                                 save_state(state)
 
                 except BinanceAPIException as e:
+                    safety_failure(state, "EXCHANGE_ERROR", str(e))
                     cycle_errors.append(f"{symbol}: Binance API chyba")
                     log.error(f"[{symbol}] Binance API chyba: {e}")
                     tg_alert(state, f"api:{symbol}:{getattr(e, 'code', 'unknown')}", f"🚨 <b>API chyba · {symbol}</b>\n{str(e)[:220]}")
                 except Exception as e:
+                    safety_failure(state, "EXECUTION_UNRESOLVED", str(e))
                     cycle_errors.append(f"{symbol}: {str(e)[:160]}")
                     log.error(f"[{symbol}] Chyba: {e}", exc_info=True)
                     tg_alert(state, f"worker:{symbol}:{type(e).__name__}", f"🚨 <b>Chyba · {symbol}</b>\n{str(e)[:200]}")

@@ -9,6 +9,7 @@
     "start": "node dist/src/server.js",
     "test": "node --import tsx --test test/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "testnet:preflight": "node --import tsx src/testnet-preflight.ts",
     "backup": "node dist/src/backup.js",
     "backup:offsite": "node dist/src/offsite-backup.js",
     "restore": "node dist/src/restore.js",

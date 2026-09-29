@@ -1,5 +1,6 @@
 # strategy.py
 from utils import calculate_ema
+import math
 
 
 def get_cross_data(client, symbol, ema_fast=50, ema_slow=200):
@@ -18,11 +19,19 @@ def get_cross_data(client, symbol, ema_fast=50, ema_slow=200):
         lows   = [float(k[3]) for k in closed_klines]
     except (IndexError, TypeError, ValueError) as exc:
         raise RuntimeError("Binance vrátila neúplná tržní data") from exc
+    if not all(math.isfinite(v) and v > 0 for values in (closes, highs, lows) for v in values):
+        raise RuntimeError("Binance vrátila neplatné tržní ceny")
+    if any(not low <= close <= high for low, close, high in zip(lows, closes, highs)):
+        raise RuntimeError("Binance vrátila nekonzistentní OHLC")
+    if all(len(row) > 6 for row in closed_klines):
+        if any(b[0] - a[0] != 4 * 3_600_000 for a, b in zip(closed_klines, closed_klines[1:])):
+            raise RuntimeError("Historie 4h svíček obsahuje mezeru nebo duplicitu")
 
     ema_f = calculate_ema(closes, ema_fast)
     ema_s = calculate_ema(closes, ema_slow)
 
     return {
+        "closed_at_ms": closed_klines[-1][6] if len(closed_klines[-1]) > 6 else None,
         "close":        closes[-1],
         "high":         highs[-1],
         "low":          lows[-1],

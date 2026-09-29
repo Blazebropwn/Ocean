@@ -74,7 +74,7 @@ def save_state(state):
     return False
 
 
-def log_trade(symbol, entry_price, exit_price, qty, pnl, result, reason=None, entry_time=None):
+def log_trade(symbol, entry_price, exit_price, qty, pnl, result, reason=None, entry_time=None, exit_time=None):
     payload = {
         "symbol": symbol,
         "entry_price": float(entry_price),
@@ -85,10 +85,14 @@ def log_trade(symbol, entry_price, exit_price, qty, pnl, result, reason=None, en
         "reason": reason,
         "entry_time": entry_time,
     }
+    if exit_time:
+        payload["exit_time"] = exit_time
     if _broker_url:
         try:
             response = requests.post(f"{_broker_url}/trades", headers=_broker_headers, json=payload, timeout=8)
             response.raise_for_status()
+            return True
         except Exception as e:
             log.error(f"Ocean log_trade chyba: {e}")
-        return
+        return False
+    return False

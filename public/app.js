@@ -479,6 +479,7 @@ function node(tag, className, text) {
 }
 
 function renderPortfolio(snapshot) {
+  renderStrategy(snapshot);
   const symbols = { USDC: "$", BTC: "₿", ETH: "Ξ", SOL: "◎" };
   const assets = snapshot.holdings?.assets || [];
   const grid = $("#asset-grid"); grid.replaceChildren();
@@ -517,6 +518,62 @@ function renderPortfolio(snapshot) {
     list.append(row);
   }
   $("#next-check-short").textContent = snapshot.nextCheckAt ? `Další kontrola ${new Intl.DateTimeFormat("cs-CZ",{hour:"2-digit",minute:"2-digit",timeZone:"Europe/Prague"}).format(new Date(snapshot.nextCheckAt))}` : "Čekám na kontrolu";
+}
+
+function renderStrategy(snapshot) {
+  const transparency = snapshot.transparency;
+  const statuses = { SAFE_MODE: "Bezpečnostní režim · nákupy blokované", PAUSED: "Nové obchody pozastavené", UNVERIFIED: "Čekám na ověření účtu", PERSISTENCE_REQUIRED: "Nákupy čekají na uložení historie", ACTIVE: "Strategie aktivní" };
+  const status = $("#strategy-status");
+  status.textContent = statuses[transparency?.strategyStatus] || "Čekám na ověření účtu";
+  const verified = transparency?.reconciliation?.status === "OK";
+  status.classList.toggle("warning", Boolean(transparency?.safeMode) || !verified);
+  const check = $("#reconciliation-note");
+  check.textContent = verified
+    ? `Účet a ochranné objednávky ověřeny proti Binance · ${formatDate(transparency.reconciliation.checkedAt)}`
+    : "Soulad účtu s Binance není potvrzený. Poslední údaje nepovažuj za aktuální potvrzení ochrany.";
+  if (transparency?.historyPending) check.textContent += " Historie potvrzených obchodů čeká na uložení.";
+  check.classList.toggle("warning", !verified || Boolean(transparency?.historyPending));
+  const decisions = transparency?.decisions || [];
+  const risk = $("#strategy-risk"); risk.replaceChildren();
+  const limits = decisions[0]?.risk;
+  if (limits) {
+    const values = [
+      ["Max. trendový vstup", limits.maxOrderQuote],
+      ["Denní ztráta", snapshot.limits?.dailyLoss, limits.dailyLossLimit],
+      ["Týdenní ztráta", snapshot.limits?.weeklyLoss, limits.weeklyLossLimit],
+    ];
+    for (const [label, value, cap] of values) {
+      if (value != null) risk.append(node("span", "", `${label}: ${formatPrice(value, snapshot.balance.asset)}${cap != null ? ` / ${formatPrice(cap, snapshot.balance.asset)}` : ""}`));
+    }
+  }
+  const grid = $("#decision-grid"); grid.replaceChildren();
+  if (!decisions.length) grid.append(node("p", "", "Worker zatím neposkytl záznam rozhodnutí. Čekám na kontrolu trhu."));
+  const actions = { NO_ENTRY: "Čeká", ENTRY_ALLOWED: "Vstup povolen", HOLD: "Drží pozici", REVIEW: "Vyžaduje kontrolu", EXIT_REQUIRED: "Pravidlo požaduje výstup" };
+  for (const decision of decisions) {
+    const card = node("article", "decision-card");
+    const heading = node("header");
+    heading.append(node("h3", "", decision.symbol.replace(/USDC$/, "")), node("span", "", `${decision.marketRegime} · ${decision.stale ? "Zastaralý záznam" : actions[decision.decision] || "Čeká"}`));
+    const description = node("p", "", decision.reason);
+    const details = node("dl");
+    for (const [label, value] of [["Cena při kontrole", decision.price], ["EMA50", decision.emaFast], ["EMA200", decision.emaSlow]]) {
+      details.append(node("dt", "", label), node("dd", "", value == null ? "—" : formatPrice(value, snapshot.balance.asset)));
+    }
+    card.append(heading, description, details, node("small", "", `Kontrola: ${formatDate(decision.checkedAt)} · Další: ${formatDate(decision.nextCheckAt)}`));
+    grid.append(card);
+  }
+  const trades = $("#trade-explanations"); trades.replaceChildren();
+  if (!transparency?.trades?.length) trades.append(node("p", "", "Worker zatím neposkytl vysvětlení obchodu."));
+  for (const trade of (transparency?.trades || []).slice(0, 5)) {
+    const item = node("article", "decision-card");
+    item.append(node("h3", "", `${trade.symbol.replace(/USDC$/, "")} · ${trade.action === "OPENED" ? "Pozice otevřena" : "Pozice uzavřena"}`), node("p", "", trade.reason));
+    const values = node("dl");
+    for (const [label, value] of [["Vstup", trade.entryPrice], ["Výstup", trade.exitPrice], ["PnL před poplatky", trade.grossPnl], ["Nominální riziko ke stopu", trade.nominalStopRiskQuote], ["Stop loss", trade.stopPrice], ["Aktivace trailingu", trade.trailingActivationPrice]]) {
+      if (value != null) values.append(node("dt", "", label), node("dd", "", formatPrice(value, snapshot.balance.asset)));
+    }
+    if (trade.quantity != null) values.append(node("dt", "", "Množství"), node("dd", "", formatQuantity(trade.quantity)));
+    item.append(values, node("small", "", `${formatDate(trade.at)}${trade.nominalStopRiskQuote != null ? " · Nominální riziko nezahrnuje poplatky ani skluz při plnění." : ""}`));
+    trades.append(item);
+  }
 }
 
 function updatePositionDetail() {
@@ -605,6 +662,8 @@ async function loadKryptotron() {
     $("#bot-error").textContent = kryptotron.lastError || "";
     $("#bot-control").textContent = entriesPaused ? "Obnovit" : "Pozastavit";
     $("#bot-control").classList.toggle("resume", entriesPaused);
+    $("#bot-control").disabled = Boolean(kryptotron.transparency?.safeMode);
+    if (kryptotron.transparency?.safeMode) setSystemState("Bezpečnostní režim", true);
     updatePositionDetail();
     renderEvents(kryptotron.events);
   } catch (error) {

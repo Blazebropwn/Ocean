@@ -3,9 +3,10 @@ import type { Config } from "./config.js";
 import type { OceanDatabase } from "./db.js";
 import { readinessIssues } from "./readiness.js";
 import { sendOwnerTelegramAlert } from "./telegram.js";
+import { loadKryptotronState } from "./kryptotron.js";
 
 type MonitorLogger = Pick<FastifyBaseLogger, "info" | "warn" | "error">;
-const CHECK_INTERVAL_MS = 15 * 60_000;
+const CHECK_INTERVAL_MS = 60_000;
 const ALERT_REMINDER_MS = 60 * 60_000;
 const STUCK_INSTANCE_THRESHOLD_MS = 30 * 60_000;
 
@@ -22,6 +23,32 @@ export function stuckInstanceIssues(db: OceanDatabase, now = new Date()) {
 
 export function opsIssues(config: Config, db: OceanDatabase, now = new Date()) {
   return [...readinessIssues(config, db), ...stuckInstanceIssues(db, now)];
+}
+
+export function workerStateIssues(state: Record<string, unknown> | null, label: string, now = Date.now()): string[] {
+  if (!state) return [`${label}: vzdálený stav není dostupný.`];
+  const heartbeat = typeof state.last_heartbeat_at === "string" ? Date.parse(state.last_heartbeat_at) : NaN;
+  const issues: string[] = [];
+  if (!Number.isFinite(heartbeat) || now-heartbeat > 180_000 || heartbeat > now+60_000) issues.push(`${label}: heartbeat není aktuální.`);
+  if (state.safe_mode === true) issues.push(`${label}: bezpečnostní režim, ověř stav účtu a ochrany.`);
+  if (Array.isArray(state.pending_trade_logs) && state.pending_trade_logs.length) issues.push(`${label}: historie obchodů čeká na uložení.`);
+  if (state.runtime_status === "degraded" && state.safe_mode !== true) issues.push(`${label}: worker hlásí provozní chybu.`);
+  return issues;
+}
+
+async function workerIssues(config: Config, db: OceanDatabase) {
+  if (!config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return [];
+  const instances = db.prepare("SELECT id, remote_state_key FROM kryptotron_instances WHERE status = 'connected' AND remote_state_key IS NOT NULL ORDER BY id")
+    .all() as Array<{ id: string; remote_state_key: string }>;
+  const issues: string[] = [];
+  for (const instance of instances) {
+    const label = `Kryptotron ${instance.id}`;
+    try {
+      const state = await loadKryptotronState(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, instance.remote_state_key);
+      issues.push(...workerStateIssues(state, label));
+    } catch { issues.push(`${label}: vzdálený stav není dostupný.`); }
+  }
+  return issues;
 }
 
 export type OpsAlertState = { activeIssuesKey: string; lastAlertAt: number };
@@ -63,9 +90,10 @@ export function startOpsMonitor(
   const check = async () => {
     if (stopped) return;
     try {
-      const { message, nextState } = evaluateOpsAlert(state, opsIssues(config, db), Date.now());
-      state = nextState;
-      if (message) await alert(message);
+      const issues = [...opsIssues(config, db), ...await workerIssues(config, db)];
+      const { message, nextState } = evaluateOpsAlert(state, issues, Date.now());
+      // Failed delivery must remain eligible for retry at the next check.
+      if (!message || await alert(message)) state = nextState;
     } catch (error) {
       logger.error({ err: error }, "Ops monitor selhal");
     }

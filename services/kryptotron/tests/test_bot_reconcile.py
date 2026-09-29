@@ -26,6 +26,9 @@ class FakeGetOrderClient:
             raise self.error
         return self.order
 
+    def get_my_trades(self, **params):
+        return [{"qty": self.order["executedQty"], "commission": "0", "commissionAsset": "USDC"}]
+
 
 class FakeProtectionClient:
     def __init__(self, oco_error=None):
@@ -112,17 +115,16 @@ class ReconcilePendingOrderTests(BotStateTestCase):
             bot.reconcile_pending_order(client, state)
         self.assertEqual(state["pending_order"], intent)
 
-    def test_order_never_created_on_binance_clears_pending_order(self):
-        """Regression: a buy rejected outright (e.g. -1013 NOTIONAL) before an
-        order ever existed must not permanently block can_trade() for every pair."""
+    def test_missing_order_remains_unresolved_instead_of_allowing_duplicate_buy(self):
+        """A single not-found response cannot disambiguate a prior timeout."""
         intent = bot.new_buy_intent("BTCUSDC", 25)
         state = self.state()
         state["pending_order"] = intent
         client = FakeGetOrderClient(error=binance_error(-2013, "Order does not exist."))
-        result = bot.reconcile_pending_order(client, state)
-        self.assertIsNone(result["pending_order"])
-        allowed, _reason = bot.can_trade(result)
-        self.assertTrue(allowed)
+        with self.assertRaisesRegex(RuntimeError, "nebyla nalezena"):
+            bot.reconcile_pending_order(client, state)
+        self.assertEqual(state["pending_order"], intent)
+        self.assertFalse(bot.can_trade(state)[0])
 
     def test_unrelated_binance_error_propagates_and_keeps_pending(self):
         intent = bot.new_buy_intent("BTCUSDC", 25)
@@ -157,19 +159,19 @@ class SecureProtectionOrExitTests(BotStateTestCase):
         self.assertEqual(client.sell_calls, 0)
         self.assertTrue(ps["in_position"])
 
-    def test_repeated_failure_forces_emergency_market_exit(self):
-        """Regression: a position must never sit unprotected indefinitely just
-        because OCO placement keeps failing."""
+    def test_repeated_ambiguous_failure_pauses_instead_of_guessing_market_exit(self):
+        """An OCO timeout may hide a successful creation; do not sell twice."""
         ps = self.position()
         ps["protection_failures"] = bot.MAX_PROTECTION_FAILURES - 1
         state = self.state()
         state["positions"]["BTCUSDC"] = ps
         client = FakeProtectionClient(oco_error=RuntimeError("Filter selhal"))
-        result = bot.secure_protection_or_exit(client, state, "BTCUSDC", ps, "BTC", 0.000001, 0.01, (10, 2000))
-        self.assertFalse(result)
-        self.assertEqual(client.sell_calls, 1)
-        self.assertFalse(ps["in_position"])
-        self.assertEqual(ps["protection_failures"], 0)
+        with self.assertRaises(RuntimeError):
+            bot.secure_protection_or_exit(client, state, "BTCUSDC", ps, "BTC", 0.000001, 0.01, (10, 2000))
+        self.assertEqual(client.sell_calls, 0)
+        self.assertTrue(ps["in_position"])
+        self.assertTrue(state["safe_mode"])
+        self.assertIsNotNone(state["pending_protection"])
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 import { readHoldings } from "./holdings.js";
+import { readKryptotronTransparency } from "./kryptotron-transparency.js";
 type SupabaseRow = Record<string, unknown>;
 
 export type KryptotronOctoState = "idle" | "scanning" | "calculating" | "trade_open" | "profit" | "loss" | "error" | "sleep";
@@ -13,6 +14,7 @@ export type KryptotronOctoPresentation = {
 };
 
 export type KryptotronSnapshot = {
+  transparency?: ReturnType<typeof readKryptotronTransparency>;
   connected: boolean;
   environment: "testnet" | "mainnet" | null;
   status: "running" | "waiting" | "degraded" | "offline" | "unknown";
@@ -167,7 +169,21 @@ export async function loadKryptotronState(url: string, key: string, stateKey: st
   return data && typeof data === "object" ? data as Record<string, unknown> : null;
 }
 
-export async function saveKryptotronState(url: string, key: string, stateKey: string, data: Record<string, unknown>) {
+async function saveKryptotronStateUnlocked(url: string, key: string, stateKey: string, data: Record<string, unknown>) {
+  const latest = await loadKryptotronState(url, key, stateKey);
+  if (!latest) throw new Error("Stav instance neexistuje; zápis byl odmítnut");
+  const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const dca = object(data.dca), savedDca = object(latest.dca);
+  const request = object(dca.test_request), savedRequest = object(savedDca.test_request);
+  const runtimeEvents = Array.isArray(data.events) ? data.events : [];
+  const controls = Array.isArray(latest.events) ? latest.events.filter(value => object(value).type === "CONTROL") : [];
+  const events = [...new Map([...controls, ...runtimeEvents].map(value => [JSON.stringify(value), value])).values()]
+    .sort((a, b) => String(object(b).at).localeCompare(String(object(a).at))).slice(0, 20);
+  data = { ...data, environment: latest.environment, entries_paused: latest.entries_paused !== false,
+    events,
+    dca: { ...dca, enabled: savedDca.enabled === true, amount: savedDca.amount,
+      test_request: savedRequest.id && savedRequest.id !== request.id ? savedRequest : dca.test_request },
+    streak: { ...object(data.streak), enabled: object(latest.streak).enabled === true } };
   const response = await fetch(`${url}/rest/v1/bot_state?key=eq.${encodeURIComponent(stateKey)}`, {
     method: "PATCH",
     headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=minimal" },
@@ -177,7 +193,12 @@ export async function saveKryptotronState(url: string, key: string, stateKey: st
   if (!response.ok) throw new Error(`Supabase odpověděl ${response.status}`);
 }
 
-export async function logKryptotronTrade(url: string, key: string, stateKey: string, trade: Record<string, unknown>) {
+async function logKryptotronTradeUnlocked(url: string, key: string, stateKey: string, trade: Record<string, unknown>) {
+  // A worker outbox retains a stable exchange-event time across delivery retries.
+  if (typeof trade.exit_time === "string" && typeof trade.symbol === "string") {
+    const existing = await supabaseRows(url, key, `bot_trades?instance_id=eq.${encodeURIComponent(stateKey)}&symbol=eq.${encodeURIComponent(trade.symbol)}&exit_time=eq.${encodeURIComponent(trade.exit_time)}&select=symbol&limit=1`);
+    if (existing.length) return;
+  }
   const response = await fetch(`${url}/rest/v1/bot_trades`, {
     method: "POST",
     headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=minimal" },
@@ -223,10 +244,13 @@ export async function initializeKryptotronInstance(url: string, key: string, sta
   return stateKey;
 }
 
-export async function setKryptotronEntriesPaused(url: string, key: string, entriesPaused: boolean, stateKey = "main") {
+async function setKryptotronEntriesPausedUnlocked(url: string, key: string, entriesPaused: boolean, stateKey = "main") {
   const states = await supabaseRows(url, key, statePath(stateKey));
   const state = states[0];
   if (!state?.data || typeof state.data !== "object") throw new Error("Stav Kryptotronu neexistuje");
+  if (!entriesPaused && (state.data as Record<string, unknown>).safe_mode === true) {
+    throw new Error("Obnovení blokuje bezpečnostní režim. Nejdřív ověř stav účtu a objednávek.");
+  }
   const data: Record<string, unknown> = { ...(state.data as Record<string, unknown>), entries_paused: entriesPaused };
   const events = Array.isArray(data.events) ? data.events : [];
   data.events = [{
@@ -249,7 +273,7 @@ export async function setKryptotronEntriesPaused(url: string, key: string, entri
   return entriesPaused;
 }
 
-export async function setDcaEnabled(url: string, key: string, enabled: boolean, stateKey = "main") {
+async function setDcaEnabledUnlocked(url: string, key: string, enabled: boolean, stateKey = "main") {
   const states = await supabaseRows(url, key, statePath(stateKey));
   const state = states[0];
   if (!state?.data || typeof state.data !== "object") throw new Error("Stav Kryptotronu neexistuje");
@@ -268,7 +292,7 @@ export async function setDcaEnabled(url: string, key: string, enabled: boolean, 
   return enabled;
 }
 
-export async function setDcaAmount(url: string, key: string, amount: number, stateKey = "main") {
+async function setDcaAmountUnlocked(url: string, key: string, amount: number, stateKey = "main") {
   const states = await supabaseRows(url, key, statePath(stateKey));
   const state = states[0];
   if (!state?.data || typeof state.data !== "object") throw new Error("Stav Kryptotronu neexistuje");
@@ -287,7 +311,7 @@ export async function setDcaAmount(url: string, key: string, amount: number, sta
   return amount;
 }
 
-export async function requestTestDca(url: string, key: string, stateKey: string) {
+async function requestTestDcaUnlocked(url: string, key: string, stateKey: string) {
   const states = await supabaseRows(url, key, statePath(stateKey));
   const state = states[0];
   if (!state?.data || typeof state.data !== "object") throw new Error("Stav Kryptotronu neexistuje");
@@ -311,7 +335,7 @@ export async function requestTestDca(url: string, key: string, stateKey: string)
   return requestId;
 }
 
-export async function setStreakEnabled(url: string, key: string, enabled: boolean, stateKey = "main") {
+async function setStreakEnabledUnlocked(url: string, key: string, enabled: boolean, stateKey = "main") {
   const states = await supabaseRows(url, key, statePath(stateKey));
   const state = states[0];
   if (!state?.data || typeof state.data !== "object") throw new Error("Stav Kryptotronu neexistuje");
@@ -332,6 +356,7 @@ export async function loadKryptotronSnapshot(url: string, key: string, stateKey 
   ]);
   const state = states[0];
   const data = state?.data && typeof state.data === "object" ? state.data as Record<string, unknown> : {};
+  const transparency = readKryptotronTransparency(data);
   const rawPositions = data.positions && typeof data.positions === "object" ? data.positions as Record<string, Record<string, unknown>> : {};
   const positions = Object.entries(rawPositions).map(([symbol, position]) => ({
     symbol,
@@ -339,7 +364,7 @@ export async function loadKryptotronSnapshot(url: string, key: string, stateKey 
     entryPrice: Number(position.entry_price ?? 0),
     quantity: Number(position.position_qty ?? 0),
     highestPrice: Number(position.highest_price ?? position.highest_since_entry ?? 0),
-    protectionActive: position.protection_status === "ACTIVE" || position.trail_active === true,
+    protectionActive: position.protection_status === "ACTIVE" && transparency.reconciliation.status === "OK",
     protectionStatus: stringOrNull(position.protection_status),
     protectionPrice: Number(position.protection_stop_price ?? position.trail_sl ?? position.trail_sl_price ?? 0),
     protectionActivationPrice: Number(position.protection_activation_price ?? 0),
@@ -353,15 +378,18 @@ export async function loadKryptotronSnapshot(url: string, key: string, stateKey 
   const dcaTargets: Record<string, number> = { BTCUSDC: 1, ETHUSDC: 10, SOLUSDC: 100 };
   const dcaSymbols = Array.isArray(rawDca.symbols) ? rawDca.symbols.filter((symbol): symbol is string => typeof symbol === "string") : [];
   const snapshot: Omit<KryptotronSnapshot, "octo"> = {
+    transparency,
     connected: Boolean(state),
     environment: data.environment === "testnet" || data.environment === "mainnet" ? data.environment : null,
     status: runtimeStatus(data.runtime_status, data.last_heartbeat_at),
     lastHeartbeatAt: stringOrNull(data.last_heartbeat_at),
     lastMarketCheckAt: stringOrNull(data.last_market_check_at),
     nextCheckAt: stringOrNull(data.next_check_at),
-    lastError: stringOrNull(data.last_error),
+    lastError: stringOrNull(data.last_error)
+      ? "Kryptotron vyžaduje kontrolu. Podrobnosti o účtu jsou v přehledu strategie; technická diagnostika je v provozním logu."
+      : null,
     updatedAt: typeof state?.updated_at === "string" ? state.updated_at : null,
-    entriesPaused: data.entries_paused === true,
+    entriesPaused: data.entries_paused === true || data.safe_mode === true,
     events: Array.isArray(data.events) ? data.events.flatMap((event) => {
       if (!event || typeof event !== "object") return [];
       const item = event as Record<string, unknown>;
@@ -452,3 +480,29 @@ function runtimeStatus(value: unknown, heartbeat: unknown): KryptotronSnapshot["
   }
   return value === "running" || value === "waiting" || value === "degraded" ? value : "unknown";
 }
+
+// Ocean currently owns one supervisor/server process. Serialize read-modify-write
+// operations per instance, including user commands and worker state publication.
+const stateWrites = new Map<string, Promise<unknown>>();
+function withStateLock<T>(url: string, stateKey: string, operation: () => Promise<T>): Promise<T> {
+  const id = `${url}:${stateKey}`;
+  const previous = stateWrites.get(id) ?? Promise.resolve();
+  const current = previous.catch(() => {}).then(operation);
+  stateWrites.set(id, current);
+  void current.finally(() => { if (stateWrites.get(id) === current) stateWrites.delete(id); }).catch(() => {});
+  return current;
+}
+export const saveKryptotronState = (...args: Parameters<typeof saveKryptotronStateUnlocked>) =>
+  withStateLock(args[0], args[2], () => saveKryptotronStateUnlocked(...args));
+export const setKryptotronEntriesPaused = (...args: Parameters<typeof setKryptotronEntriesPausedUnlocked>) =>
+  withStateLock(args[0], args[3] ?? "main", () => setKryptotronEntriesPausedUnlocked(...args));
+export const setDcaEnabled = (...args: Parameters<typeof setDcaEnabledUnlocked>) =>
+  withStateLock(args[0], args[3] ?? "main", () => setDcaEnabledUnlocked(...args));
+export const setDcaAmount = (...args: Parameters<typeof setDcaAmountUnlocked>) =>
+  withStateLock(args[0], args[3] ?? "main", () => setDcaAmountUnlocked(...args));
+export const requestTestDca = (...args: Parameters<typeof requestTestDcaUnlocked>) =>
+  withStateLock(args[0], args[2], () => requestTestDcaUnlocked(...args));
+export const setStreakEnabled = (...args: Parameters<typeof setStreakEnabledUnlocked>) =>
+  withStateLock(args[0], args[3] ?? "main", () => setStreakEnabledUnlocked(...args));
+export const logKryptotronTrade = (...args: Parameters<typeof logKryptotronTradeUnlocked>) =>
+  withStateLock(args[0], args[2], () => logKryptotronTradeUnlocked(...args));

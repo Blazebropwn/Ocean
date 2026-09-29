@@ -151,7 +151,7 @@ Provozní kontrola je dostupná na `/api/ready`. HTTP 200 znamená, že databáz
 
 ### Provozní monitoring
 
-`OCEAN_OPS_MONITOR_ENABLED=true` zapne vnitřní kontrolu (každých 15 minut): stejné problémy jako `/api/ready`, plus Kryptotron instance zaseklé ve stavu `error` déle než 30 minut (supervisor je zkouší restartovat, ale sám o tom nikoho neinformuje). Při nálezu pošle vlastníkovi zprávu na Telegram — ihned při vzniku problému, pak nejvýš jednou za hodinu dokud trvá, a zprávu o vyřešení, jakmile zmizí. Vyžaduje nastaveného `OCEAN_TELEGRAM_BOT_TOKEN` a vlastníka propojeného s Telegramem.
+`OCEAN_OPS_MONITOR_ENABLED=true` zapne vnitřní kontrolu (každou minutu): stejné problémy jako `/api/ready`, plus Kryptotron instance zaseklé ve stavu `error` déle než 30 minut (supervisor je zkouší restartovat, ale sám o tom nikoho neinformuje). Při nálezu pošle vlastníkovi zprávu na Telegram — ihned při vzniku problému, pak nejvýš jednou za hodinu dokud trvá, a zprávu o vyřešení, jakmile zmizí. Kontroluje také zastaralý heartbeat připojených workerů, bezpečnostní režim a čekající zápisy historie. Vyžaduje nastaveného `OCEAN_TELEGRAM_BOT_TOKEN` a vlastníka propojeného s Telegramem.
 
 Tahle kontrola běží uvnitř Oceanu, takže nic nezjistí, pokud proces nebo celý kontejner úplně spadne. Na to je potřeba nezávislá vnější kontrola: bezplatná uptime služba (např. UptimeRobot, Healthchecks.io) namířená na veřejné `/api/health` s upozorněním na e-mail nebo webhook.
 
@@ -166,3 +166,16 @@ Tahle kontrola běží uvnitř Oceanu, takže nic nezjistí, pokud proces nebo c
 - mutace kontrolují `Origin` proti `APP_ORIGIN`.
 
 Před Mainnetem zůstává povinné dokončit rotaci tajemství, automatizované testy obnovy ze zálohy, oddělené omezené oprávnění každého workeru a provozní monitoring. Mainnet vyžaduje výslovné serverové povolení a ověřené Binance připojení; nestačí změna přepínače v rozhraní.
+
+## Kryptotron v1: ověřitelnost a bezpečnost exekuce
+
+[Audit](docs/kryptotron-v1-audit.md) popisuje tok strategie a rozdíly proti
+research modelu. [Implementační report](docs/kryptotron-v1-report.md)
+obsahuje bezpečnostní změny, benchmark a známá omezení.
+[Testnet validační scénář](docs/kryptotron-testnet-validation.md) odděluje
+deterministické fault-injection testy od skutečného acceptance běhu.
+`npm run testnet:preflight` zkontroluje místní předpoklady testnet běhu
+bez zápisů, síťových volání nebo spuštění workerů. Výsledek `CONFIGURED`
+potvrzuje pouze konfiguraci; živé acceptance ověření je samostatný krok.
+Nový production-model benchmark zachovává původní zamčený holdout a
+používá pouze historii před jeho začátkem. Výsledek není povolení mainnetu.
