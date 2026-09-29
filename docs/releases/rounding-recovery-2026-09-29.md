@@ -63,3 +63,22 @@ Starý worker neumí nový residual ledger: návrat na původní image bez
 kompatibilní reconciliation není bezpečný postup. Nepřepisovat stav starou
 zálohou a neopakovat vyplněný prodej. Případná další oprava musí zachovat
 evidenci skutečného plnění a zbytku.
+
+## Stav nasazení: blokováno platformou
+
+K 2026-09-29 17:43 UTC je oprava commitnutá a pushnutá na `main`:
+`ee58b51` (funkční oprava) a `7907ef4` (CI runner). Kompletní
+[GitHub CI včetně restore drill](https://github.com/Blazebropwn/Ocean/actions/runs/36606211344)
+pro `7907ef4` prošlo. Lokální testnet po návratu běžného workeru:
+reconciliation OK, žádná pozice ani čekající historie, prodáno 0,00031 BTC,
+nový zbytek nula, uživatelská globální pauza zachovaná.
+
+Produkční nasazení **dosud neproběhlo**. Railway odmítlo explicitní
+`serviceInstanceDeployV2` pro ověřený commit zprávou
+`Deploys have been paused temporarily`. Provozovatel hlásí
+[incident API / deployments](https://status.railway.com/incident/YYTG8I10).
+
+Nasazení a produkční ověření zůstávají nedokončené.
+
+Po obnovení Railway zbývá nasadit ověřený commit a provést výše uvedenou
+čtecí kontrolu obnovy. Nebyl spuštěný žádný automatický opakovací deploy job.
