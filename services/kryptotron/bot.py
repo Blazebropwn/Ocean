@@ -17,6 +17,7 @@ from uuid import uuid4
 from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from decimal import Decimal
 
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
@@ -530,7 +531,12 @@ def finalize_market_exit(state, intent, order):
     if not math.isclose(quantity, intent["quantity"], rel_tol=1e-8, abs_tol=1e-12):
         raise RuntimeError("Množství prodeje nesouhlasí se záměrem")
     ps = state.get("positions", {}).get(intent["symbol"], {})
-    if not ps.get("in_position") or abs(ps.get("position_qty", 0)-quantity) > intent.get("step_size", 1e-12):
+    recorded = Decimal(str(ps.get("position_qty", 0)))
+    sold = Decimal(str(order.get("executedQty", 0)))
+    step = Decimal(str(intent.get("step_size", 1e-12)))
+    residual = recorded - sold
+    if (not ps.get("in_position") or not recorded.is_finite() or not step.is_finite()
+            or step <= 0 or residual < 0 or residual > step):
         raise RuntimeError("Potvrzený prodej nepokrývá evidovanou pozici")
     request = state.get("manual_close") or {}
     if intent["reason"] == "MANUAL_CLOSE" and (
@@ -539,7 +545,22 @@ def finalize_market_exit(state, intent, order):
     ):
         raise RuntimeError("Ruční prodej neodpovídá uloženému požadavku")
     before = copy.deepcopy(state)
-    record_close(state, intent["symbol"], quote / quantity, intent["reason"])
+    # Older float flooring could undersell an exact lot by one step. Recover
+    # only a fully FILLED original intent, and retain every unsold unit in an
+    # explicit ledger; never resubmit a sell or silently write off the remainder.
+    if residual:
+        ledger = state.setdefault("strategy_residuals", {}).setdefault(intent["symbol"], {})
+        ledger.update(quantity=str(Decimal(str(ledger.get("quantity", 0))) + residual),
+                      cost_quote=str(Decimal(str(ledger.get("cost_quote", 0))) + residual * Decimal(str(ps["entry_price"]))),
+                      last_exit_client_id=intent["client_order_id"], updated_at=now_utc().isoformat())
+    executed_at = now_utc()
+    exchange_time = order.get("updateTime", order.get("transactTime"))
+    if isinstance(exchange_time, (int, float)) and 0 < exchange_time <= (executed_at.timestamp() + 30) * 1000:
+        executed_at = datetime.fromtimestamp(exchange_time / 1000, timezone.utc)
+    record_close(state, intent["symbol"], quote / quantity, intent["reason"],
+                 quantity=quantity, executed_at=executed_at)
+    state["trade_explanations"][-1].update(exitOrderId=order.get("orderId"),
+        exitClientOrderId=intent["client_order_id"], residualQuantity=float(residual))
     state["pending_order"] = None
     if intent["reason"] == "MANUAL_CLOSE":
         # Start after confirmation, even when a fill is recovered after a restart.
@@ -547,6 +568,7 @@ def finalize_market_exit(state, intent, order):
         until = (confirmed + timedelta(hours=1)).isoformat()
         state.setdefault("pair_cooldowns", {})[intent["symbol"]] = until
         request.update(status="completed", completed_at=confirmed.isoformat(), cooldown_until=until)
+        request.update(sold_quantity=quantity, residual_quantity=float(residual))
         if intent["symbol"] in state.get("decisions", {}):
             state["decisions"][intent["symbol"]].update(
                 positionState="FLAT", decision="NO_ENTRY", reasonCode="PAIR_COOLDOWN")
@@ -580,20 +602,22 @@ def execute_market_exit(client, state, symbol, step_size, reason):
     state["pending_order"] = intent
     if not save_state(state):
         raise RuntimeError("Záměr prodeje není uložený; příkaz nebyl odeslaný")
-    order = client.order_market_sell(symbol=symbol, quantity=str(intent["quantity"]),
+    order = client.order_market_sell(symbol=symbol, quantity=format(Decimal(str(intent["quantity"])), "f"),
                                      newClientOrderId=intent["client_order_id"])
     return finalize_market_exit(state, intent, order)
 
 
-def record_close(state, symbol, exit_price, reason):
+def record_close(state, symbol, exit_price, reason, *, quantity=None, executed_at=None):
     ps      = state["positions"][symbol]
     if not ps.get("in_position"):
         return state
-    pnl     = (exit_price - ps["entry_price"]) * ps["position_qty"]
+    quantity = ps["position_qty"] if quantity is None else quantity
+    executed_at = executed_at or now_utc()
+    pnl     = (exit_price - ps["entry_price"]) * quantity
     pnl_pct = (exit_price - ps["entry_price"]) / ps["entry_price"] * 100
     result  = "WIN" if pnl >= 0 else "LOSS"
-    evidence = {"symbol": symbol, "at": now_utc().isoformat(), "decision": "POSITION_CLOSED",
-                "entryPrice": ps["entry_price"], "exitPrice": exit_price, "quantity": ps["position_qty"],
+    evidence = {"symbol": symbol, "at": executed_at.isoformat(), "decision": "POSITION_CLOSED",
+                "entryPrice": ps["entry_price"], "exitPrice": exit_price, "quantity": quantity,
                 "grossPnl": pnl, "reasonCode": reason,
                 "entryOrderId": ps.get("entry_order_id"), "entryFees": ps.get("entry_fees", {}),
                 "pnlBasis": "gross_before_fees", "entryDecision": ps.get("entry_decision")}
@@ -603,7 +627,7 @@ def record_close(state, symbol, exit_price, reason):
     duration_str = ""
     if ps.get("entry_time"):
         entry_dt     = datetime.fromisoformat(ps["entry_time"])
-        elapsed_secs = (now_utc() - entry_dt).total_seconds()
+        elapsed_secs = (executed_at - entry_dt).total_seconds()
         days         = int(elapsed_secs // 86400)
         hours        = int((elapsed_secs % 86400) // 3600)
         duration_str = f"\n⏱️ Délka: {days}d {hours}h"
@@ -637,7 +661,7 @@ def record_close(state, symbol, exit_price, reason):
 
     state.setdefault("pending_trade_logs", []).append({
         "symbol": symbol, "entry_price": ps["entry_price"], "exit_price": exit_price,
-        "qty": ps["position_qty"], "pnl": pnl, "result": result,
+        "qty": quantity, "pnl": pnl, "result": result,
         "reason": reason, "entry_time": ps.get("entry_time"), "exit_time": evidence["at"],
     })
 

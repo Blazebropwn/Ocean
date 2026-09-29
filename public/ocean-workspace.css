@@ -21,7 +21,7 @@
 .ocean-workspace .dashboard-grid { display:block; flex:1 0 auto; min-height:0; }
 .ocean-workspace .kryptotron-card { display:block; height:100%; min-height:0; border:0; border-radius:0; box-shadow:none; background:none; overflow:visible; }
 .ocean-workspace .kryptotron-card::before,.ocean-workspace .kryptotron-card::after { display:none; }
-.portfolio-surface { height:100%; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.12fr); grid-template-rows:minmax(156px,auto) auto minmax(390px,1fr) auto; gap:20px; grid-template-areas:"assets assets" "strategy strategy" "goals positions" "footer footer"; position:relative; }
+.portfolio-surface { height:100%; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.12fr); grid-template-rows:minmax(156px,auto) minmax(390px,1fr) auto; gap:20px; grid-template-areas:"assets assets" "goals positions" "footer footer"; position:relative; }
 .compact-tabs { display:none; }
 .asset-grid { grid-area:assets; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; }
 .asset-card,.goals-card,.positions-card { background:var(--panel); border:1px solid var(--line); border-radius:15px; min-width:0; }
@@ -82,7 +82,7 @@
 .ocean-workspace .dca-footer strong { margin:0; color:var(--muted); font-size:11px; font-weight:400; }
 .ocean-workspace .dca-test { margin:0; font-size:11px; }
 .overview-footer { grid-area:footer; display:flex; flex-wrap:wrap; align-items:center; gap:12px; color:var(--muted); font-size:12px; }
-.overview-footer > div { margin-left:auto; display:flex; gap:6px; }
+.overview-footer > div { margin-left:auto; display:flex; flex-wrap:wrap; gap:6px; }
 .overview-footer button { min-height:44px; border:1px solid transparent; border-radius:8px; background:none; color:var(--ink-soft); font-size:13px; cursor:pointer; padding:8px 10px; }
 .overview-footer button:hover { background:var(--panel); border-color:var(--line); color:var(--ink); }
 .mode-badge { border:1px solid var(--line); padding:6px 9px; border-radius:6px; font-size:11px; }
@@ -139,7 +139,7 @@
  .ocean-workspace .side-nav { padding-inline:8px; }
  .ocean-workspace .side-link { font-size:12px; padding-inline:10px; gap:8px; }
  .ocean-workspace .workspace { padding:22px; gap:16px; }
- .portfolio-surface { gap:16px; grid-template-rows:minmax(144px,auto) auto minmax(390px,1fr) auto; }
+ .portfolio-surface { gap:16px; grid-template-rows:minmax(144px,auto) minmax(390px,1fr) auto; }
  .asset-card { padding:15px; }
  .asset-card > strong { font-size:28px; }
  .goals-card,.positions-card { padding:18px; }
@@ -152,7 +152,7 @@
  .goals-card header > span { display:none; }
 }
 @media (max-width:760px), (max-height:650px) {
- .portfolio-surface { grid-template-columns:minmax(0,1fr); grid-template-rows:auto auto auto minmax(230px,1fr) auto; gap:16px; grid-template-areas:"tabs" "assets" "strategy" "goals" "footer"; }
+ .portfolio-surface { grid-template-columns:minmax(0,1fr); grid-template-rows:auto auto minmax(230px,1fr) auto; gap:16px; grid-template-areas:"tabs" "assets" "goals" "footer"; }
  .compact-tabs { grid-area:tabs; display:flex; gap:3px; background:#191f25; border:1px solid var(--line); border-radius:8px; padding:3px; }
  .compact-tabs button { flex:1; min-height:44px; border:0; border-radius:5px; background:transparent; color:var(--ink-soft); font-size:13px; font-weight:500; cursor:pointer; }
  .compact-tabs button[aria-pressed=true] { background:#34413f; color:var(--ink); }
@@ -210,7 +210,7 @@
  .goals-card,.positions-card { padding:16px 20px; }
 }
 @media (max-height:650px) and (min-width:761px) {
- .portfolio-surface { grid-template-rows:auto auto auto minmax(230px,1fr) auto; grid-template-areas:"tabs" "assets" "strategy" "goals" "footer"; }
+ .portfolio-surface { grid-template-rows:auto auto minmax(230px,1fr) auto; grid-template-areas:"tabs" "assets" "goals" "footer"; }
  .asset-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
 }
 
@@ -273,10 +273,10 @@
 .dca-amount-control strong { display:flex; align-items:center; gap:12px; color:var(--ink); font-size:17px; font-weight:500; font-variant-numeric:tabular-nums; }
 .dca-settings-label { font-size:12px; color:var(--ink-soft); margin:0 0 14px; }
 
-/* Deterministic strategy evidence, alongside the existing account overview. */
-.strategy-card { grid-area:strategy; min-width:0; padding:24px; background:var(--panel); border:1px solid var(--line); border-radius:15px; }
+/* Strategy details live in an on-demand information dialog. */
+#strategy-dialog { width:min(1040px,calc(100vw - 32px)); }
+.strategy-card { min-width:0; }
 .strategy-card > header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; }
-.strategy-card h2 { margin:0; font-size:19px; font-weight:600; }
 #strategy-status { color:var(--ink-soft); font-size:13px; }
 #strategy-status.warning,.reconciliation-note.warning { color:var(--warn); }
 .reconciliation-note { margin:18px 0; color:var(--muted); font-size:13px; line-height:1.6; }
@@ -297,9 +297,7 @@
 #trade-explanations { display:grid; gap:12px; }
 .ocean-workspace .kryptotron-degraded,#bot-error-wrap { position:static; grid-column:1/-1; }
 @media (max-width:760px), (max-height:650px) {
- .portfolio-surface[data-compact-view=positions] .strategy-card,.portfolio-surface[data-compact-view=automation] .strategy-card { display:none; }
  .portfolio-surface[data-compact-view=automation] { grid-template-rows:auto minmax(390px,1fr) auto; }
- .strategy-card { padding:18px; }
  .decision-grid { grid-template-columns:1fr; }
 }
 

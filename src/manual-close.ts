@@ -28,7 +28,13 @@ export function manualCloseView(data: Record<string, unknown>, now = Date.now())
     request: typeof request.id === "string" && stages.includes(String(request.status)) ? {
       id: request.id, symbol: String(request.symbol), positionId: String(request.position_id), status: String(request.status),
       requestedAt: request.requested_at, completedAt: request.completed_at, cooldownUntil: request.cooldown_until,
+      soldQuantity: typeof request.sold_quantity === "number" && Number.isFinite(request.sold_quantity) ? request.sold_quantity : null,
+      residualQuantity: typeof request.residual_quantity === "number" && Number.isFinite(request.residual_quantity) ? request.residual_quantity : null,
     } : null,
+    residuals: Object.entries(record(data.strategy_residuals)).flatMap(([symbol, value]) => {
+      const quantity = Number(record(value).quantity);
+      return ["BTCUSDC", "ETHUSDC"].includes(symbol) && Number.isFinite(quantity) && quantity > 0 ? [{ symbol, quantity }] : [];
+    }),
     cooldowns: Object.entries(record(data.pair_cooldowns)).flatMap(([symbol, until]) =>
       ["BTCUSDC", "ETHUSDC"].includes(symbol) && typeof until === "string" && Date.parse(until) > now ? [{ symbol, until }] : []),
   };

@@ -3,6 +3,7 @@ import math
 import logging
 import requests
 import pandas as pd
+from decimal import Decimal, ROUND_DOWN
 from datetime import datetime, timezone
 
 log = logging.getLogger(__name__)
@@ -139,8 +140,10 @@ def _precision(v):
 
 
 def round_step(qty, step_size):
-    p = _precision(step_size)
-    return round(math.floor(qty / step_size) * step_size, p)
+    quantity, step = Decimal(str(qty)), Decimal(str(step_size))
+    if not quantity.is_finite() or quantity < 0 or not step.is_finite() or step <= 0:
+        raise ValueError("Neplatné množství nebo krok objednávky")
+    return float((quantity / step).to_integral_value(rounding=ROUND_DOWN) * step)
 
 
 def round_price(price, tick_size):

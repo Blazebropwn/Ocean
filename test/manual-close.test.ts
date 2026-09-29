@@ -120,3 +120,9 @@ test("an ambiguous completion write cannot resurrect a sold position or erase it
   await assert.rejects(() => saveKryptotronState("https://example.test", "key", "kry_test", old), /autoritativní/);
   assert.equal(writes, 0);
 });
+
+test("residual quantities remain visible and malformed values never reach the UI", () => {
+  const data = state();
+  data.strategy_residuals = { BTCUSDC: { quantity: "0.00001000" }, ETHUSDC: { quantity: "NaN" }, UNKNOWN: { quantity: "1" } };
+  assert.deepEqual(manualCloseView(data).residuals, [{ symbol: "BTCUSDC", quantity: .00001 }]);
+});

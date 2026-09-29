@@ -50,7 +50,8 @@ def inspect_account(client, state, pairs, *, now, quote_asset="USDC"):
         # Explicitly acknowledged external inventory is never treated as a
         # strategy position or sold to reconcile a discrepancy.
         external = number(state.get("unmanaged_inventory", {}).get(base, 0))
-        attributed = strategy_quantity + dca_quantity + external
+        residual = number(state.get("strategy_residuals", {}).get(symbol, {}).get("quantity", 0))
+        attributed = strategy_quantity + dca_quantity + external + residual
         total = held["free"] + held["locked"]
         if total > attributed + tolerance:
             issues.append({"code": "UNATTRIBUTED_BALANCE", "symbol": symbol})

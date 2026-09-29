@@ -240,3 +240,72 @@ class ManualCloseTests(BotStateTestCase):
         self.assertEqual(len(state['pending_trade_logs']), 1)
         bot.process_manual_close(client, state, FILTERS)
         self.assertEqual(client.order_market_sell.call_count, 1)
+
+    def test_exact_mainnet_btc_lot_sells_full_quantity(self):
+        state = self.state()
+        state['positions']['BTCUSDC']['position_qty'] = .00031
+        client = self.setup_exchange()
+        client.order_market_sell.return_value = {**FILL, 'executedQty': '0.00031000', 'cummulativeQuoteQty': '26.16'}
+        bot.process_manual_close(client, state, {'BTCUSDC': (.00001,.01,5)})
+        self.assertEqual(client.order_market_sell.call_args.kwargs['quantity'], '0.00031')
+        self.assertEqual(state['pending_trade_logs'][0]['qty'], .00031)
+        self.assertNotIn('strategy_residuals', state)
+
+    def legacy_pending_state(self):
+        state = self.state()
+        state['positions']['BTCUSDC'].update(position_qty=.00031, entry_price=84501.14)
+        state['manual_close']['status'] = 'selling'
+        state['pending_order'] = {'side':'SELL', 'symbol':'BTCUSDC', 'quantity':.0003,
+            'step_size':.00001, 'reason':'MANUAL_CLOSE', 'client_order_id':'known-sell',
+            'manual_request_id':'request-1', 'created_at':NOW.isoformat()}
+        return state
+
+    def test_confirmed_legacy_fill_recovers_without_reselling_or_losing_remaining_lot(self):
+        state = self.legacy_pending_state()
+        client = self.setup_exchange()
+        client.get_order.return_value = {'status':'FILLED','executedQty':'0.00030000',
+            'cummulativeQuoteQty':'25.32237000', 'orderId':10435001521, 'updateTime':int(NOW.timestamp()*1000)}
+        self.clock.return_value = NOW + timedelta(hours=4)
+        bot.reconcile_pending_order(client, state)
+        client.order_market_sell.assert_not_called()
+        self.assertIsNone(state['pending_order'])
+        self.assertFalse(state['positions']['BTCUSDC']['in_position'])
+        self.assertEqual(state['strategy_residuals']['BTCUSDC']['quantity'], '0.00001000')
+        self.assertAlmostEqual(float(state['strategy_residuals']['BTCUSDC']['cost_quote']), .8450114)
+        self.assertEqual(state['pending_trade_logs'][0]['qty'], .0003)
+        self.assertAlmostEqual(state['pending_trade_logs'][0]['pnl'], -.027972)
+        self.assertEqual(state['pending_trade_logs'][0]['exit_time'], NOW.isoformat())
+        self.assertEqual(state['manual_close']['residual_quantity'], .00001)
+        self.assertEqual(state['manual_close']['status'], 'completed')
+        persisted = copy.deepcopy(state)
+        bot.reconcile_pending_order(client, persisted)
+        bot.process_manual_close(client, persisted, FILTERS)
+        self.assertEqual(len(persisted['pending_trade_logs']),1)
+        self.assertEqual(persisted['strategy_residuals'],state['strategy_residuals'])
+        self.assertEqual(client.get_order.call_count,1)
+        client.order_market_sell.assert_not_called()
+
+    def test_larger_mismatch_is_not_disguised_as_residual(self):
+        state = self.legacy_pending_state()
+        state['positions']['BTCUSDC']['position_qty'] = .00032
+        client = self.setup_exchange()
+        client.get_order.return_value = {'status':'FILLED','executedQty':'.0003','cummulativeQuoteQty':'25.32237'}
+        with self.assertRaises(RuntimeError):
+            bot.reconcile_pending_order(client, state)
+        self.assertIsNotNone(state['pending_order'])
+        self.assertNotIn('strategy_residuals',state)
+        client.order_market_sell.assert_not_called()
+
+    def test_failed_residual_write_rolls_back_and_recovers_exactly_once(self):
+        state = self.legacy_pending_state()
+        client = self.setup_exchange()
+        client.get_order.return_value = {'status':'FILLED','executedQty':'.0003','cummulativeQuoteQty':'25.32237'}
+        bot.db.save_state = lambda _: False
+        with self.assertRaises(RuntimeError):
+            bot.reconcile_pending_order(client, state)
+        self.assertNotIn('strategy_residuals',state)
+        self.assertIsNotNone(state['pending_order'])
+        bot.db.save_state = lambda _: True
+        bot.reconcile_pending_order(client, state)
+        self.assertEqual(float(state['strategy_residuals']['BTCUSDC']['quantity']),.00001)
+        self.assertEqual(len(state['pending_trade_logs']),1)

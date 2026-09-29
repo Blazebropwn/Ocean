@@ -531,6 +531,10 @@ function renderPortfolio(snapshot) {
   for (const cooldown of snapshot.manualClose?.cooldowns || []) {
     list.append(node("p", "position-cooldown", `${cooldown.symbol.replace(snapshot.balance.asset, "")} · Pauza po ručním uzavření do ${formatDate(cooldown.until)}. ${snapshot.entriesPaused ? "Bot je dál celkově pozastavený." : "Poté rozhodne další pravidelná kontrola."}`));
   }
+  for (const residual of snapshot.manualClose?.residuals || []) {
+    const asset = residual.symbol.replace(snapshot.balance.asset, "");
+    list.append(node("p", "position-cooldown", `${asset} · Zbytek po prodeji: ${formatQuantity(residual.quantity)} ${asset}. Zůstává na účtu mimo otevřené pozice.`));
+  }
   const closeRequest = snapshot.manualClose?.request;
   if (closeRequest && ["queued", "cancelling", "ready", "selling"].includes(closeRequest.status)) {
     list.append(node("p", "position-cooldown", snapshot.transparency?.safeMode ? "Ruční uzavření čeká na ověření burzou. Nový prodej se neodesílá." : "Ruční uzavření se zpracovává. Potvrzení může trvat přibližně minutu."));
@@ -618,6 +622,10 @@ function updateClosePositionStatus(snapshot) {
   if (request?.symbol === closePositionSelection.symbol && request.positionId === closePositionSelection.positionId) {
     const messages = { queued: "Požadavek je uložený. Čekám na zpracování botem.", cancelling: "Ověřuji zrušení ochrany pozice.", ready: "Připravuji prodej.", selling: "Čekám na potvrzení prodeje burzou.", completed: "Pozice je uzavřená. Pro tento pár začala hodinová pauza.", superseded: "Původní pozice už není otevřená. Další prodej nebyl odeslán.", rejected: "Požadavek vypršel bez odeslání prodeje. Můžete jej znovu potvrdit." };
     $("#close-position-message").textContent = messages[request.status] || "Čekám na ověření.";
+    if (request.status === "completed" && request.residualQuantity > 0) {
+      const asset = request.symbol.replace(/USDC$/, "");
+      $("#close-position-message").textContent = `Prodej dokončen: ${formatQuantity(request.soldQuantity)} ${asset}. Na účtu zůstává evidovaný zbytek ${formatQuantity(request.residualQuantity)} ${asset}. Pro pár běží hodinová pauza.`;
+    }
     button.disabled = request.status !== "rejected" || !snapshot.manualClose?.available;
     button.textContent = request.status === "completed" ? "Prodáno" : request.status === "rejected" ? "Znovu potvrdit prodej" : "Požadavek uložen";
   } else if (!snapshot.manualClose?.available || !snapshot.positions.some(p => p.inPosition && p.positionId === closePositionSelection.positionId && p.symbol === closePositionSelection.symbol)) {
@@ -730,6 +738,8 @@ async function loadKryptotron() {
     $("#bot-control").textContent = entriesPaused ? "Obnovit" : "Pozastavit";
     $("#bot-control").classList.toggle("resume", entriesPaused);
     $("#bot-control").disabled = Boolean(kryptotron.transparency?.safeMode);
+    if (kryptotron.transparency?.historyPending) setSystemState("Čekám na uložení historie", true);
+    if (kryptotron.transparency?.reconciliation?.status !== "OK") setSystemState("Čekám na ověření účtu", true);
     if (kryptotron.transparency?.safeMode) setSystemState("Bezpečnostní režim", true);
     updatePositionDetail();
     renderEvents(kryptotron.events);

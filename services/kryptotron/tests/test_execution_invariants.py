@@ -224,3 +224,16 @@ class ExecutionInvariants(BotStateTestCase):
         self.assertIsNone(state["dca"]["pending"])
         client.order_market_buy.assert_not_called()
         self.assertEqual(state["dca"]["recorded_totals"]["BTCUSDC"]["spent"], 5)
+
+class ResidualInventoryInvariants(unittest.TestCase):
+    def test_residual_is_accounted_separately_from_dca_and_new_position(self):
+        client = Mock()
+        client.get_account.return_value = {'canTrade': True, 'balances':[
+            {'asset':'BTC','free':'.00008','locked':'0'}, {'asset':'USDC','free':'100','locked':'0'}]}
+        client.get_open_orders.return_value = []
+        state = {'positions':{}, 'dca':{'purchases':[{'symbol':'BTCUSDC','quantity':'.00002'}]},
+                 'strategy_residuals':{'BTCUSDC':{'quantity':'.00003'}}, 'unmanaged_inventory':{'BTC':'.00003'}}
+        pairs = [{'symbol':'BTCUSDC','base':'BTC','step_size':'.00001'}]
+        self.assertEqual(inspect_account(client,state,pairs,now=NOW)['status'],'OK')
+        state.pop('strategy_residuals')
+        self.assertEqual(inspect_account(client,state,pairs,now=NOW)['status'],'UNRESOLVED')

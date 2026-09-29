@@ -124,13 +124,6 @@
 <div class="portfolio-surface" data-compact-view="portfolio">
   <div class="compact-tabs" role="group" aria-label="Část přehledu"><button type="button" data-compact="portfolio" aria-pressed="true">Portfolio</button><button type="button" data-compact="positions" aria-pressed="false">Pozice</button><button type="button" data-compact="automation" aria-pressed="false">DCA</button></div>
   <section class="asset-grid" id="asset-grid" aria-label="Zůstatky"><article class="asset-card"><span>USDC</span><strong>—</strong></article><article class="asset-card"><span>BTC</span><strong>—</strong></article><article class="asset-card"><span>ETH</span><strong>—</strong></article><article class="asset-card"><span>SOL</span><strong>—</strong></article></section>
-  <section class="strategy-card" aria-labelledby="strategy-title">
-    <header><div class="panel-heading"><h2 id="strategy-title">Rozhodování strategie</h2><p>EMA50 / EMA200 · uzavřené 4h svíčky</p></div><span id="strategy-status" role="status">Čekám na ověření</span></header>
-    <p class="reconciliation-note" id="reconciliation-note">Stav účtu zatím není ověřený proti burze.</p>
-    <div class="strategy-risk" id="strategy-risk"></div>
-    <div class="decision-grid" id="decision-grid"><p>Čekám na první kontrolu trhu.</p></div>
-    <details class="trade-explanations"><summary>Proč proběhly poslední obchody</summary><div id="trade-explanations"><p>Zatím nejsou dostupné záznamy.</p></div></details>
-  </section>
   <section class="goals-card dca-card" aria-labelledby="dca-panel-title">
     <header><div class="panel-heading"><h2 id="dca-panel-title">DCA</h2><p>Pravidelné nákupy</p></div><div class="dca-toggle"><span id="dca-toggle-status">Načítám</span><button aria-label="Pravidelné nákupy" aria-checked="false" id="dca-control" role="switch" type="button" disabled></button></div></header>
     <button class="dca-amount-control" id="dca-settings-open" type="button" aria-haspopup="dialog" disabled><span>Částka na každé aktivum</span><strong><span id="dca-amount-value">—</span><b aria-hidden="true">›</b></strong></button>
@@ -138,7 +131,7 @@
     <div class="dca-metrics"><div><span>Investováno</span><strong id="dca-invested">—</strong></div><div><span>Hodnota nákupů</span><strong id="dca-current-value">—</strong></div></div>
   </section>
   <section class="positions-card" aria-labelledby="positions-panel-title"><header><div class="panel-heading"><h2 id="positions-panel-title">Otevřené pozice <span id="position-count">0</span></h2><p>Obchody Kryptotronu</p></div><span class="app-status" id="kryptotron-status"><i></i>Načítám</span></header><div id="positions-list"></div><div class="positions-footer"><span id="next-check-short">—</span><button type="button" id="bot-control">Pozastavit</button></div></section>
-  <footer class="overview-footer"><span class="mode-badge" id="bot-environment">—</span><span id="bot-balance-updated" role="status">—</span><div><button type="button" data-dialog="activity-dialog">Aktivita</button><button type="button" data-dialog="tools-dialog">Nástroje</button></div></footer>
+  <footer class="overview-footer"><span class="mode-badge" id="bot-environment">—</span><span id="bot-balance-updated" role="status">—</span><div><button type="button" data-dialog="strategy-dialog" aria-haspopup="dialog" aria-controls="strategy-dialog">O strategii</button><button type="button" data-dialog="activity-dialog">Aktivita</button><button type="button" data-dialog="tools-dialog">Nástroje</button></div></footer>
   <div class="kryptotron-degraded hidden" id="kryptotron-degraded" role="status">Stav není dostupný. Zkouším spojení obnovit.</div>
   <div class="bot-error hidden" id="bot-error-wrap">
 <small>Upozornění</small><strong id="bot-error"></strong>
@@ -170,6 +163,16 @@
       <div class="agent-report" id="agent-report"></div>
       <ol class="agent-ledger" id="agent-ledger"></ol>
     </dialog>
+<dialog class="workspace-dialog" id="strategy-dialog" aria-labelledby="strategy-title">
+  <header class="dialog-heading"><h2 id="strategy-title">Rozhodování strategie</h2><button type="button" data-close-dialog aria-label="Zavřít">×</button></header>
+  <section class="strategy-card" aria-label="Stav a pravidla strategie">
+    <header><div class="panel-heading"><p>EMA50 / EMA200 · uzavřené 4h svíčky</p></div><span id="strategy-status" role="status">Čekám na ověření</span></header>
+    <p class="reconciliation-note" id="reconciliation-note">Stav účtu zatím není ověřený proti burze.</p>
+    <div class="strategy-risk" id="strategy-risk"></div>
+    <div class="decision-grid" id="decision-grid"><p>Čekám na první kontrolu trhu.</p></div>
+    <details class="trade-explanations"><summary>Proč proběhly poslední obchody</summary><div id="trade-explanations"><p>Zatím nejsou dostupné záznamy.</p></div></details>
+  </section>
+</dialog>
 <dialog class="workspace-dialog" id="dca-dialog" aria-labelledby="dca-dialog-title">
   <header class="dialog-heading"><h2 id="dca-dialog-title">Částka DCA</h2><button type="button" data-close-dialog aria-label="Zavřít">×</button></header>
   <form id="dca-settings-form">
