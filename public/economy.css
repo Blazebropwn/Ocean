@@ -15,17 +15,12 @@
 #genesis-message.error { color:var(--warn); }
 #profile-genesis { color:var(--cyan); letter-spacing:.1em; }
 #tide-ledger-open { color:var(--ink-soft); }
-.home-tide { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px; padding:16px 20px; margin-bottom:20px; border:1px solid var(--line); border-radius:14px; background:var(--panel); }
-.home-tide-wallet { display:flex; align-items:center; gap:14px; color:var(--cyan); }
-.home-tide-wallet > span { font:28px Georgia,serif; }
-.home-tide-wallet strong { font-size:20px; font-variant-numeric:tabular-nums; }
-.home-tide-wallet small { font-size:11px; letter-spacing:.08em; font-weight:400; }
-.home-tide a,.home-tide button { color:var(--ink-soft); text-decoration:none; font:inherit; }
-.home-tide .home-tide-redeem { width:36px; height:36px; display:grid; place-items:center; border:1px solid var(--line); border-radius:9px; font-size:22px; }
-.home-quick-links { display:flex; flex-wrap:wrap; gap:4px 16px; align-items:center; }
-.home-quick-links button { background:none; border:0; cursor:pointer; padding:0; }
-.home-quick-links a,.home-quick-links button { min-height:36px; display:flex; align-items:center; font-size:12px; }
-.home-tide a:hover,.home-tide button:hover { color:var(--cyan); }
+.header-tide { display:flex; align-items:center; gap:8px; min-height:42px; padding:4px 10px; border:1px solid transparent; border-radius:12px; background:transparent; color:var(--cyan); font-family:inherit; font-size:14px; font-weight:600; cursor:pointer; }
+.header-tide img { display:block; flex:none; }
+.header-tide span { max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.header-tide:hover { border-color:var(--line); background:#78c9b80a; }
+.header-tide:focus-visible { outline:2px solid var(--cyan); outline-offset:3px; }
+@media (max-width:560px) { .header-tide { gap:6px; padding-inline:4px; } .header-tide span { max-width:80px; } .nav-account { gap:6px; } }
 .slot-mode .workspace-head { display:none; }
 .slot-view { display:grid; place-items:center; min-height:min(740px,100%); padding:24px 0; }
 .slot-machine { --cell:112px; width:min(100%,490px); padding:32px 30px 26px; position:relative; overflow:hidden; border-radius:26px; border:1px solid #526d69; background:linear-gradient(135deg,#3b5556,#152f36 22%,#0c212a 75%,#344d4e); box-shadow:0 24px 65px #0006,inset 0 1px #accab755,inset 0 0 0 5px #09202977; }

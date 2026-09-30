@@ -29,7 +29,8 @@
   function renderWallet() {
     if (!wallet) return;
     $('profile-tide').textContent = format(wallet.balance);
-    $('home-tide').textContent = format(wallet.balance);
+    $('header-tide').textContent = format(wallet.balance);
+    $('header-tide-open').setAttribute('aria-label', `${format(wallet.balance)} TIDE — otevřít historii`);
     $('slot-balance').textContent = format(wallet.balance);
     const genesis = wallet.genesis;
     $('profile-genesis').classList.toggle('hidden', !genesis);
@@ -179,7 +180,7 @@
           else positions.forEach((p, i) => place(i, p));
           if (!busy) $('slot-message').textContent = pending() ? 'Poslední spin čeká na potvrzení. Ověř ho tlačítkem.' : wallet.balance < 10 ? 'Na spin potřebuješ 10 TIDE.' : 'Tři stejné symboly na linii.';
         }
-      } catch (error) { if (view === 'overview') $('home-tide').textContent = '—';
+      } catch (error) { if (view === 'overview') { $('header-tide').textContent = '—'; $('header-tide-open').setAttribute('aria-label', 'TIDE není dostupné — otevřít historii'); }
         else $(view === 'slot' ? 'slot-message' : 'genesis-message').textContent = error.message; }
       controls();
     },
