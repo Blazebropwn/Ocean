@@ -14,12 +14,9 @@
 #genesis-message { min-height:24px; color:var(--cyan); }
 #genesis-message.error { color:var(--warn); }
 #profile-genesis { color:var(--cyan); letter-spacing:.1em; }
-#tide-ledger-open { color:var(--ink-soft); }
-.header-tide { display:flex; align-items:center; gap:8px; min-height:42px; padding:4px 10px; border:1px solid transparent; border-radius:12px; background:transparent; color:var(--cyan); font-family:inherit; font-size:14px; font-weight:600; cursor:pointer; }
+.header-tide { display:flex; align-items:center; gap:8px; min-height:42px; padding:4px 10px; border:1px solid transparent; border-radius:12px; background:transparent; color:var(--cyan); font-family:inherit; font-size:14px; font-weight:600; }
 .header-tide img { display:block; flex:none; }
 .header-tide span { max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-variant-numeric:tabular-nums; }
-.header-tide:hover { border-color:var(--line); background:#78c9b80a; }
-.header-tide:focus-visible { outline:2px solid var(--cyan); outline-offset:3px; }
 @media (max-width:560px) { .header-tide { gap:6px; padding-inline:4px; } .header-tide span { max-width:80px; } .nav-account { gap:6px; } }
 .slot-mode .workspace-head { display:none; }
 .slot-view { display:grid; place-items:center; min-height:min(740px,100%); padding:24px 0; }
@@ -54,12 +51,6 @@
 .slot-machine.anticipating .slot-reels { box-shadow:0 0 28px #93e4bb25; }
 .slot-machine.won .slot-monitor { box-shadow:0 0 30px #80f3cd22; }
 .slot-machine.won #slot-message { color:#cefde2; font-size:17px; }
-#tide-history { padding:0; margin:22px 0; list-style:none; }
-#tide-history li { display:flex; justify-content:space-between; align-items:center; gap:18px; padding:14px 0; border-bottom:1px solid var(--line); }
-#tide-history li span { display:grid; gap:7px; font-size:13px; }
-#tide-history small { color:var(--muted); font-size:11px; }
-#tide-history strong { white-space:nowrap; font:14px ui-monospace,monospace; }
-#tide-history-more { background:var(--panel); border:1px solid var(--line); color:var(--ink); padding:12px 18px; border-radius:8px; cursor:pointer; }
 @media (max-width:600px) {
  .gift-card { padding:26px 20px; }.gift-card h2 { font-size:23px; }
  .slot-view { padding:8px 0 24px; min-height:0; }

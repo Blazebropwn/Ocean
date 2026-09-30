@@ -24,10 +24,10 @@ dalšího připsání. Jiný uživatel použitý kód aktivovat nemůže.
 
 Hlavní navigace je Home · Arcade · Gamble · Vault. Arcade obsahuje Sonar,
 Gamble samostatný slot. Redeem code je v profilu. TIDE zůstatek je v hlavičce vedle profilu,
-s ikonou mince; kliknutí otevře historii TIDE dostupnou také z profilu. Staré odkazy #dashboard,
+s ikonou mince jako neinteraktivní informace o stavu. Staré odkazy #dashboard,
 #gift a #slot zůstávají funkční.
-Profil zobrazuje Genesis a TIDE. Historie TIDE je v samostatném dialogu,
-nikoliv na hlavní herní ploše. SVG symboly a mechanická animace vycházejí
+Profil zobrazuje Genesis a vstup Redeem code; neopakuje zůstatek ani nenabízí
+historii TIDE. Účetní ledger zůstává na serveru. SVG symboly a mechanická animace vycházejí
 z dodaného prototypu; jeho lokální ekonomika ani RNG se nepoužívají.
 
 ## Hranice a rizika
@@ -109,7 +109,7 @@ Produkční kódy zatím vydané nejsou.
   a aktivace kódů, samostatná matematika a vypořádání hry.
 - `src/routes/economy.ts`, `src/app.ts`: pět endpointů nad stávající auth.
 - `public/economy.js`, `public/economy.css`, `public/slot/*.svg`: Redeem code,
-  slot, animace a TIDE historie; `public/app.js` / `index.html` integrují
+  slot, animace a TIDE zůstatek; `public/app.js` / `index.html` integrují
   routing, profil, TIDE zůstatek v hlavičce a samostatná sekce Gamble.
 - `test/tide-economy.test.ts`, `test/economy-routes.test.ts`, procesový
   helper a migrační testy: kritické účetní a autorizační scénáře.

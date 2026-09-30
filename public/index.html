@@ -10,9 +10,9 @@
     <header class="nav">
       <a class="brand" href="/">Ocean<span>.</span></a>
       <div class="nav-account hidden" id="nav-account">
-        <button class="header-tide" id="header-tide-open" data-tide-history type="button" aria-haspopup="dialog" aria-label="TIDE — otevřít historii" title="TIDE history">
-          <img src="/tide-coin.svg" width="30" height="30" alt=""><span id="header-tide">—</span>
-        </button>
+        <div class="header-tide" id="header-tide-status" role="status" aria-label="Zůstatek TIDE">
+          <img src="/tide-coin.svg" width="30" height="30" alt="TIDE"><span id="header-tide">—</span>
+        </div>
         <button class="profile-button" id="profile-button" type="button" aria-haspopup="true" aria-expanded="false">
           <span id="nav-avatar">O</span><b id="nav-username">Účet</b><i>⌄</i>
         </button>
@@ -20,9 +20,7 @@
           <strong id="menu-username"></strong><small id="email"></small
           ><small class="internal-id" id="display-id"></small
           ><small id="profile-genesis" class="hidden"></small
-          ><small>≋ <span id="profile-tide">—</span> TIDE</small
           ><a href="#redeem" data-open-view="gift">Redeem code <b>→</b></a
-          ><button id="tide-ledger-open" data-tide-history type="button" aria-haspopup="dialog">TIDE history <b>→</b></button
           ><a class="hidden" id="invite-admin-link" href="/invites.html">Správa <b>→</b></a
           ><a href="/change-password.html">Nastavení účtu <b>→</b></a
           ><a href="/telegram.html">Telegram <b>→</b></a
@@ -186,7 +184,6 @@
       <div class="agent-report" id="agent-report"></div>
       <ol class="agent-ledger" id="agent-ledger"></ol>
     </dialog>
-<dialog class="workspace-dialog" id="tide-dialog" aria-labelledby="tide-title"><header class="dialog-heading"><h2 id="tide-title">TIDE Ledger</h2><button type="button" data-close-dialog aria-label="Zavřít">×</button></header><p class="tide-note">TIDE jsou interní jednotky bez peněžní hodnoty a možnosti výběru či převodu. Spin stojí 10 TIDE; uvedená výhra je celá připsaná částka, sázka se odečítá zvlášť.</p><ol id="tide-history"></ol><p id="tide-history-message" role="status"></p><button type="button" id="tide-history-more" hidden>Starší záznamy</button></dialog>
 <dialog class="workspace-dialog" id="strategy-dialog" aria-labelledby="strategy-title">
   <header class="dialog-heading"><h2 id="strategy-title">Rozhodování strategie</h2><button type="button" data-close-dialog aria-label="Zavřít">×</button></header>
   <section class="strategy-card" aria-label="Stav a pravidla strategie">

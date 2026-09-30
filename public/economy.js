@@ -2,7 +2,7 @@
   const $ = id => document.getElementById(id);
   const names = { wave: 'Wave', fish: 'Fish', shell: 'Shell', octo: 'Octo', core: 'Ocean Core' };
   const format = n => new Intl.NumberFormat('cs-CZ').format(n);
-  let user = null, wallet = null, game = null, busy = false, loadedUser = null, ledgerCursor = null, ledgerBusy = false;
+  let user = null, wallet = null, game = null, busy = false, loadedUser = null;
   const tracks = [...document.querySelectorAll('.slot-track')];
   const positions = [25, 25, 25];
   const pendingName = () => `ocean-slot-pending:${user.id}`;
@@ -28,9 +28,8 @@
   }
   function renderWallet() {
     if (!wallet) return;
-    $('profile-tide').textContent = format(wallet.balance);
     $('header-tide').textContent = format(wallet.balance);
-    $('header-tide-open').setAttribute('aria-label', `${format(wallet.balance)} TIDE — otevřít historii`);
+    $('header-tide-status').setAttribute('aria-label', `${format(wallet.balance)} TIDE`);
     $('slot-balance').textContent = format(wallet.balance);
     const genesis = wallet.genesis;
     $('profile-genesis').classList.toggle('hidden', !genesis);
@@ -145,28 +144,6 @@
       $('genesis-message').classList.add('error'); $('genesis-message').textContent = error.status ? error.message : 'Potvrzení se nepodařilo načíst. Zkus znovu stejný kód.';
     } finally { $('genesis-submit').disabled = !user?.accessApproved; }
   });
-  async function ledgerPage(reset) {
-    if (ledgerBusy) return;
-    ledgerBusy = true; $('tide-history-more').disabled = true;
-    if (reset) { ledgerCursor = null; $('tide-history').replaceChildren(); }
-    try {
-      const data = await api('/api/tide/ledger' + (ledgerCursor ? `?before=${ledgerCursor}` : ''));
-      for (const entry of data.entries) {
-        const item = document.createElement('li'), description = document.createElement('span'), date = document.createElement('small'), amount = document.createElement('strong');
-        description.textContent = { GENESIS_REDEMPTION: 'Genesis aktivace', SLOT_BET: 'Sázka', SLOT_WIN: 'Výhra' }[entry.transactionType];
-        date.textContent = new Date(entry.createdAt).toLocaleString('cs-CZ'); description.append(date);
-        amount.textContent = `${entry.amount > 0 ? '+' : ''}${format(entry.amount)} TIDE`; item.append(description, amount); $('tide-history').append(item);
-      }
-      ledgerCursor = data.nextCursor; $('tide-history-more').hidden = !ledgerCursor;
-      $('tide-history-message').textContent = $('tide-history').children.length ? '' : 'Zatím žádné pohyby TIDE.';
-    } catch (error) { $('tide-history-message').textContent = error.message; }
-    finally { ledgerBusy = false; $('tide-history-more').disabled = false; }
-  }
-  document.querySelectorAll('[data-tide-history]').forEach(button => button.addEventListener('click', () => {
-    $('profile-menu').classList.add('hidden'); $('profile-button').setAttribute('aria-expanded', 'false');
-    $('tide-dialog').showModal(); ledgerPage(true);
-  }));
-  $('tide-history-more').addEventListener('click', () => ledgerPage(false));
   window.addEventListener('resize', () => { if (!busy) positions.forEach((p, i) => place(i, p)); });
   window.OceanEconomy = {
     setUser(value) { user = { ...value, accessApproved: value.accessApproved ?? value.emailVerified }; if (loadedUser !== user.id) { loadedUser = user.id; wallet = null; refreshWallet().catch(() => {}); } },
@@ -180,7 +157,7 @@
           else positions.forEach((p, i) => place(i, p));
           if (!busy) $('slot-message').textContent = pending() ? 'Poslední spin čeká na potvrzení. Ověř ho tlačítkem.' : wallet.balance < 10 ? 'Na spin potřebuješ 10 TIDE.' : 'Tři stejné symboly na linii.';
         }
-      } catch (error) { if (view === 'overview') { $('header-tide').textContent = '—'; $('header-tide-open').setAttribute('aria-label', 'TIDE není dostupné — otevřít historii'); }
+      } catch (error) { if (view === 'overview') { $('header-tide').textContent = '—'; $('header-tide-status').setAttribute('aria-label', 'TIDE není dostupné'); }
         else $(view === 'slot' ? 'slot-message' : 'genesis-message').textContent = error.message; }
       controls();
     },
