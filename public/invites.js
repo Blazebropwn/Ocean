@@ -69,7 +69,7 @@ async function loadInvitations() {
     const email = document.createElement("strong");
     const detail = document.createElement("small");
     const state = document.createElement("span");
-    email.textContent = invitation.email || "Pozvánka bez omezení e-mailu";
+    email.textContent = invitation.email || "Jednorázová pozvánka";
     detail.textContent = `Platí do ${new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Prague" }).format(new Date(invitation.expiresAt))}`;
     state.textContent = inviteStatus(invitation.status);
     state.className = `invite-status ${invitation.status}`;
@@ -232,10 +232,9 @@ $("#invite-form").addEventListener("submit", async (event) => {
   button.disabled = true;
   setInviteMessage("");
   try {
-    const { invitation } = await inviteRequest("/api/invitations", { method: "POST", body: JSON.stringify(Object.fromEntries(new FormData(form))) });
+    const { invitation } = await inviteRequest("/api/invitations", { method: "POST", body: "{}" });
     $("#invite-url").value = invitation.inviteUrl;
     $("#invite-result").classList.remove("hidden");
-    form.reset();
     await Promise.all([loadInvitations(), loadMembers()]);
   } catch (error) {
     setInviteMessage(error instanceof Error ? error.message : "Něco se nepovedlo.");
