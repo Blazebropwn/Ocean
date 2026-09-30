@@ -29,6 +29,7 @@
   function renderWallet() {
     if (!wallet) return;
     $('profile-tide').textContent = format(wallet.balance);
+    $('home-tide').textContent = format(wallet.balance);
     $('slot-balance').textContent = format(wallet.balance);
     const genesis = wallet.genesis;
     $('profile-genesis').classList.toggle('hidden', !genesis);
@@ -160,13 +161,16 @@
     } catch (error) { $('tide-history-message').textContent = error.message; }
     finally { ledgerBusy = false; $('tide-history-more').disabled = false; }
   }
-  $('tide-ledger-open').addEventListener('click', () => { $('tide-dialog').showModal(); ledgerPage(true); });
+  document.querySelectorAll('[data-tide-history]').forEach(button => button.addEventListener('click', () => {
+    $('profile-menu').classList.add('hidden'); $('profile-button').setAttribute('aria-expanded', 'false');
+    $('tide-dialog').showModal(); ledgerPage(true);
+  }));
   $('tide-history-more').addEventListener('click', () => ledgerPage(false));
   window.addEventListener('resize', () => { if (!busy) positions.forEach((p, i) => place(i, p)); });
   window.OceanEconomy = {
     setUser(value) { user = { ...value, accessApproved: value.accessApproved ?? value.emailVerified }; if (loadedUser !== user.id) { loadedUser = user.id; wallet = null; refreshWallet().catch(() => {}); } },
     async open(view) {
-      if (!user || !['slot', 'gift'].includes(view)) return;
+      if (!user || !['overview', 'slot', 'gift'].includes(view)) return;
       if (view === 'slot' && busy) return;
       try {
         await refreshWallet();
@@ -175,7 +179,8 @@
           else positions.forEach((p, i) => place(i, p));
           if (!busy) $('slot-message').textContent = pending() ? 'Poslední spin čeká na potvrzení. Ověř ho tlačítkem.' : wallet.balance < 10 ? 'Na spin potřebuješ 10 TIDE.' : 'Tři stejné symboly na linii.';
         }
-      } catch (error) { $(view === 'slot' ? 'slot-message' : 'genesis-message').textContent = error.message; }
+      } catch (error) { if (view === 'overview') $('home-tide').textContent = '—';
+        else $(view === 'slot' ? 'slot-message' : 'genesis-message').textContent = error.message; }
       controls();
     },
   };

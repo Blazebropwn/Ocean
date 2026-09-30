@@ -68,9 +68,7 @@ function showUser(user) {
   $("#verify-banner-text").textContent = user.approvalMode === "owner" ? "Účet čeká na schválení vlastníkem." : "Ověřte svůj e-mail.";
   $("#verify-mailbox-link").classList.toggle("hidden", user.approvalMode === "owner");
   $("#resend-verification").classList.toggle("hidden", user.approvalMode === "owner");
-  const initialView = ["arcade", "vault", "gift", "slot"].includes(location.hash.slice(1)) ? location.hash.slice(1) : "overview";
-  const initialLink = document.querySelector(`.side-link[href="${location.hash || "#dashboard"}"]`);
-  showAppView(initialView, initialLink);
+  showAppView(viewFromHash());
   clearInterval(kryptotronRefresh);
   clearInterval(approvalRefresh);
   if (!accessApproved) {
@@ -204,6 +202,10 @@ $("#agent-dialog").addEventListener("click", (event) => {
   if (event.target === event.currentTarget) event.currentTarget.close();
 });
 
+function viewFromHash() {
+  return { home: "overview", dashboard: "overview", arcade: "arcade", gamble: "slot", slot: "slot", vault: "vault", redeem: "gift", gift: "gift" }[location.hash.slice(1)] || "overview";
+}
+
 function showAppView(view, activeLink = null) {
   const selected = ["overview", "arcade", "vault", "gift", "slot"].includes(view) ? view : "overview";
   document.body.classList.toggle("slot-mode", selected === "slot");
@@ -213,12 +215,12 @@ function showAppView(view, activeLink = null) {
   }
   document.querySelectorAll(".app-view").forEach((panel) => panel.classList.toggle("hidden", panel.id !== `${selected}-view`));
   document.querySelectorAll(".side-link[data-view]").forEach((link) => {
-    const active = activeLink ? link === activeLink : link.dataset.view === (selected === "slot" ? "arcade" : selected);
+    const active = activeLink ? link === activeLink : link.dataset.view === selected;
     link.classList.toggle("active", active);
     if (active) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   });
-  $("#workspace-title").textContent = { overview: "Přehled", arcade: "Arcade", slot: "Arcade", vault: "Vault", gift: "Gift" }[selected];
+  $("#workspace-title").textContent = { overview: "Home", arcade: "Arcade", slot: "Gamble", vault: "Vault", gift: "Redeem code" }[selected];
   $("#workspace-subtitle").textContent = selected === "vault"
     ? "Tvoje pravidelné nákupy a jejich historie."
     : selected === "arcade" ? "Malá pauza pod hladinou." : "Peníze, strategie a poslední dění. Na jednom místě.";
@@ -228,7 +230,8 @@ function showAppView(view, activeLink = null) {
 
 document.querySelectorAll("[data-open-view]").forEach(link => link.addEventListener("click", event => {
   event.preventDefault();
-  history.replaceState(null, "", `#${link.dataset.openView}`);
+  history.replaceState(null, "", `#${{ overview: "home", slot: "gamble", gift: "redeem" }[link.dataset.openView] || link.dataset.openView}`);
+  setProfileOpen(false);
   showAppView(link.dataset.openView);
 }));
 
@@ -237,6 +240,10 @@ document.querySelectorAll(".side-link[data-view]").forEach((link) => link.addEve
   history.replaceState(null, "", link.getAttribute("href"));
   showAppView(link.dataset.view, link);
 }));
+
+window.addEventListener("hashchange", () => {
+  if (!$("#dashboard").classList.contains("hidden")) showAppView(viewFromHash());
+});
 
 const sonarHint = "Pingni ve chvíli, kdy paprsek protne zelený sektor.";
 
@@ -792,7 +799,7 @@ async function initializeKryptotron() {
     for (const id of ["vault-invested", "vault-count", "vault-amount"]) $("#" + id).textContent = "—";
     $("#vault-empty").classList.remove("hidden");
     $("#vault-schedule").textContent = "Nastavení se načte po připojení";
-    setVaultUnavailable("Připoj Binance v Přehledu a načti historii nákupů.");
+    setVaultUnavailable("Připoj Binance na Home a načti historii nákupů.");
     disconnect.classList.add("hidden");
     panel.classList.remove("hidden");
     $("#kryptotron").classList.add("connection-active");
