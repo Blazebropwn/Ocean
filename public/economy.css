@@ -1,17 +1,12 @@
-.gift-view { display:grid; place-items:center; padding:30px 0; }
-.gift-card { width:min(100%,480px); text-align:center; padding:36px; border:1px solid var(--line); border-radius:22px; background:linear-gradient(145deg,#1b2d31,#121c23); }
-.gift-mark { display:block; font:64px Georgia,serif; color:var(--cyan); line-height:1; margin-bottom:26px; }
-.gift-card h2 { margin:16px 0; font-size:26px; letter-spacing:-.03em; }
-.gift-card p { color:var(--muted); line-height:1.7; }
-#genesis-form { text-align:left; margin:30px 0; display:grid; gap:12px; }
-#genesis-form label { color:var(--ink-soft); font-size:12px; }
-#genesis-code { width:100%; padding:16px; border:1px solid #385652; border-radius:9px; color:var(--ink); background:#0d191f; font:17px ui-monospace,monospace; letter-spacing:.08em; text-transform:uppercase; }
-#genesis-submit,.gift-result button { min-height:48px; border:1px solid #78c9b8; border-radius:9px; background:#a6dfcf; color:#112d28; font:inherit; cursor:pointer; padding:12px 20px; }
-.gift-result { display:grid; gap:18px; margin-top:30px; }
-.gift-result strong { color:var(--cyan); letter-spacing:.09em; }
-.gift-result span { color:var(--ink-soft); }
-.gift-card .tide-note,.tide-note { color:var(--muted); font-size:12px; line-height:1.7; }
-#genesis-message { min-height:24px; color:var(--cyan); }
+.redeem-mode .workspace-head { display:none; }
+.gift-view { display:grid; place-items:center; flex:1 0 auto; min-height:240px; padding:24px 0 12vh; }
+#genesis-form { width:min(100%,380px); display:grid; gap:12px; margin:0; }
+#genesis-code { width:100%; min-height:52px; padding:16px; border:1px solid var(--line); border-radius:8px; color:var(--ink); background:var(--deep); font:15px ui-monospace,monospace; letter-spacing:.06em; text-transform:uppercase; }
+#genesis-code::placeholder { color:var(--muted); }
+#genesis-submit { min-height:48px; padding:12px 20px; border:1px solid #78c9b8; border-radius:8px; background:#a6dfcf; color:#112d28; font:600 12px ui-monospace,monospace; letter-spacing:.1em; cursor:pointer; }
+#genesis-submit:disabled { opacity:.45; cursor:default; }
+#genesis-code:focus-visible,#genesis-submit:focus-visible { outline:2px solid var(--cyan); outline-offset:3px; }
+#genesis-message { min-height:20px; margin:0; color:var(--cyan); font-size:12px; line-height:1.6; text-align:center; }
 #genesis-message.error { color:var(--warn); }
 #profile-genesis { color:var(--cyan); letter-spacing:.1em; }
 .header-tide { display:flex; align-items:center; gap:8px; min-height:42px; padding:4px 10px; border:1px solid transparent; border-radius:12px; background:transparent; color:var(--cyan); font-family:inherit; font-size:14px; font-weight:600; }
@@ -52,7 +47,6 @@
 .slot-machine.won .slot-monitor { box-shadow:0 0 30px #80f3cd22; }
 .slot-machine.won #slot-message { color:#cefde2; font-size:17px; }
 @media (max-width:600px) {
- .gift-card { padding:26px 20px; }.gift-card h2 { font-size:23px; }
  .slot-view { padding:8px 0 24px; min-height:0; }
  .slot-machine { padding:25px 14px 24px; border-radius:20px; --cell:90px; }
  .slot-reel { height:166px; }.slot-track { top:38px; }.slot-cell img { width:76px; height:76px; }

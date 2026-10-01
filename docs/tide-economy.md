@@ -30,6 +30,12 @@ Profil zobrazuje Genesis a vstup Redeem code; neopakuje zůstatek ani nenabízí
 historii TIDE. Účetní ledger zůstává na serveru. SVG symboly a mechanická animace vycházejí
 z dodaného prototypu; jeho lokální ekonomika ani RNG se nepoužívají.
 
+Redeem stránka obsahuje pouze vstup a ACTIVATE, bez karty či nadpisu.
+Enter odešle kód; probíhající požadavek blokuje další odeslání. Výsledek
+se objeví přímo pod formulářem a odměna se čte z odpovědi serveru.
+Aktuální generátor vydává 100 kódů po 300 TIDE (30 000 TIDE). Návrh
+Genesis Supply #1 s různými odměnami a alokací správci zatím není implementován.
+
 ## Hranice a rizika
 
 TIDE nelze koupit, převést, vybrat ani směnit. Nemá peněžní kurz. Neexistuje

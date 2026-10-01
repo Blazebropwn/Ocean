@@ -2,7 +2,7 @@
   const $ = id => document.getElementById(id);
   const names = { wave: 'Wave', fish: 'Fish', shell: 'Shell', octo: 'Octo', core: 'Ocean Core' };
   const format = n => new Intl.NumberFormat('cs-CZ').format(n);
-  let user = null, wallet = null, game = null, busy = false, loadedUser = null;
+  let user = null, wallet = null, game = null, busy = false, loadedUser = null, redeemBusy = false;
   const tracks = [...document.querySelectorAll('.slot-track')];
   const positions = [25, 25, 25];
   const pendingName = () => `ocean-slot-pending:${user.id}`;
@@ -34,10 +34,9 @@
     const genesis = wallet.genesis;
     $('profile-genesis').classList.toggle('hidden', !genesis);
     $('profile-genesis').textContent = genesis ? `GENESIS #${String(genesis.number).padStart(3, '0')}` : '';
-    $('genesis-form').classList.toggle('hidden', Boolean(genesis));
-    $('genesis-result').classList.toggle('hidden', !genesis);
-    $('genesis-identity').textContent = genesis ? `GENESIS #${String(genesis.number).padStart(3, '0')} ACTIVATED` : '';
-    $('genesis-submit').disabled = !user?.accessApproved;
+    $('genesis-code').disabled = Boolean(genesis) || redeemBusy;
+    $('genesis-submit').disabled = !user?.accessApproved || Boolean(genesis) || redeemBusy;
+    if (genesis && !redeemBusy) { $('genesis-message').classList.remove('error'); $('genesis-message').textContent = 'Activated'; }
     controls();
   }
   async function refreshWallet() {
@@ -133,16 +132,22 @@
   $('slot-spin').addEventListener('click', spin);
   $('genesis-form').addEventListener('submit', async event => {
     event.preventDefault();
-    if ($('genesis-submit').disabled) return;
+    if (redeemBusy || $('genesis-submit').disabled) return;
+    const code = $('genesis-code').value.trim().toUpperCase().replace(/\s/g, '');
+    $('genesis-code').value = code;
+    redeemBusy = true; $('genesis-code').disabled = true; $('genesis-code').removeAttribute('aria-invalid');
     $('genesis-submit').disabled = true; $('genesis-message').classList.remove('error'); $('genesis-message').textContent = 'Ověřuji kód…';
     try {
-      const result = await api('/api/genesis/redeem', { code: $('genesis-code').value });
+      const result = await api('/api/genesis/redeem', { code });
       wallet = { balance: result.balance, genesis: result.genesis }; renderWallet();
-      $('genesis-message').textContent = result.replayed ? 'Tato aktivace už je uložená.' : '+300 TIDE';
+      $('genesis-message').textContent = result.replayed ? 'Activated' : `+${format(result.reward)} TIDE`;
       $('genesis-code').value = '';
     } catch (error) {
-      $('genesis-message').classList.add('error'); $('genesis-message').textContent = error.status ? error.message : 'Potvrzení se nepodařilo načíst. Zkus znovu stejný kód.';
-    } finally { $('genesis-submit').disabled = !user?.accessApproved; }
+      $('genesis-message').classList.add('error');
+      const invalid = error.status === 400 || ['INVALID_CODE', 'CODE_REDEEMED'].includes(error.code);
+      $('genesis-code').setAttribute('aria-invalid', String(invalid));
+      $('genesis-message').textContent = invalid ? 'Invalid code' : error.status === 404 ? 'Aktivace není dostupná. Zkus to později.' : error.status ? error.message : 'Potvrzení chybí. Zkus znovu stejný kód.';
+    } finally { redeemBusy = false; $('genesis-code').disabled = Boolean(wallet?.genesis); $('genesis-submit').disabled = !user?.accessApproved || Boolean(wallet?.genesis); }
   });
   window.addEventListener('resize', () => { if (!busy) positions.forEach((p, i) => place(i, p)); });
   window.OceanEconomy = {
@@ -150,6 +155,7 @@
     async open(view) {
       if (!user || !['overview', 'slot', 'gift'].includes(view)) return;
       if (view === 'slot' && busy) return;
+      if (view === 'gift' && !redeemBusy) { $('genesis-message').textContent = ''; $('genesis-message').classList.remove('error'); }
       try {
         await refreshWallet();
         if (view === 'slot') {
@@ -158,7 +164,7 @@
           if (!busy) $('slot-message').textContent = pending() ? 'Poslední spin čeká na potvrzení. Ověř ho tlačítkem.' : wallet.balance < 10 ? 'Na spin potřebuješ 10 TIDE.' : 'Tři stejné symboly na linii.';
         }
       } catch (error) { if (view === 'overview') { $('header-tide').textContent = '—'; $('header-tide-status').setAttribute('aria-label', 'TIDE není dostupné'); }
-        else $(view === 'slot' ? 'slot-message' : 'genesis-message').textContent = error.message; }
+        else { const message = $(view === 'slot' ? 'slot-message' : 'genesis-message'); message.textContent = error.status === 404 ? 'Služba není dostupná. Zkus to později.' : error.message; if (view === 'gift') message.classList.add('error'); } }
       controls();
     },
   };

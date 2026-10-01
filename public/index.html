@@ -150,12 +150,12 @@
           >
             <div class="arcade-game" id="arcade-game"><div class="game-top"><div class="game-score"><small>SKÓRE</small><strong id="game-score">0</strong></div></div><div class="game-canvas-wrap"><canvas id="game-canvas" aria-label="Herní plocha Sonaru"></canvas><button id="game-tap" type="button">Spustit</button></div><div class="game-bottom"><span id="game-hint">Pingni ve chvíli, kdy paprsek protne zelený sektor.</span><strong>OSOBNÍ REKORD · <span id="game-best">0</span></strong></div></div>
           </section>
-          <section class="gift-view app-view hidden" id="gift-view" aria-labelledby="gift-title">
-            <div class="gift-card"><span class="gift-mark" aria-hidden="true">≋</span><p class="section-kicker">PRVNÍ VLNA · 001—100</p><h2 id="gift-title">Tvůj začátek v OCEANu.</h2><p>Aktivuj Genesis kód a získej svou trvalou identitu a 300 TIDE.</p>
-              <form id="genesis-form"><label for="genesis-code">Genesis kód</label><input id="genesis-code" name="code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" placeholder="A7KF-9Q2M-XT4R" required><button type="submit" id="genesis-submit">Aktivovat</button></form>
-              <div id="genesis-result" class="gift-result hidden"><strong id="genesis-identity"></strong><span>300 TIDE při aktivaci</span><button type="button" data-open-view="slot">Otevřít slot <span aria-hidden="true">↗</span></button></div>
-              <p id="genesis-message" role="status" aria-live="polite"></p><p class="tide-note">TIDE jsou interní jednotky bez peněžní hodnoty. Nelze je koupit, vybrat, směnit ani převést. Genesis identita ti zůstane i po jejich utracení.</p>
-            </div>
+          <section class="gift-view app-view hidden" id="gift-view" aria-label="Redeem code">
+            <form id="genesis-form">
+              <input id="genesis-code" name="code" aria-label="Genesis code" aria-describedby="genesis-message" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" placeholder="XXXX-XXXX-XXXX" required>
+              <button type="submit" id="genesis-submit" disabled>ACTIVATE</button>
+              <p id="genesis-message" role="status" aria-live="polite"></p>
+            </form>
           </section>
           <section class="slot-view app-view hidden" id="slot-view" aria-label="OCEAN Slot">
             <div class="slot-machine" id="slot-machine">

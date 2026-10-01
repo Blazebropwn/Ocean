@@ -209,6 +209,7 @@ function viewFromHash() {
 function showAppView(view, activeLink = null) {
   const selected = ["overview", "arcade", "vault", "gift", "slot"].includes(view) ? view : "overview";
   document.body.classList.toggle("slot-mode", selected === "slot");
+  document.body.classList.toggle("redeem-mode", selected === "gift");
   if (selected !== "arcade") {
     cancelAnimationFrame(arcadeFrame);
     if (arcadeState) arcadeState.active = false;
