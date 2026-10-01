@@ -3,6 +3,7 @@
   const names = { wave: 'Wave', fish: 'Fish', shell: 'Shell', octo: 'Octo', core: 'Ocean Core' };
   const format = n => new Intl.NumberFormat('cs-CZ').format(n);
   let user = null, wallet = null, game = null, busy = false, loadedUser = null, redeemBusy = false;
+  let loading = false, unavailable = false, openRequest = 0, walletRequest = 0;
   const tracks = [...document.querySelectorAll('.slot-track')];
   const positions = [25, 25, 25];
   const pendingName = () => `ocean-slot-pending:${user.id}`;
@@ -22,12 +23,20 @@
   function controls() {
     let retry = false;
     try { retry = Boolean(user && pending()); } catch { /* checked before a request */ }
-    $('slot-spin').disabled = busy || !user?.accessApproved || !game || (!retry && (!wallet || wallet.balance < 10));
-    $('slot-spin').setAttribute('aria-label', retry ? 'Ověřit poslední spin' : 'Roztočit za 10 TIDE');
-    $('slot-cost').textContent = retry ? 'Ověřit poslední spin' : '10 TIDE';
+    const recover = unavailable || !game;
+    $('slot-spin').disabled = busy || loading || !user?.accessApproved || (!recover && !retry && (!wallet || wallet.balance < 10));
+    $('slot-spin').setAttribute('aria-label', busy ? 'Probíhá ověření a zobrazení spinu' : loading ? 'Načítám hru' : recover ? 'Znovu načíst hru' : retry ? 'Ověřit poslední spin' : 'Roztočit za 10 TIDE');
+    $('slot-action').textContent = busy ? 'ČEKEJ…' : loading ? 'NAČÍTÁM…' : recover ? 'OBNOVIT' : retry ? 'OVĚŘIT' : 'SPIN';
+    $('slot-cost').textContent = recover || retry ? 'Bez nové sázky' : '10 TIDE / spin';
+    $('slot-reels').setAttribute('aria-busy', String(busy || loading));
+    $('slot-machine').dataset.state = busy ? 'spinning' : loading ? 'loading' : recover ? 'unavailable' : retry ? 'pending' : 'ready';
   }
   function renderWallet() {
-    if (!wallet) return;
+    if (!wallet) {
+      $('header-tide').textContent = $('slot-balance').textContent = '—';
+      $('header-tide-status').setAttribute('aria-label', 'Zůstatek TIDE není dostupný');
+      controls(); return;
+    }
     $('header-tide').textContent = format(wallet.balance);
     $('header-tide-status').setAttribute('aria-label', `${format(wallet.balance)} TIDE`);
     $('slot-balance').textContent = format(wallet.balance);
@@ -41,14 +50,21 @@
   async function refreshWallet() {
     const id = user?.id;
     if (!id) return;
-    const data = await api('/api/tide');
-    if (user?.id !== id) return;
+    const request = ++walletRequest;
+    let data;
+    try { data = await api('/api/tide'); }
+    catch (error) {
+      if (user?.id !== id || request !== walletRequest) return;
+      throw error;
+    }
+    if (user?.id !== id || request !== walletRequest) return;
     wallet = data; renderWallet();
   }
   function place(i, position) {
     positions[i] = position;
     const cell = tracks[i].querySelector('.slot-cell');
-    if (cell) tracks[i].style.transform = `translateY(${-position * cell.getBoundingClientRect().height}px)`;
+    // Computed height survives navigation away while an animation is finishing.
+    if (cell) tracks[i].style.transform = `translateY(${-position * parseFloat(getComputedStyle(cell).height)}px)`;
   }
   function buildReels() {
     tracks.forEach((track, i) => {
@@ -98,31 +114,39 @@
     $('slot-message').textContent = spin.payout ? `Výhra ${format(spin.payout)} TIDE` : 'Bez výhry';
   }
   async function spin() {
-    if (busy || !user?.accessApproved || !game) return;
+    if (busy || loading || !user?.accessApproved) return;
+    if (unavailable || !game) { await window.OceanEconomy.open('slot'); return; }
+    const userId = user.id, storageKey = pendingName();
     let key;
     try {
       key = pending();
       if (!key && (!wallet || wallet.balance < 10)) return;
       key ||= crypto.randomUUID();
-      sessionStorage.setItem(pendingName(), key);
+      sessionStorage.setItem(storageKey, key);
     } catch { $('slot-message').textContent = 'Povol úložiště této stránky pro bezpečné obnovení spinu.'; return; }
-    busy = true; controls(); $('slot-message').textContent = 'Ověřuji spin…';
+    ++walletRequest; // Discard a wallet read started before this settlement.
+    busy = true; controls(); $('slot-machine').classList.remove('won', 'anticipating'); $('slot-message').textContent = 'Ověřuji spin…';
     try {
       const result = await api('/api/slot/spins', { idempotencyKey: key });
       const r = result.spin;
-      if (r.gameVersion !== game.gameVersion || r.idempotencyKey !== key || r.userId !== user.id || r.stops?.length !== 3 ||
+      if (!r || r.gameVersion !== game.gameVersion || r.idempotencyKey !== key || r.userId !== userId || r.stops?.length !== 3 || r.symbols?.length !== 3 ||
           r.stops.some((stop, i) => !Number.isInteger(stop) || stop < 0 || stop > 24 || game.reels[i][stop] !== r.symbols[i]) ||
+          r.payout !== (r.symbols.every(s => s === r.symbols[0]) ? game.payouts[r.symbols[0]] : 0) ||
           !Number.isSafeInteger(result.balance) || result.balance < 0) throw new Error('Výsledek nelze ověřit. Zkus znovu ověřit stejný spin.');
+      if (user?.id !== userId) return;
       // The server has already settled the spin. Animation cannot affect it.
       await present(r);
+      if (user?.id !== userId) return;
+      ++walletRequest;
       wallet = { ...(wallet || { genesis: null }), balance: result.balance }; renderWallet();
-      sessionStorage.removeItem(pendingName());
+      sessionStorage.removeItem(storageKey);
       try { await refreshWallet(); } catch { /* settlement balance is confirmed */ }
     } catch (error) {
+      if (user?.id !== userId) return;
       if ([400, 403, 409].includes(error.status)) {
-        sessionStorage.removeItem(pendingName());
+        sessionStorage.removeItem(storageKey);
         $('slot-message').textContent = error.message;
-        try { await refreshWallet(); } catch { wallet = null; }
+        try { await refreshWallet(); } catch { wallet = null; unavailable = true; renderWallet(); }
       } else {
         $('slot-message').textContent = 'Potvrzení chybí. Ověř stejný spin tlačítkem; další sázka se nevytvoří.';
       }
@@ -150,20 +174,36 @@
   });
   window.addEventListener('resize', () => { if (!busy) positions.forEach((p, i) => place(i, p)); });
   window.OceanEconomy = {
-    setUser(value) { user = { ...value, accessApproved: value.accessApproved ?? value.emailVerified }; if (loadedUser !== user.id) { loadedUser = user.id; wallet = null; refreshWallet().catch(() => {}); } },
+    setUser(value) { user = { ...value, accessApproved: value.accessApproved ?? value.emailVerified }; if (loadedUser !== user.id) { loadedUser = user.id; wallet = null; renderWallet(); refreshWallet().catch(() => {}); } },
     async open(view) {
       if (!user || !['overview', 'slot', 'gift'].includes(view)) return;
       if (view === 'slot' && busy) return;
+      const request = view === 'slot' ? ++openRequest : null;
+      if (view === 'slot') { loading = true; controls(); $('slot-message').textContent = 'Načítám hru…'; }
       if (view === 'gift' && !redeemBusy) { $('genesis-message').textContent = ''; $('genesis-message').classList.remove('error'); }
       try {
-        await refreshWallet();
         if (view === 'slot') {
-          if (!game) { game = await api('/api/slot'); buildReels(); }
+          if (!game) {
+            const data = await api('/api/slot');
+            if (request !== openRequest) return;
+            game = data; buildReels();
+          }
           else positions.forEach((p, i) => place(i, p));
+        }
+        await refreshWallet();
+        if (view === 'slot' && request === openRequest) {
+          unavailable = false;
           if (!busy) $('slot-message').textContent = pending() ? 'Poslední spin čeká na potvrzení. Ověř ho tlačítkem.' : wallet.balance < 10 ? 'Na spin potřebuješ 10 TIDE.' : 'Tři stejné symboly na linii.';
         }
-      } catch (error) { if (view === 'overview') { $('header-tide').textContent = '—'; $('header-tide-status').setAttribute('aria-label', 'TIDE není dostupné'); }
-        else { const message = $(view === 'slot' ? 'slot-message' : 'genesis-message'); message.textContent = error.status === 404 ? 'Služba není dostupná. Zkus to později.' : error.message; if (view === 'gift') message.classList.add('error'); } }
+      } catch (error) {
+        if (view === 'slot' && request !== openRequest) return;
+        if (view !== 'gift') { wallet = null; renderWallet(); }
+        if (view === 'slot') {
+          let retry = false; try { retry = Boolean(pending()); } catch { /* storage checked before spin */ }
+          unavailable = !game || !retry;
+          $('slot-message').textContent = unavailable ? 'Hru se nepodařilo načíst. Zkus obnovit spojení.' : 'Poslední spin čeká na potvrzení. Ověř ho tlačítkem.';
+        } else if (view === 'gift') { $('genesis-message').textContent = error.status === 404 ? 'Služba není dostupná. Zkus to později.' : error.message; $('genesis-message').classList.add('error'); }
+      } finally { if (view === 'slot' && request === openRequest) loading = false; }
       controls();
     },
   };

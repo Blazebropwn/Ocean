@@ -127,6 +127,23 @@ Slot zachovává cenu 10 TIDE, 3×25 stops, 15 625 kombinací, RTP 95,1808 %, hi
 animací. Retry po ztrátě odpovědi používá stejný key ze sessionStorage; RNG se
 neopakuje. SVG a animace vycházejí z prototypu, jeho klientská ekonomika ne.
 
+Ovládání rozlišuje SPIN, OVĚŘIT (čekající idempotency key) a OBNOVIT
+(opakování načtení hry bez POST sázky). Při nedostupném zůstatku se zobrazí
+pomlčka, nikoli poslední částka. Načítání a probíhající spin blokují další
+kliknutí. Klient ověřuje i soulad payoutu se symboly; poškozená odpověď
+zachová čekající key. Starší načítání peněženky nepřepisuje novější výsledek.
+Zůstatek a ovládání jsou vedle sebe, výherní řádek se zvýrazní. Válce respektují
+omezený pohyb a zachovají polohu i při přepnutí sekce během animace.
+
+Browser kontrola 2026-10-01 na izolované syntetické databázi: šířky
+320/390/768/1440/1920 px, nulový zůstatek, výhra bez animace, ovládání Enter,
+výpadek načítání a obnovení bez sázky. Skutečný testovací spin byl vypořádán,
+jeho odpověď zahozena a stránka obnovena: retry použil původní key a zůstatek
+se podruhé nezměnil. Ověřeno také odmítnutí nesouladného payoutu, blokování
+dvojkliku a přepnutí sekce se změnou rozlišení během animace. Produkční účty
+ani emise nejsou součástí těchto kontrol.
+
+
 ## Inicializace prostředí
 
 1. Nasadit aplikaci s migrací 006; před migrací zálohovat SQLite. Ověřit health
