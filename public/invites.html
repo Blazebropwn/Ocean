@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="cs">
-  <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Správa · Ocean</title><meta name="theme-color" content="#0c1014"><link rel="stylesheet" href="/command-deck.css"><link rel="stylesheet" href="/ocean-theme.css"></head>
+  <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Správa · Ocean</title><meta name="theme-color" content="#0c1014"><link rel="stylesheet" href="/command-deck.css"><link rel="stylesheet" href="/ocean-theme.css"><link rel="stylesheet" href="/genesis-admin.css"></head>
   <body class="ocean-ui">
     <header class="nav"><a class="brand" href="/">Ocean<span>.</span></a><a class="result-link back-link" href="/#home">← Home</a></header>
     <main class="invite-page utility-page admin-page">
@@ -23,6 +23,19 @@
             <div class="invite-result hidden" id="member-reset-result"><input id="member-reset-url" readonly><button id="copy-member-reset" type="button">Kopírovat</button></div>
           </section>
         </div>
+        <section class="admin-section genesis-admin" aria-labelledby="genesis-admin-title">
+          <div class="section-heading"><div><small>TIDE</small><h2 id="genesis-admin-title">Emise a kódy</h2></div><button type="button" id="genesis-refresh">Obnovit</button></div>
+          <div class="genesis-admin-filters">
+            <label>Emise<select id="genesis-wave"></select></label>
+            <label>Stav<select id="genesis-status-filter"><option value="all">Všechny kódy</option><option value="unclaimed">Nevyzvednuté</option><option value="redeemed">Aktivované</option></select></label>
+            <label>Hledat<input id="genesis-search" type="search" placeholder="Číslo kódu nebo uživatel" autocomplete="off"></label>
+          </div>
+          <div id="genesis-summary" class="genesis-summary"></div>
+          <p class="genesis-admin-note">Genesis alokace nezahrnuje výsledky her. Úplné kódy jsou pouze v soukromém exportu; zde jsou jejich evidenční čísla.</p>
+          <p id="genesis-admin-message" role="status"></p>
+          <div class="genesis-table-scroll"><table><thead><tr><th scope="col">Kód</th><th scope="col">Odměna</th><th scope="col">Stav</th><th scope="col">Aktivoval</th><th scope="col">Aktivováno</th></tr></thead><tbody id="genesis-admin-codes"></tbody></table></div>
+          <small id="genesis-admin-count"></small>
+        </section>
       </section>
     </main>
     <script src="/invites.js" defer></script>

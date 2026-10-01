@@ -4,4 +4,6 @@ import { adminAuditLog } from "./003_admin_audit_log.js";
 import { workerNotifications } from "./004_worker_notifications.js";
 import { tideEconomy } from "./005_tide_economy.js";
 
-export const databaseMigrations = [existingOceanSchema, agent001Foundation, adminAuditLog, workerNotifications, tideEconomy];
+import { genesisWaves } from "./006_genesis_waves.js";
+
+export const databaseMigrations = [existingOceanSchema, agent001Foundation, adminAuditLog, workerNotifications, tideEconomy, genesisWaves];

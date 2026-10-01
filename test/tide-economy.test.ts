@@ -6,7 +6,8 @@ import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { openDatabase, type OceanDatabase } from "../src/db.js";
-import { genesisIdentity, hashCode, issueGenesisBatch, redeemGenesis } from "../src/genesis/service.js";
+import { genesisIdentity, hashCode, type GenesisCodeExport } from "../src/genesis/service.js";
+import { issueTestGenesis as issueGenesisBatch, redeemTestGenesis as redeemGenesis, TEST_GENESIS_KEY } from "./helpers/genesis-fixture.js";
 import { appendTide, tideBalance, tideHistory } from "../src/tide/ledger.js";
 import { spinSlot } from "../src/slot/service.js";
 import { evaluateStops, REELS } from "../src/slot/math.js";
@@ -16,8 +17,8 @@ function user(db: OceanDatabase, id: string) {
 }
 function funded(db: OceanDatabase) {
   user(db, "alice"); user(db, "bob");
-  let codes: Array<{ genesisNumber: number; code: string }> = [];
-  issueGenesisBatch(db, values => { codes = values; });
+  let codes: GenesisCodeExport[] = [];
+  issueGenesisBatch(db, values => { codes = [...values].sort((a,b)=>a.rewardTide-b.rewardTide); });
   redeemGenesis(db, "alice", codes[0]!.code);
   return codes;
 }
@@ -45,18 +46,18 @@ test("100 hashed codes are issued once; failed export leaves no batch", t => {
   assert.equal(issueGenesisBatch(db,c=>{codes=c}),100);
   assert.equal(new Set(codes.map(c=>c.code)).size,100);
   assert.deepEqual(codes.map(c=>c.genesisNumber),Array.from({length:100},(_,i)=>i+1));
-  assert.equal((db.prepare("SELECT code_hash FROM genesis_codes WHERE genesis_number=1").pluck().get()),hashCode(codes[0]!.code));
+  assert.equal((db.prepare("SELECT code_hash FROM genesis_codes WHERE genesis_number=1").pluck().get()),hashCode(codes[0]!.code,TEST_GENESIS_KEY));
   assert.throws(()=>issueGenesisBatch(db,()=>assert.fail("must not export")),/již byly/);
 });
 
 test("Genesis is permanent, normalized, single per account and replay-safe after spending", t => {
   const db=openDatabase(":memory:");t.after(()=>db.close());const codes=funded(db);
   assert.equal(redeemGenesis(db,"alice",codes[0]!.code.toLowerCase().replaceAll("-"," ")).replayed,true);
-  assert.throws(()=>redeemGenesis(db,"bob",codes[0]!.code),/už byl/);
-  assert.throws(()=>redeemGenesis(db,"alice",codes[1]!.code),/už má/);
-  assert.throws(()=>redeemGenesis(db,"bob","AAAA-BBBB-CCCC"),/není platný/);
+  assert.throws(()=>redeemGenesis(db,"bob",codes[0]!.code),/Invalid code/);
+  assert.throws(()=>redeemGenesis(db,"alice",codes[1]!.code),/Invalid code/);
+  assert.throws(()=>redeemGenesis(db,"bob","AAAA-BBBB-CCCC"),/Invalid code/);
   for(let i=0;i<30;i++) spinSlot(db,"alice",randomUUID(),loss);
-  assert.equal(tideBalance(db,"alice"),0);assert.equal(genesisIdentity(db,"alice")!.number,1);
+  assert.equal(tideBalance(db,"alice"),0);assert.equal(genesisIdentity(db,"alice")!.number,codes[0]!.genesisNumber);
   assert.equal(redeemGenesis(db,"alice",codes[0]!.code).balance,0);
   assert.equal(db.prepare("SELECT COUNT(*) FROM tide_ledger WHERE transaction_type='GENESIS_REDEMPTION'").pluck().get(),1);
   assert.throws(()=>spinSlot(db,"alice",randomUUID(),()=>{assert.fail("RNG must not run");return []}),/10 TIDE/);
@@ -135,5 +136,5 @@ test("two accounts racing for one Genesis code produce one identity and one rewa
   const results=await Promise.all([worker(path,"redeem",codes[1]!.code,"bob"),worker(path,"redeem",codes[1]!.code,"charlie")]);
   assert.equal(results.filter(r=>r.ok).length,1);
   assert.equal(tideBalance(db,"bob")+tideBalance(db,"charlie"),300);
-  assert.equal(db.prepare("SELECT COUNT(*) FROM genesis_redemptions WHERE genesis_number=2").pluck().get(),1);
+  assert.equal(db.prepare("SELECT COUNT(*) FROM genesis_redemptions r JOIN genesis_codes c ON c.id=r.code_id WHERE c.genesis_number=?").pluck().get(codes[1]!.genesisNumber),1);
 });

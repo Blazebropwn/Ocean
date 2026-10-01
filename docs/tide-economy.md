@@ -1,137 +1,185 @@
-# Genesis → TIDE → OCEAN Slot
+# Genesis Supply #1 → TIDE → OCEAN Slot
 
-## Integrace a rozhodnutí
+## Architektura
 
-Používá se existující Fastify, session cookie `zero_session`, schvalování účtů,
-kontrola Origin, rate limiting a SQLite s verzovanými migracemi. Proof Ledger
-Risk Agenta je audit analýz, nikoliv účetnictví: zůstává samostatný. Kryptotron,
-Vault, Sonar a jejich zůstatky nejsou zdrojem TIDE.
+Fastify, SQLite a session cookie `zero_session` zůstávají společné se zbytkem
+OCEANu. TIDE balance je součet neměnného `tide_ledger`; samostatná editovatelná
+balance neexistuje. Proof Ledger Risk Agenta zůstává oddělený audit analýz.
+Kryptotron, DCA, Vault ani Binance nejsou zdrojem TIDE. TIDE nelze koupit,
+převést, směnit ani vybrat; nejde o blockchain token.
 
-Migrace 005 přidává `genesis_codes`, `genesis_redemptions`, `slot_spins`
-a `tide_ledger`. Genesis identita žije v redemptions, nezávisle na zůstatku.
-Jeden účet může mít právě jedno Genesis číslo. Balance je součet immutable
-ledgeru, ne editovatelná kolonka uživatele. Částky jsou celočíselné TIDE.
-Změny existujících záznamů ekonomiky zakazují SQLite triggery; vazby a
-jedinečnost chrání i databáze. Ekonomické transakce používají BEGIN IMMEDIATE.
+Emise vzniká pouze explicitním CLI příkazem. Start aplikace aplikuje schéma,
+ale negeneruje kódy a nepřipisuje správci žádné TIDE.
 
-API: `GET /api/tide`, stránkované `GET /api/tide/ledger`,
-`POST /api/genesis/redeem` (`code`), `GET /api/slot`,
-`POST /api/slot/spins` (`idempotencyKey`). Vše je svázané s přihlášeným účtem;
-zápisy vyžadují také schválení dle současných pravidel OCEANu. Klient neposílá
-userId, výhru, sázku ani výsledek. Stejný spin key vrací tentýž uložený spin.
-Redeem stejného kódu stejným uživatelem vrací jeho existující aktivaci bez
-dalšího připsání. Jiný uživatel použitý kód aktivovat nemůže.
+## Genesis Supply #1
 
-Hlavní navigace je Home · Arcade · Gamble · Vault. Arcade obsahuje Sonar,
-Gamble samostatný slot. Redeem code je v profilu. TIDE zůstatek je v hlavičce vedle profilu,
-s ikonou mince jako neinteraktivní informace o stavu. Staré odkazy #dashboard,
-#gift a #slot zůstávají funkční.
-Profil zobrazuje Genesis a vstup Redeem code; neopakuje zůstatek ani nenabízí
-historii TIDE. Účetní ledger zůstává na serveru. SVG symboly a mechanická animace vycházejí
-z dodaného prototypu; jeho lokální ekonomika ani RNG se nepoužívají.
+`GENESIS_001` má 100 000 TIDE: 75 000 je rezervováno kódům a 25 000 jednorázově
+připsáno schválenému vlastníkovi podle stabilního `users.id`. Část rezervy za
+neaktivované kódy není zůstatkem žádného uživatele.
 
-Redeem stránka obsahuje pouze vstup a ACTIVATE, bez karty či nadpisu.
-Enter odešle kód; probíhající požadavek blokuje další odeslání. Výsledek
-se objeví přímo pod formulářem a odměna se čte z odpovědi serveru.
-Aktuální generátor vydává 100 kódů po 300 TIDE (30 000 TIDE). Návrh
-Genesis Supply #1 s různými odměnami a alokací správci zatím není implementován.
+| Počet | Odměna za kód | Alokace |
+| ---: | ---: | ---: |
+| 40 | 300 | 12 000 |
+| 30 | 500 | 15 000 |
+| 15 | 800 | 12 000 |
+| 8 | 1 000 | 8 000 |
+| 4 | 2 000 | 8 000 |
+| 2 | 5 000 | 10 000 |
+| 1 | 10 000 | 10 000 |
+| **100** | | **75 000** |
 
-## Hranice a rizika
+Pool se nejprve sestaví a promíchá pomocí Fisher–Yates a `crypto.randomInt`.
+Kódy mají 20 náhodných znaků z bezpečné abecedy a formát
+`OCN-XXXXX-XXXXX-XXXXX-XXXXX`; jejich text nekóduje číslo, hodnotu ani rarity.
+Databáze uchovává pouze HMAC-SHA256 s dedikovaným 32bytovým tajemstvím
+`GENESIS_CODE_HMAC_KEY`. Tajemství není v DB, API ani exportu. Fingerprint
+klíče v metadatech brání tichému použití nesprávného klíče.
 
-TIDE nelze koupit, převést, vybrat ani směnit. Nemá peněžní kurz. Neexistuje
-propojení s burzovním účtem. Model výher má zápornou dlouhodobou návratnost
-pro hráče, žádný slib výdělku. Nevytváří se autoplay ani placené doplňování.
-Matematika se ověřuje vyčerpávajícím testem všech 15 625 kombinací, ne vzorkem.
+Generování, 100 vložených digestů, alokace správci, dokončení emise i auditní
+událost běží v jedné `BEGIN IMMEDIATE` transakci. Před commitem se zapíše a
+fsyncne nový soukromý export. Opakované vydání stejné emise se odmítne.
+Dokončení emise ověřuje databázový trigger: počty, všechny reward tiery,
+celkovou rezervu a skutečný účetní zápis alokace správci. Vydaná emise je
+neměnná a nelze k ní přidat další kódy.
 
-Největší provozní rizika: ztráta exportu promo kódů, neopatrné zveřejnění
-kódů, ztráta SQLite volume a nekompatibilní rollback migrace. Kódy jsou
-bearer tajemství; v DB jsou jen SHA-256 hashe náhodných kódů. Nejsou v logu,
-Gitu ani veřejném API. Výdej přes CLI vytváří přesně 100 kódů jednou, export
-je nový soubor s oprávněním 0600. Záloha DB musí zachovat ledger i výsledky.
-V jedné transakci není síť ani animace. SQLite zůstává jediný zapisující
-zdroj pravdy; horizontální replikace není podporovaná současnou architekturou.
+Po celou dobu platí:
 
-Idempotency key se v prohlížeči uchovává pouze pro zotavení požadavku;
-balance je vždy načtený ze serveru. Při nejasném síťovém výsledku se nesmí
-vytvořit nový key. Zavření stránky neruší již vypořádaný spin. Klientská
-animace není doklad provedení; dokladem je uložený spin a ledger.
+- `admin allocation + code allocation = 100 000`
+- `redeemed amount + unclaimed amount = 75 000`
 
-## API a provoz
+Jde o původní Genesis alokaci. Aktuální součet hráčských zůstatků se dále mění
+sázkami a výhrami slotu; tato změna není další Genesis emisí. Přehled správce
+proto tyto dva významy nezaměňuje.
 
-| Endpoint | Výsledek |
+## Databáze a migrace
+
+Migrace 005 založila původní TIDE ledger, Genesis kódy a `slot_spins`.
+Migrace **006 `genesis_waves`** přidává metadata emisí a převádí existující
+kódy, aktivace a ledger na schéma podporující proměnlivé odměny:
+
+- `genesis_waves`: ID, druh, stav draft/issued, počet kódů, alokace a supply,
+  admin user ID, reward distribution, fingerprint HMAC klíče a čas.
+- `genesis_codes`: interní UUID, wave, evidenční číslo, unique digest,
+  digest scheme, reward a čas. Neobsahuje plaintext.
+- `genesis_redemptions`: neměnná vazba kódu na uživatele, wave a čas.
+  Stav kódu se odvozuje z existence aktivace, neduplikuje se v další kolonce.
+- `tide_ledger`: zachovává sequence, ID, reference, částky a historii; nově
+  přijímá `GENESIS_ADMIN_ALLOCATION` se zdrojem `genesis_admin`. Kredity musí
+  odkazovat na skutečnou aktivaci nebo správnou alokaci wave a souhlasit částkou.
+
+Původní kódy se zachovají jako `LEGACY_300`, se SHA-256 digesty a odměnou 300.
+Nemění se jejich čerpání, zůstatky ani trvalé identity. **Pokud legacy emise
+existuje, CLI odmítne vydat `GENESIS_001`**: živá starší ekonomika vyžaduje
+samostatný migrační plán. Automaticky se nemaže, nepřepisuje ani nepřičítá
+nových 100 000 TIDE. Prázdná databáze nemá žádnou legacy emisi.
+
+Schéma i redeem podporují další waves bez změny mechanismu. Druh `promo`
+umožňuje uživateli jednu aktivaci v každé budoucí wave; jeho Genesis identita
+zůstává stejná. Genesis identitu lze získat pouze jednou, také napříč legacy
+emisí a novou Genesis. Současné CLI úmyslně vydává pouze `GENESIS_001`.
+
+## Redeem a bezpečnost
+
+Server normalizuje velikost písmen, mezery a pomlčky. Uvnitř SQLite IMMEDIATE
+transakce vyhledá digest, ověří emisi a aktivaci, zapíše claim a kredit ledgeru.
+Dva procesy nemohou odměnu připsat dvakrát. Opakování vlastního dokončeného
+požadavku vrací původní reward s `replayed: true`, bez dalšího připsání.
+Neplatný, cizím účtem použitý nebo pro uživatele nepřípustný kód vrací stejný
+`400 {error: "Invalid code", code: "INVALID_CODE"}`; před aktivací se reward
+běžnému uživateli nezpřístupňuje. Neplatný či chybějící serverový HMAC klíč
+způsobí 503 a žádný zápis.
+
+Autentizace a schválení účtu používají současný model. Origin kontrola je
+sdílená s ostatními zápisy. Redeem má dva nezávislé limity přes existující
+Fastify rate-limit: 10 pokusů/min/IP a 10 pokusů/min/uživatel. Hlavička
+X-Forwarded-For se respektuje jen při správně nastaveném důvěryhodném proxy.
+Limity jsou v paměti procesu stejně jako ostatní limity aplikace.
+
+Audit aktivace tvoří immutable redemption a navázaný ledger: uživatel, wave,
+interní ID kódu, čas a skutečná odměna. CLI navíc ukládá `GENESIS_WAVE_ISSUED`
+do současného `admin_audit_log`. Žádný z těchto záznamů neobsahuje plaintext.
+
+## API a rozhraní
+
+| Endpoint | Účel |
 | --- | --- |
-| `GET /api/tide` | Aktuální balance a samostatná Genesis identita |
-| `GET /api/tide/ledger?before=<sequence>` | 25 vlastních záznamů a nextCursor |
-| `POST /api/genesis/redeem` | `{code}` → identita, reward, aktuální balance, replayed |
-| `GET /api/slot` | Verze hry, sázka, immutable reel strips a paytable |
-| `POST /api/slot/spins` | `{idempotencyKey}` → immutable spin, aktuální balance, replayed |
+| `GET /api/tide` | Vlastní balance a Genesis identita |
+| `GET /api/tide/ledger?before=<sequence>` | Stránkovaná vlastní účetní historie |
+| `POST /api/genesis/redeem` | `{code}` → genesis, reward, balance, replayed |
+| `GET /api/admin/genesis?wave=GENESIS_001` | Pouze schválený owner: emise, účetní součty a metadata všech kódů zvolené wave |
+| `GET /api/slot` | Verze, sázka, strips a paytable |
+| `POST /api/slot/spins` | `{idempotencyKey}` → uložený výsledek, balance a replayed |
 
-Nová aktivace/spin vrací 201, opakování 200. Neplatný vstup 400,
-nepřihlášený účet 401, neschválený účet nebo cizí Origin 403,
-neexistující kód 404, obsazený kód/identita či nedostatek TIDE 409.
-POST limit je 10 redeem / 30 spin požadavků za minutu na IP, navíc platí
-současný globální limit. Ledger ani promo kódy nemají veřejné administrační
-write endpointy. Uživatelská data mají `Cache-Control: no-store`.
+Všechny ekonomické odpovědi mají `Cache-Control: no-store`. Admin API má
+explicitní seznam vracených polí; nevrací plaintext kódy, jejich digests ani
+fingerprint klíče. Přehled ve Správě obsahuje odměny, stav, kdo/kdy aktivoval,
+filtr emise/stavu a hledání čísla kódu nebo uživatele. Evidenční číslo + wave
+odpovídají soukromému exportu. Vydávání kódů přes webový formulář neexistuje.
 
-### Výdej první dávky
+Navigace: Home · Arcade · Gamble · Vault. Redeem je pouze v profilu a na
+`#redeem`, také původní `#gift` funguje. Stránka má jeden vstup a ACTIVATE,
+krátký error/success a podporuje Enter, normalizaci i blokaci dvojího submitu.
+Odměna se čte ze serveru. TIDE mince v hlavičce je neinteraktivní zůstatek;
+profil neobsahuje množství ani historii TIDE.
 
-Po záloze SQLite a nasazení migrace spusť se správným `DATABASE_PATH`:
+Slot zachovává cenu 10 TIDE, 3×25 stops, 15 625 kombinací, RTP 95,1808 %, hit
+7,264 % a jackpot 1/15 625. Výsledek i bet/payout se vypořádají na serveru před
+animací. Retry po ztrátě odpovědi používá stejný key ze sessionStorage; RNG se
+neopakuje. SVG a animace vycházejí z prototypu, jeho klientská ekonomika ne.
+
+## Inicializace prostředí
+
+1. Nasadit aplikaci s migrací 006; před migrací zálohovat SQLite. Ověřit health
+   a schváleného vlastníka. Samotný deploy emisi nevytvoří.
+2. V secret manageru nastavit dedikovaný `GENESIS_CODE_HMAC_KEY` (64 hex znaků
+   z kryptografického generátoru) a `GENESIS_ADMIN_USER_ID` na skutečné stabilní
+   `users.id` vlastníka. Klíč bezpečně zálohovat; nezaměňovat s Binance ani
+   `OCEAN_CREDENTIALS_KEY`. Restartovat aplikaci s touto konfigurací.
+3. Připravit soukromý adresář mimo veřejné soubory, např. `data/genesis-exports`
+   s oprávněním 0700. Ověřit správný DATABASE_PATH. Vydat jedinou sadu:
 
 ```sh
 npm run build
-npm run genesis:issue -- --output /soukroma/cesta/genesis.csv
+npm run genesis:issue -- --output data/genesis-exports/genesis-codes-GENESIS_001.csv
 ```
 
-Cílový adresář musí existovat a být soukromý. CLI odmítá výstup v `public/`
-a nepřepisuje existující soubor. Soubor se fsyncne před commitnutím dávky.
-Při chybě zápisu se rollbackne i databáze. Při jakémkoli již vydaném kódu
-se nová dávka odmítne; žádná automatická regenerace čísel 001–100.
-Export bezpečně zálohuj a distribuuj mimo veřejný repozitář. Nikdy nevydávej
-lokální testovací kódy jako produkční: každá databáze má vlastní dávku.
+Výsledkem je CSV `index,code,reward_tide,wave`, 100 řádků, režim **0600**.
+Soubor se vytváří výhradně jako nový (`wx`), nepřepisuje se. Cesty přes symlink
+se vyhodnotí před kontrolou. Uvnitř projektu je povolen jen soukromý `data/`;
+exporty `genesis-codes-*.csv` jsou navíc v `.gitignore` i `.dockerignore`.
+CLI nevypisuje kódy. Secret a export nesmí do logů, ticketů ani veřejných příloh.
 
-### Ověření
+4. Ve Správě ověřit `GENESIS_001`: 100 kódů, supply 100 000, alokace správci
+   25 000, code pool 75 000, redeemed 0, unclaimed 75 000 a správného příjemce.
+5. Soukromě zálohovat export a HMAC klíč; udělat novou zálohu DB. Kódy
+   distribuovat bezpečným soukromým kanálem, ne z administračního API.
 
-`npm run verify` zahrnuje přesnou enumeraci matematiky, rollback ekonomiky,
-replay po restartu SQLite, odmítnutí kreditů bez sázky/reference, append-only
-pravidla, scoped API, auth/approval/Origin a dva skutečné procesy soutěžící
-o tentýž kód, stejný spin key i poslední sázku.
+Při chybě exportu/DB se transakce vrátí a nově vytvořený export odstraní.
+Při pádu procesu mezi exportem a commitem může zůstat soubor bez emise: před
+jakýmkoli opakováním porovnat DB a soubor, nepřepisovat ho naslepo.
+Plaintext nelze z digestů obnovit. Ztráta HMAC klíče znemožní nové aktivace;
+klíč nelze svévolně rotovat. Obnova starší DB může znovu otevřít použitý kód,
+proto nikdy nevracet ekonomickou historii zpět za běžícího provozu.
 
-Lokální integrační náhled ověřil skutečný redeem, zúčtování, dvojklik,
-ztracenou HTTP odpověď po commitu, reload a obnovení stejného výsledku,
-ledger, nedostatek TIDE a desktop/mobil. SVG assety jsou odvozené z dodaného
-`OCEAN_Slot_Prototype.html`; runtime neobsahuje jeho Kč, demo balance,
-reset, lab, statistiky ani klientský RNG.
+## Ověření a změněné části
 
-Výsledek před předáním: build, 182 Node testů a 132 Python testů prošly.
-Ověřená obnova SQLite s 23 tabulkami zahrnuje i aktivace, spiny a ledger.
-Vydána a zkontrolována lokální testovací dávka 100 kódů s exportem 0600.
-Produkční kódy zatím vydané nejsou.
+Testy pokrývají přesnou distribuci, všechny slot kombinace, oba procesové
+závody (redeem i issuance), idempotenci, reálnou výši všech tier odměn,
+rollback kreditu/issuance/exportu, legacy migraci s historií, promo wave,
+HMAC bez plaintextu, auth/owner/Origin, limity přes účty/IP a CLI export 0600.
+Ověřeno: build, 190 Node testů, 132 Python testů a restore drill 24 tabulek.
+Prohlížeč ověřuje skutečné API/DB při aktivaci a změně admin součtů, filtry,
+nezpřístupnění dat členům a mobilní rozložení. Restore drill zahrnuje emisi,
+aktivace a slot ledger.
 
-### Změněné části
-
-- `src/database/migrations/005_tide_economy.ts` a registr migrací: čtyři
-  ekonomické tabulky, omezení, indexy a immutable triggery.
-- `src/tide/ledger.ts`, `src/genesis/*`, `src/slot/*`: účetnictví, výdej
-  a aktivace kódů, samostatná matematika a vypořádání hry.
-- `src/routes/economy.ts`, `src/app.ts`: pět endpointů nad stávající auth.
-- `public/economy.js`, `public/economy.css`, `public/slot/*.svg`: Redeem code,
-  slot, animace a TIDE zůstatek; `public/app.js` / `index.html` integrují
-  routing, profil, TIDE zůstatek v hlavičce a samostatná sekce Gamble.
-- `test/tide-economy.test.ts`, `test/economy-routes.test.ts`, procesový
-  helper a migrační testy: kritické účetní a autorizační scénáře.
-- `package.json`: provozní příkaz `genesis:issue`.
-
-## Omezení MVP
-
-Promo kódy mají jednorázový neveřejný export, nikoli administrátorské UI.
-Ztracený export neumíme odvodit zpět z hashů. Účet s ekonomickou historií
-nelze smazat kaskádou; budoucí anonymizace musí zachovat audit. Zůstatek
-počítáme ze SUM ledgeru s indexem podle uživatele; případná budoucí cache
-musí zůstat účetně ověřitelná. První verze nemá zvuk ani autoplay.
-
-Obnova starší zálohy nesmí znovu zpřístupnit použité promo kódy nebo vymazat
-spiny, které už klient potvrdil. Pro obnovu použij konzistentní zálohu celé
-SQLite a provoz během obnovy zastav. Idempotency klíče a záznamy se v MVP
-nepročišťují. Při nejasném síťovém výsledku UI vyžaduje sessionStorage;
-bez něj novou sázku neodesílá. Vymazání tohoto úložiště nemění historii na
-serveru, ale odstraní automatickou návaznost na poslední nepotvrzený požadavek.
+- `src/database/migrations/006_genesis_waves.ts`, registr migrací: schéma,
+  kompatibilita a DB invarianty.
+- `src/genesis/service.ts`, `issue.ts`, `admin.ts`, `src/tide/ledger.ts`:
+  emise, bezpečný export, redeem, účetnictví a read-only report.
+- `src/config.ts`, `.env.example`, `.gitignore`, `.dockerignore`: konfigurace
+  HMAC/owner a ochrana exportů.
+- `src/routes/economy.ts`: admin endpoint, nové kódy a dvojí limit pokusů.
+- `public/invites.html`, `invites.js`, `genesis-admin.css`: administrační přehled.
+- `public/index.html`, `economy.js`, `economy.css`: nový formát a skutečná odměna.
+- `test/genesis-waves.test.ts` a existující ekonomické/migrační testy: nové
+  invarianty i zachování stávajících cest.

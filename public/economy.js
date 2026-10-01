@@ -34,9 +34,8 @@
     const genesis = wallet.genesis;
     $('profile-genesis').classList.toggle('hidden', !genesis);
     $('profile-genesis').textContent = genesis ? `GENESIS #${String(genesis.number).padStart(3, '0')}` : '';
-    $('genesis-code').disabled = Boolean(genesis) || redeemBusy;
-    $('genesis-submit').disabled = !user?.accessApproved || Boolean(genesis) || redeemBusy;
-    if (genesis && !redeemBusy) { $('genesis-message').classList.remove('error'); $('genesis-message').textContent = 'Activated'; }
+    $('genesis-code').disabled = redeemBusy;
+    $('genesis-submit').disabled = !user?.accessApproved || redeemBusy;
     controls();
   }
   async function refreshWallet() {
@@ -147,7 +146,7 @@
       const invalid = error.status === 400 || ['INVALID_CODE', 'CODE_REDEEMED'].includes(error.code);
       $('genesis-code').setAttribute('aria-invalid', String(invalid));
       $('genesis-message').textContent = invalid ? 'Invalid code' : error.status === 404 ? 'Aktivace není dostupná. Zkus to později.' : error.status ? error.message : 'Potvrzení chybí. Zkus znovu stejný kód.';
-    } finally { redeemBusy = false; $('genesis-code').disabled = Boolean(wallet?.genesis); $('genesis-submit').disabled = !user?.accessApproved || Boolean(wallet?.genesis); }
+    } finally { redeemBusy = false; $('genesis-code').disabled = false; $('genesis-submit').disabled = !user?.accessApproved; }
   });
   window.addEventListener('resize', () => { if (!busy) positions.forEach((p, i) => place(i, p)); });
   window.OceanEconomy = {

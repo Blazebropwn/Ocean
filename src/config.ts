@@ -1,6 +1,8 @@
 import { resolve } from "node:path";
 
 export type Config = {
+  genesisCodeHmacKey?: string;
+  genesisAdminUserId?: string;
   port: number;
   host: string;
   databasePath: string;
@@ -40,6 +42,8 @@ export type Config = {
 
 export function loadConfig(env = process.env): Config {
   return {
+    genesisCodeHmacKey: env.GENESIS_CODE_HMAC_KEY,
+    genesisAdminUserId: env.GENESIS_ADMIN_USER_ID,
     port: Number(env.PORT ?? 3000),
     host: env.HOST ?? "127.0.0.1",
     databasePath: resolve(env.DATABASE_PATH ?? "./data/ocean.db"),

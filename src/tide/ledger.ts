@@ -5,7 +5,7 @@ export function tideBalance(db: OceanDatabase, userId: string): number {
   return (db.prepare("SELECT COALESCE(SUM(amount),0) AS balance FROM tide_ledger WHERE user_id = ?").get(userId) as { balance: number }).balance;
 }
 
-export function appendTide(db: OceanDatabase, entry: { userId: string; amount: number; transactionType: "GENESIS_REDEMPTION" | "SLOT_BET" | "SLOT_WIN"; source: "genesis" | "ocean_slot_v1"; referenceId: string; createdAt: string }) {
+export function appendTide(db: OceanDatabase, entry: { userId: string; amount: number; transactionType: "GENESIS_REDEMPTION" | "GENESIS_ADMIN_ALLOCATION" | "SLOT_BET" | "SLOT_WIN"; source: "genesis" | "genesis_admin" | "ocean_slot_v1"; referenceId: string; createdAt: string }) {
   if (!db.inTransaction) throw new Error("TIDE_REQUIRES_TRANSACTION");
   db.prepare("INSERT INTO tide_ledger (id,user_id,amount,transaction_type,source,reference_id,created_at) VALUES (?,?,?,?,?,?,?)")
     .run(`tide_${randomUUID().replaceAll("-", "")}`, entry.userId, entry.amount, entry.transactionType, entry.source, entry.referenceId, entry.createdAt);

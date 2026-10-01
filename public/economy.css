@@ -1,7 +1,7 @@
 .redeem-mode .workspace-head { display:none; }
 .gift-view { display:grid; place-items:center; flex:1 0 auto; min-height:240px; padding:24px 0 12vh; }
-#genesis-form { width:min(100%,380px); display:grid; gap:12px; margin:0; }
-#genesis-code { width:100%; min-height:52px; padding:16px; border:1px solid var(--line); border-radius:8px; color:var(--ink); background:var(--deep); font:15px ui-monospace,monospace; letter-spacing:.06em; text-transform:uppercase; }
+#genesis-form { width:min(100%,420px); display:grid; gap:12px; margin:0; }
+#genesis-code { width:100%; min-height:52px; padding:16px; border:1px solid var(--line); border-radius:8px; color:var(--ink); background:var(--deep); font:14px ui-monospace,monospace; letter-spacing:.02em; text-transform:uppercase; }
 #genesis-code::placeholder { color:var(--muted); }
 #genesis-submit { min-height:48px; padding:12px 20px; border:1px solid #78c9b8; border-radius:8px; background:#a6dfcf; color:#112d28; font:600 12px ui-monospace,monospace; letter-spacing:.1em; cursor:pointer; }
 #genesis-submit:disabled { opacity:.45; cursor:default; }
