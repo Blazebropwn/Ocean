@@ -159,11 +159,11 @@
           </section>
           <section class="slot-view app-view hidden" id="slot-view" aria-label="OCEAN Slot">
             <div class="slot-machine" id="slot-machine">
-              <div class="slot-monitor"><div class="slot-reels" id="slot-reels" aria-label="Tři válce"><div class="slot-reel"><div class="slot-track"></div></div><div class="slot-reel"><div class="slot-track"></div></div><div class="slot-reel"><div class="slot-track"></div></div></div><p id="slot-message" role="status" aria-live="polite">Načítám…</p></div>
+              <div class="slot-monitor"><div class="slot-reels" id="slot-reels" aria-label="Tři válce"><div class="slot-reel"><div class="slot-track"></div></div><div class="slot-reel"><div class="slot-track"></div></div><div class="slot-reel"><div class="slot-track"></div></div></div></div><p id="slot-message" class="slot-a11y" role="status" aria-live="polite">Načítám…</p>
               <div class="slot-paytable" id="slot-paytable" aria-label="Výhry za tři stejné symboly"></div>
               <div class="slot-console">
-                <div class="slot-wallet"><div class="slot-balance" role="status" aria-label="Zůstatek TIDE"><img src="/tide-coin.svg" width="28" height="28" alt=""><span id="slot-balance">—</span></div></div>
-                <div class="slot-control"><button type="button" id="slot-spin" aria-label="Roztočit za 10 TIDE" aria-describedby="slot-message" disabled><svg viewBox="0 0 64 48" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="7" width="48" height="32" rx="7"/><path d="M21 9v28m16-28v28M14 20v6m15-6v6m15-6v6m10-7h5v13"/><circle cx="59" cy="13" r="3"/></svg></button></div>
+                <div class="slot-bet" aria-label="Cena spinu 10 TIDE"><span id="slot-bet">10</span><img src="/tide-coin.svg" width="28" height="28" alt="TIDE"></div>
+                <div class="slot-control"><button type="button" id="slot-spin" aria-label="Roztočit za 10 TIDE" aria-describedby="slot-message" disabled><svg viewBox="0 0 64 48" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="7" width="48" height="32" rx="7"/><path d="M21 9v28m16-28v28M14 20v6m15-6v6m15-6v6m10-7h5v13"/><circle cx="59" cy="13" r="3"/></svg><span id="slot-action">SPIN</span></button></div>
               </div>
             </div>
           </section>

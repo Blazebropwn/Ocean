@@ -127,16 +127,13 @@ Slot zachovává cenu 10 TIDE, 3×25 stops, 15 625 kombinací, RTP 95,1808 %, hi
 animací. Retry po ztrátě odpovědi používá stejný key ze sessionStorage; RNG se
 neopakuje. SVG a animace vycházejí z prototypu, jeho klientská ekonomika ne.
 
-Tlačítko používá pouze ikonu; přístupný název a tooltip rozlišují spin,
-ověření (čekající idempotency key) a obnovení
-(opakování načtení hry bez POST sázky). Při nedostupném zůstatku se zobrazí
-pomlčka, nikoli poslední částka. Načítání a probíhající spin blokují další
-kliknutí. Klient ověřuje i soulad payoutu se symboly; poškozená odpověď
-zachová čekající key. Starší načítání peněženky nepřepisuje novější výsledek.
-Mince s částkou a ikonové ovládání jsou vedle sebe, výherní řádek se zvýrazní.
-Výplatní tabulka používá logo TIDE místo názvu tokenu. Válce nemají středovou
-čáru; klidový stav je bez vysvětlujících textů, chyby a výsledky zůstávají viditelné. Válce respektují
-omezený pohyb a zachovají polohu i při přepnutí sekce během animace.
+Větší válce nemají středovou čáru ani viditelný stavový panel. Dole je pevná
+cena 10 TIDE (číslo + mince) a větší tlačítko SPIN; zůstatek je v hlavičce.
+Přístupná stavová hlášení zůstávají pro čtečky obrazovky. Tlačítko při chybě
+nabízí OVĚŘIT (stejný idempotency key) nebo OBNOVIT (jen načtení hry).
+Načítání a probíhající spin blokují další kliknutí. Klient ověřuje payout
+proti symbolům; neplatná odpověď zachová klíč pro retry. Válce respektují
+omezený pohyb a zachovají polohu při přepnutí sekce. Výherní řádek se zvýrazní.
 
 Browser kontrola 2026-10-01 na izolované syntetické databázi: šířky
 320/390/768/1440/1920 px, nulový zůstatek, výhra bez animace, ovládání Enter,
@@ -146,6 +143,24 @@ se podruhé nezměnil. Ověřeno také odmítnutí nesouladného payoutu, blokov
 dvojkliku a přepnutí sekce se změnou rozlišení během animace. Produkční účty
 ani emise nejsou součástí těchto kontrol.
 
+
+## Admin prostor
+
+- `/invites.html`: pozvánky a členové, včetně původních účtových akcí.
+- `/genesis.html`: emise, součty, filtry, aktivace a soukromé stažení CSV.
+- `/slot-mathlab.html`: přesná matematika produkčních válců a izolovaná
+  klientská simulace 1 000 / 10 000 / 100 000 spinů; žádný zápis sázek ani TIDE.
+
+Všechny stránky mají společnou navigaci; oprávnění chrání také API.
+`GET /api/admin/slot/math` vyžaduje schváleného ownera a přesně enumeruje
+15 625 kombinací z `src/slot/math.ts` (RTP 95,1808 %, hit rate 7,264 %).
+`POST /api/admin/genesis/export` přijímá pouze `{wave}`, vyžaduje schváleného
+ownera a přesně odpovídající Origin. Vrací CSV attachment s `no-store`.
+Soubor musí ležet v `genesis-exports/` vedle DB a být čitelný pro proces aplikace.
+Server porovná všechna čísla, odměny a HMAC kódů s DB; chybějící či odlišný
+export nevydá. Audit obsahuje jen actor, wave a počet, nikdy kódy. Běžný
+inventář dál plaintext nevrací. Export nevytváří ani nemění kódy, obsahuje
+celou emisi včetně již aktivovaných položek; aktuální stav je v tabulce.
 
 ## Inicializace prostředí
 
@@ -187,7 +202,7 @@ Testy pokrývají přesnou distribuci, všechny slot kombinace, oba procesové
 závody (redeem i issuance), idempotenci, reálnou výši všech tier odměn,
 rollback kreditu/issuance/exportu, legacy migraci s historií, promo wave,
 HMAC bez plaintextu, auth/owner/Origin, limity přes účty/IP a CLI export 0600.
-Ověřeno: build, 190 Node testů, 132 Python testů a restore drill 24 tabulek.
+Ověřeno: build, 192 Node testů, 132 Python testů a restore drill 24 tabulek.
 Prohlížeč ověřuje skutečné API/DB při aktivaci a změně admin součtů, filtry,
 nezpřístupnění dat členům a mobilní rozložení. Restore drill zahrnuje emisi,
 aktivace a slot ledger.

@@ -1,0 +1,47 @@
+.admin-layout { display:grid; grid-template-columns:220px minmax(0,1fr); }
+.admin-sidebar { background:var(--deep); border-right:1px solid var(--line); padding:32px 16px; }
+.admin-caption { display:block; padding:0 12px 22px; color:var(--muted); font-size:10px; letter-spacing:.14em; }
+.admin-sidebar nav { display:grid; gap:8px; }
+.admin-sidebar nav a { display:flex; align-items:center; gap:12px; min-height:46px; padding:12px; border-radius:8px; color:var(--ink-soft); font-size:12px; text-decoration:none; }
+.admin-sidebar nav a span { color:var(--muted); font:10px ui-monospace,monospace; }
+.admin-sidebar nav a:hover { background:var(--panel); }
+.admin-sidebar nav a[aria-current] { background:#20352f; color:#b5edde; }
+#admin-identity { display:block; margin:32px 12px; color:var(--muted); font-size:12px; overflow-wrap:anywhere; }
+.admin-content { min-width:0; padding:36px clamp(20px,4vw,56px) 64px; max-width:1500px; width:100%; margin-inline:auto; }
+.admin-page-heading { margin-bottom:28px; }
+.admin-page-heading h1 { margin:0; font-size:28px; letter-spacing:-.03em; }
+#admin-status { color:var(--warn); font-size:13px; margin:0 0 20px; } #admin-status:empty { display:none; }
+.admin-workspace .admin-section { padding:24px; }
+.admin-workspace .admin-columns { grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr); }
+.admin-workspace h2 { font-size:17px; margin:0; }
+.admin-workspace .section-heading { align-items:center; gap:16px; flex-wrap:wrap; }
+.admin-workspace button { width:auto; min-height:40px; border:1px solid var(--line); border-radius:8px; background:var(--deep); color:var(--ink-soft); padding:10px 14px; font-size:12px; cursor:pointer; }
+.admin-workspace button.primary { color:#122b25; background:var(--cyan); border-color:var(--cyan); }
+.admin-workspace button:disabled { opacity:.5; cursor:default; }
+.admin-workspace .invite-create { display:block; }
+.admin-workspace .invite-list article { display:flex; flex-wrap:wrap; gap:12px; }
+.admin-workspace .invite-list article > div:first-child { min-width:160px; flex:1; }
+.admin-workspace .invite-list article button { padding:8px 10px; }
+.admin-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.admin-workspace .genesis-admin { margin:0; }
+.admin-help { margin-top:16px; color:var(--muted); font-size:12px; line-height:1.7; }
+.admin-help summary { cursor:pointer; width:fit-content; }
+.admin-help p { max-width:700px; margin:10px 0; }
+.math-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; margin-bottom:20px; }
+.math-metrics article { padding:20px; border:1px solid var(--line); border-radius:12px; background:var(--panel); }
+.math-metrics small,.math-results small { display:block; color:var(--muted); font-size:12px; margin-bottom:12px; }
+.math-metrics strong { font-size:24px; font-weight:550; color:var(--ink); font-variant-numeric:tabular-nums; }
+.math-metrics p { color:var(--muted); font-size:11px; margin:10px 0 0; }
+.math-symbol { display:flex; align-items:center; gap:10px; }.math-symbol img { width:28px; height:28px; }
+.math-simulation { margin-top:20px; }
+.math-controls { display:flex; align-items:end; gap:14px; margin-top:24px; flex-wrap:wrap; }
+.math-controls label { font-size:12px; margin:0; }.math-controls select { display:block; margin-top:8px; min-width:170px; height:40px; padding:8px 12px; font:inherit; }
+.math-results { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; margin-top:24px; }.math-results:empty { display:none; }
+.math-results strong { font-size:18px; font-weight:550; font-variant-numeric:tabular-nums; }
+@media(max-width:1100px) { .admin-workspace .admin-columns { grid-template-columns:minmax(0,1fr); }.math-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:760px) {
+ .admin-layout { grid-template-columns:minmax(0,1fr); }.admin-sidebar { padding:12px; border-right:0; border-bottom:1px solid var(--line); }.admin-caption,#admin-identity { display:none; }.admin-sidebar nav { grid-template-columns:repeat(3,minmax(0,1fr)); gap:4px; }.admin-sidebar nav a { padding:10px 8px; justify-content:center; font-size:11px; text-align:center; }.admin-sidebar nav a span { display:none; }
+ .admin-content { padding:24px 14px 40px; }.admin-page-heading { margin-bottom:20px; }.admin-page-heading h1 { font-size:24px; }.admin-workspace .admin-section { padding:18px; }.math-metrics article { padding:16px; }.math-metrics strong { font-size:20px; }.math-results { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+
+.admin-workspace .primary { margin:0; }.admin-workspace #genesis-refresh { font-size:12px; }

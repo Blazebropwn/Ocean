@@ -1,43 +1,23 @@
 <!doctype html>
-<html lang="cs">
-  <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Správa · Ocean</title><meta name="theme-color" content="#0c1014"><link rel="stylesheet" href="/command-deck.css"><link rel="stylesheet" href="/ocean-theme.css"><link rel="stylesheet" href="/genesis-admin.css"></head>
-  <body class="ocean-ui">
-    <header class="nav"><a class="brand" href="/">Ocean<span>.</span></a><a class="result-link back-link" href="/#home">← Home</a></header>
-    <main class="invite-page utility-page admin-page">
-      <section class="admin-shell">
-        <div class="admin-heading"><div><small>SPRÁVA</small><h1>Správa účtů</h1></div><span>CHRÁNĚNÝ PŘÍSTUP</span></div>
-        <section class="admin-section invite-create-section">
-          <div class="section-heading"><div><small>NOVÝ ČLEN</small><h2>Vytvořit pozvánku</h2></div><span>Platnost 7 dní</span></div>
+<html lang="cs"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pozvánky a členové · Ocean</title><meta name="theme-color" content="#0c1014"><link rel="stylesheet" href="/command-deck.css"><link rel="stylesheet" href="/ocean-theme.css"><link rel="stylesheet" href="/genesis-admin.css"><link rel="stylesheet" href="/admin.css"></head>
+<body class="ocean-ui admin-workspace"><header class="nav"><a class="brand" href="/#home">Ocean<span>.</span></a><a class="result-link back-link" href="/#home">← Home</a></header>
+<main class="admin-layout"><aside class="admin-sidebar"><span class="admin-caption">SPRÁVA</span><nav aria-label="Administrace"><a href="/invites.html" aria-current="page"><span aria-hidden="true">01</span>Pozvánky a členové</a><a href="/genesis.html"><span aria-hidden="true">02</span>Emise a kódy</a><a href="/slot-mathlab.html"><span aria-hidden="true">03</span>Slot Mathlab</a></nav><span id="admin-identity"></span></aside>
+<div class="admin-content"><header class="admin-page-heading"><h1>Pozvánky a členové</h1></header><p id="admin-status" role="status">Ověřuji přístup…</p><div id="admin-body" class="hidden">        <section class="admin-section invite-create-section">
+          <div class="section-heading"><div><h2>Vytvořit pozvánku</h2></div><span>Platnost 7 dní</span></div>
           <form class="invite-create" id="invite-form"><button class="primary" type="submit">Vytvořit pozvánku</button></form>
           <div class="invite-result hidden" id="invite-result"><input id="invite-url" readonly><button id="copy-invite" type="button">Kopírovat</button></div>
           <p class="message" id="invite-message" role="alert"></p>
         </section>
         <div class="admin-columns">
           <section class="admin-section">
-            <div class="invite-list-head"><strong>Pozvánky</strong><small>Jednorázové odkazy</small></div>
+            <div class="invite-list-head"><strong>Pozvánky</strong></div>
             <div class="invite-list" id="invite-list"><p>Načítám…</p></div>
           </section>
           <section class="admin-section members-section">
-            <div class="invite-list-head"><strong>Členové</strong><small>Účty a automatizace</small></div>
+            <div class="invite-list-head"><strong>Členové</strong></div>
             <div class="invite-list" id="member-list"><p>Načítám…</p></div>
             <div class="invite-result hidden" id="member-reset-result"><input id="member-reset-url" readonly><button id="copy-member-reset" type="button">Kopírovat</button></div>
           </section>
         </div>
-        <section class="admin-section genesis-admin" aria-labelledby="genesis-admin-title">
-          <div class="section-heading"><div><small>TIDE</small><h2 id="genesis-admin-title">Emise a kódy</h2></div><button type="button" id="genesis-refresh">Obnovit</button></div>
-          <div class="genesis-admin-filters">
-            <label>Emise<select id="genesis-wave"></select></label>
-            <label>Stav<select id="genesis-status-filter"><option value="all">Všechny kódy</option><option value="unclaimed">Nevyzvednuté</option><option value="redeemed">Aktivované</option></select></label>
-            <label>Hledat<input id="genesis-search" type="search" placeholder="Číslo kódu nebo uživatel" autocomplete="off"></label>
-          </div>
-          <div id="genesis-summary" class="genesis-summary"></div>
-          <p class="genesis-admin-note">Genesis alokace nezahrnuje výsledky her. Úplné kódy jsou pouze v soukromém exportu; zde jsou jejich evidenční čísla.</p>
-          <p id="genesis-admin-message" role="status"></p>
-          <div class="genesis-table-scroll"><table><thead><tr><th scope="col">Kód</th><th scope="col">Odměna</th><th scope="col">Stav</th><th scope="col">Aktivoval</th><th scope="col">Aktivováno</th></tr></thead><tbody id="genesis-admin-codes"></tbody></table></div>
-          <small id="genesis-admin-count"></small>
-        </section>
-      </section>
-    </main>
-    <script src="/invites.js" defer></script>
-  </body>
-</html>
+</div></div></main>
+<script src="/admin.js" defer></script><script src="/invites.js" defer></script></body></html>
