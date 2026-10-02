@@ -8,6 +8,8 @@ import { genesisOverview } from "../genesis/admin.js";
 import { EconomyError, tideBalance, tideHistory } from "../tide/ledger.js";
 import { BET, GAME_VERSION, PAYOUTS, REELS } from "../slot/math.js";
 import { spinSlot } from "../slot/service.js";
+import { slotMathReport } from "../slot/report.js";
+import { readGenesisExport } from "../genesis/export.js";
 
 const redeemSchema = z.object({ code: z.string().max(40).transform(normalizeCode).pipe(z.string().regex(/^(?:[A-Z2-9]{12}|OCN[A-Z2-9]{20})$/)) }).strict();
 const spinSchema = z.object({ idempotencyKey: z.string().regex(/^[A-Za-z0-9_-]{16,80}$/) }).strict();
@@ -16,6 +18,32 @@ const ledgerQuery = z.object({ before: z.coerce.number().int().positive().max(Nu
 export function registerEconomyRoutes(app: FastifyInstance, db: OceanDatabase, config: Config) {
   let ipLimiter: ReturnType<FastifyInstance["createRateLimit"]> | undefined;
   let userLimiter: ReturnType<FastifyInstance["createRateLimit"]> | undefined;
+  app.get("/api/admin/slot/math", async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const user = currentUser(db, request);
+    if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
+    if (user.role !== "owner" || !hasApprovedAccess(user, config)) return reply.code(403).send({ error: "Přístup má pouze schválený vlastník." });
+    return slotMathReport();
+  });
+  app.post("/api/admin/genesis/export", { bodyLimit: 1024 }, async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const user = currentUser(db, request);
+    if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
+    if (user.role !== "owner" || !hasApprovedAccess(user, config)) return reply.code(403).send({ error: "Přístup má pouze schválený vlastník." });
+    if (request.headers.origin !== config.appOrigin) return reply.code(403).send({ error: "Neplatný původ požadavku." });
+    const input = z.object({ wave: z.string().regex(/^[A-Z0-9_]{1,64}$/) }).strict().safeParse(request.body);
+    if (!input.success) return reply.code(400).send({ error: "Neplatná emise." });
+    try {
+      const result = await readGenesisExport(db, config.databasePath, input.data.wave, config.genesisCodeHmacKey);
+      db.prepare("INSERT INTO admin_audit_log (actor_user_id,action,details_json) VALUES (?,'GENESIS_CODES_EXPORTED',?)")
+        .run(user.id, JSON.stringify({ wave: input.data.wave, count: result.count }));
+      return reply.header("Content-Disposition", `attachment; filename="${result.filename}"`)
+        .type("text/csv; charset=utf-8").send(result.csv);
+    } catch (error) {
+      if (error instanceof EconomyError) return reply.code(error.status).send({ error: error.message });
+      throw error;
+    }
+  });
   app.get("/api/admin/genesis", async (request, reply) => {
     reply.header("Cache-Control", "no-store");
     const user = currentUser(db, request);

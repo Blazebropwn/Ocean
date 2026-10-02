@@ -27,18 +27,18 @@
     $('slot-spin').disabled = busy || loading || !user?.accessApproved || (!recover && !retry && (!wallet || wallet.balance < 10));
     $('slot-spin').setAttribute('aria-label', busy ? 'Probíhá ověření a zobrazení spinu' : loading ? 'Načítám hru' : recover ? 'Znovu načíst hru' : retry ? 'Ověřit poslední spin' : 'Roztočit za 10 TIDE');
     $('slot-spin').title = $('slot-spin').getAttribute('aria-label');
+    $('slot-action').textContent = recover && !loading ? 'OBNOVIT' : retry && !busy ? 'OVĚŘIT' : 'SPIN';
     $('slot-reels').setAttribute('aria-busy', String(busy || loading));
     $('slot-machine').dataset.state = busy ? 'spinning' : loading ? 'loading' : recover ? 'unavailable' : retry ? 'pending' : 'ready';
   }
   function renderWallet() {
     if (!wallet) {
-      $('header-tide').textContent = $('slot-balance').textContent = '—';
+      $('header-tide').textContent = '—';
       $('header-tide-status').setAttribute('aria-label', 'Zůstatek TIDE není dostupný');
       controls(); return;
     }
     $('header-tide').textContent = format(wallet.balance);
     $('header-tide-status').setAttribute('aria-label', `${format(wallet.balance)} TIDE`);
-    $('slot-balance').textContent = format(wallet.balance);
     const genesis = wallet.genesis;
     $('profile-genesis').classList.toggle('hidden', !genesis);
     $('profile-genesis').textContent = genesis ? `GENESIS #${String(genesis.number).padStart(3, '0')}` : '';

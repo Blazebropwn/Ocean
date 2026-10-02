@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="cs"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Slot Mathlab · Ocean</title><meta name="theme-color" content="#0c1014"><link rel="stylesheet" href="/command-deck.css"><link rel="stylesheet" href="/ocean-theme.css"><link rel="stylesheet" href="/genesis-admin.css"><link rel="stylesheet" href="/admin.css"></head>
+<body class="ocean-ui admin-workspace"><header class="nav"><a class="brand" href="/#home">Ocean<span>.</span></a><a class="result-link back-link" href="/#home">← Home</a></header>
+<main class="admin-layout"><aside class="admin-sidebar"><span class="admin-caption">SPRÁVA</span><nav aria-label="Administrace"><a href="/invites.html"><span aria-hidden="true">01</span>Pozvánky a členové</a><a href="/genesis.html"><span aria-hidden="true">02</span>Emise a kódy</a><a href="/slot-mathlab.html" aria-current="page"><span aria-hidden="true">03</span>Slot Mathlab</a></nav><span id="admin-identity"></span></aside>
+<div class="admin-content"><header class="admin-page-heading"><h1>Slot Mathlab</h1></header><p id="admin-status" role="status">Ověřuji přístup…</p><div id="admin-body" class="hidden"><div class="math-metrics" id="math-metrics"></div>
+<section class="admin-section"><div class="section-heading"><h2>Výplaty a pravděpodobnosti</h2><span id="math-version"></span></div>
+<div class="genesis-table-scroll"><table><thead><tr><th>Symbol</th><th>Výplata</th><th>Kombinace</th><th>Pravděpodobnost</th><th>Podíl na RTP</th></tr></thead><tbody id="math-outcomes"></tbody></table></div>
+<details class="admin-help"><summary>Jak se počítá matematika</summary><p>Výpočet prochází všech 15 625 kombinací aktuálních produkčních válců. Výplata je celá připsaná částka; sázka 10 TIDE se odečítá zvlášť. RTP je dlouhodobý průměr, nikoli záruka výsledku jednotlivé hry.</p></details></section>
+<section class="admin-section math-simulation"><div class="section-heading"><h2>Simulace</h2><span>Bez sázek a změn zůstatku</span></div>
+<form id="math-form" class="math-controls"><label>Počet spinů<select id="math-samples"><option value="1000">1 000</option><option value="10000" selected>10 000</option><option value="100000">100 000</option></select></label><button class="primary" type="submit" id="math-run" disabled>Spustit simulaci</button></form>
+<div id="math-results" class="math-results" aria-live="polite"></div>
+<p id="math-message" class="message" role="status"></p></section></div></div></main>
+<script src="/admin.js" defer></script><script src="/slot-mathlab.js" defer></script></body></html>
