@@ -26,8 +26,7 @@
     const recover = unavailable || !game;
     $('slot-spin').disabled = busy || loading || !user?.accessApproved || (!recover && !retry && (!wallet || wallet.balance < 10));
     $('slot-spin').setAttribute('aria-label', busy ? 'Probíhá ověření a zobrazení spinu' : loading ? 'Načítám hru' : recover ? 'Znovu načíst hru' : retry ? 'Ověřit poslední spin' : 'Roztočit za 10 TIDE');
-    $('slot-action').textContent = busy ? 'ČEKEJ…' : loading ? 'NAČÍTÁM…' : recover ? 'OBNOVIT' : retry ? 'OVĚŘIT' : 'SPIN';
-    $('slot-cost').textContent = recover || retry ? 'Bez nové sázky' : '10 TIDE / spin';
+    $('slot-spin').title = $('slot-spin').getAttribute('aria-label');
     $('slot-reels').setAttribute('aria-busy', String(busy || loading));
     $('slot-machine').dataset.state = busy ? 'spinning' : loading ? 'loading' : recover ? 'unavailable' : retry ? 'pending' : 'ready';
   }
@@ -80,7 +79,9 @@
       const row = document.createElement('div'); row.className = 'slot-payrow'; row.dataset.symbol = symbol;
       const icons = document.createElement('span');
       for (let n = 0; n < 3; n++) icons.append(image(symbol));
-      const payout = document.createElement('strong'); payout.textContent = `${format(game.payouts[symbol])} TIDE`;
+      const payout = document.createElement('strong'); payout.textContent = format(game.payouts[symbol]);
+      const coin = document.createElement('img'); coin.src = '/tide-coin.svg'; coin.alt = 'TIDE'; coin.className = 'slot-payout-coin'; coin.width = coin.height = 18;
+      payout.append(coin);
       row.append(icons, payout); $('slot-paytable').append(row);
     }
   }
@@ -193,7 +194,7 @@
         await refreshWallet();
         if (view === 'slot' && request === openRequest) {
           unavailable = false;
-          if (!busy) $('slot-message').textContent = pending() ? 'Poslední spin čeká na potvrzení. Ověř ho tlačítkem.' : wallet.balance < 10 ? 'Na spin potřebuješ 10 TIDE.' : 'Tři stejné symboly na linii.';
+          if (!busy) $('slot-message').textContent = pending() ? 'Poslední spin čeká na potvrzení. Ověř ho tlačítkem.' : '';
         }
       } catch (error) {
         if (view === 'slot' && request !== openRequest) return;

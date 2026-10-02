@@ -127,12 +127,15 @@ Slot zachovává cenu 10 TIDE, 3×25 stops, 15 625 kombinací, RTP 95,1808 %, hi
 animací. Retry po ztrátě odpovědi používá stejný key ze sessionStorage; RNG se
 neopakuje. SVG a animace vycházejí z prototypu, jeho klientská ekonomika ne.
 
-Ovládání rozlišuje SPIN, OVĚŘIT (čekající idempotency key) a OBNOVIT
+Tlačítko používá pouze ikonu; přístupný název a tooltip rozlišují spin,
+ověření (čekající idempotency key) a obnovení
 (opakování načtení hry bez POST sázky). Při nedostupném zůstatku se zobrazí
 pomlčka, nikoli poslední částka. Načítání a probíhající spin blokují další
 kliknutí. Klient ověřuje i soulad payoutu se symboly; poškozená odpověď
 zachová čekající key. Starší načítání peněženky nepřepisuje novější výsledek.
-Zůstatek a ovládání jsou vedle sebe, výherní řádek se zvýrazní. Válce respektují
+Mince s částkou a ikonové ovládání jsou vedle sebe, výherní řádek se zvýrazní.
+Výplatní tabulka používá logo TIDE místo názvu tokenu. Válce nemají středovou
+čáru; klidový stav je bez vysvětlujících textů, chyby a výsledky zůstávají viditelné. Válce respektují
 omezený pohyb a zachovají polohu i při přepnutí sekce během animace.
 
 Browser kontrola 2026-10-01 na izolované syntetické databázi: šířky
