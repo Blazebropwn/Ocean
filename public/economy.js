@@ -4,6 +4,8 @@
   const format = n => new Intl.NumberFormat('cs-CZ').format(n);
   let user = null, wallet = null, game = null, busy = false, loadedUser = null, redeemBusy = false;
   let loading = false, unavailable = false, openRequest = 0, walletRequest = 0;
+  // Presentation only: the server always settles bet + payout atomically.
+  let spinDisplay = null;
   const tracks = [...document.querySelectorAll('.slot-track')];
   const positions = [25, 25, 25];
   const pendingName = () => `ocean-slot-pending:${user.id}`;
@@ -32,14 +34,15 @@
     $('slot-machine').dataset.state = busy ? 'spinning' : loading ? 'loading' : recover ? 'unavailable' : retry ? 'pending' : 'ready';
   }
   function renderWallet() {
-    if (!wallet) {
+    const balance = spinDisplay && spinDisplay.userId === user?.id ? spinDisplay.balance : wallet?.balance;
+    if (balance == null) {
       $('header-tide').textContent = '—';
       $('header-tide-status').setAttribute('aria-label', 'Zůstatek TIDE není dostupný');
       controls(); return;
     }
-    $('header-tide').textContent = format(wallet.balance);
-    $('header-tide-status').setAttribute('aria-label', `${format(wallet.balance)} TIDE`);
-    const genesis = wallet.genesis;
+    $('header-tide').textContent = format(balance);
+    $('header-tide-status').setAttribute('aria-label', `${format(balance)} TIDE`);
+    const genesis = wallet?.genesis;
     $('profile-genesis').classList.toggle('hidden', !genesis);
     $('profile-genesis').textContent = genesis ? `GENESIS #${String(genesis.number).padStart(3, '0')}` : '';
     $('genesis-code').disabled = redeemBusy;
@@ -68,7 +71,7 @@
   function buildReels() {
     tracks.forEach((track, i) => {
       track.replaceChildren();
-      for (let n = 0; n < 100; n++) {
+      for (let n = 0; n < 125; n++) {
         const cell = document.createElement('div'); cell.className = 'slot-cell';
         cell.append(image(game.reels[i][n % 25])); cell.setAttribute('aria-hidden', 'true'); track.append(cell);
       }
@@ -86,8 +89,11 @@
     }
   }
   function animateReel(i, target, duration) {
-    const start = positions[i], end = 75 + target;
+    const start = positions[i] + 50, end = 25 + target;
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) { place(i, 25 + target); return Promise.resolve(); }
+    // Rebase onto an identical later strip, then decrease the cell index so
+    // translateY increases and the visible symbols travel from top to bottom.
+    place(i, start);
     const started = performance.now();
     return new Promise(resolve => {
       function frame(now) {
@@ -118,40 +124,53 @@
     if (busy || loading || !user?.accessApproved) return;
     if (unavailable || !game) { await window.OceanEconomy.open('slot'); return; }
     const userId = user.id, storageKey = pendingName();
-    let key;
+    let key, retry;
     try {
       key = pending();
+      retry = Boolean(key);
       if (!key && (!wallet || wallet.balance < 10)) return;
       key ||= crypto.randomUUID();
       sessionStorage.setItem(storageKey, key);
     } catch { $('slot-message').textContent = 'Povol úložiště této stránky pro bezpečné obnovení spinu.'; return; }
     ++walletRequest; // Discard a wallet read started before this settlement.
-    busy = true; controls(); $('slot-machine').classList.remove('won', 'anticipating'); $('slot-message').textContent = 'Ověřuji spin…';
+    busy = true;
+    if (!retry) spinDisplay = { userId, balance: wallet.balance - 10 };
+    renderWallet(); $('slot-machine').classList.remove('won', 'anticipating'); $('slot-message').textContent = 'Ověřuji spin…';
     try {
       const result = await api('/api/slot/spins', { idempotencyKey: key });
       const r = result.spin;
       if (!r || r.gameVersion !== game.gameVersion || r.idempotencyKey !== key || r.userId !== userId || r.stops?.length !== 3 || r.symbols?.length !== 3 ||
           r.stops.some((stop, i) => !Number.isInteger(stop) || stop < 0 || stop > 24 || game.reels[i][stop] !== r.symbols[i]) ||
           r.payout !== (r.symbols.every(s => s === r.symbols[0]) ? game.payouts[r.symbols[0]] : 0) ||
+          r.bet !== 10 || !Number.isSafeInteger(r.balanceBefore) || r.balanceBefore < r.bet ||
+          !Number.isSafeInteger(r.balanceAfter) || r.balanceAfter !== r.balanceBefore - r.bet + r.payout ||
+          typeof result.replayed !== 'boolean' || (!result.replayed && result.balance !== r.balanceAfter) ||
           !Number.isSafeInteger(result.balance) || result.balance < 0) throw new Error('Výsledek nelze ověřit. Zkus znovu ověřit stejný spin.');
       if (user?.id !== userId) return;
-      // The server has already settled the spin. Animation cannot affect it.
+      // Replays already belong to the current wallet. Never subtract their bet
+      // again or replace today's balance with the historical balanceAfter.
+      spinDisplay = result.replayed ? null : { userId, balance: r.balanceBefore - r.bet };
+      wallet = { ...(wallet || { genesis: null }), balance: result.balance }; renderWallet();
       await present(r);
       if (user?.id !== userId) return;
       ++walletRequest;
+      spinDisplay = null;
       wallet = { ...(wallet || { genesis: null }), balance: result.balance }; renderWallet();
       sessionStorage.removeItem(storageKey);
       try { await refreshWallet(); } catch { /* settlement balance is confirmed */ }
     } catch (error) {
       if (user?.id !== userId) return;
+      spinDisplay = null;
       if ([400, 403, 409].includes(error.status)) {
         sessionStorage.removeItem(storageKey);
         $('slot-message').textContent = error.message;
+        renderWallet();
         try { await refreshWallet(); } catch { wallet = null; unavailable = true; renderWallet(); }
       } else {
+        wallet = null; renderWallet();
         $('slot-message').textContent = 'Potvrzení chybí. Ověř stejný spin tlačítkem; další sázka se nevytvoří.';
       }
-    } finally { busy = false; controls(); }
+    } finally { spinDisplay = null; busy = false; controls(); }
   }
   $('slot-spin').addEventListener('click', spin);
   $('genesis-form').addEventListener('submit', async event => {
@@ -175,7 +194,7 @@
   });
   window.addEventListener('resize', () => { if (!busy) positions.forEach((p, i) => place(i, p)); });
   window.OceanEconomy = {
-    setUser(value) { user = { ...value, accessApproved: value.accessApproved ?? value.emailVerified }; if (loadedUser !== user.id) { loadedUser = user.id; wallet = null; renderWallet(); refreshWallet().catch(() => {}); } },
+    setUser(value) { user = { ...value, accessApproved: value.accessApproved ?? value.emailVerified }; if (loadedUser !== user.id) { loadedUser = user.id; spinDisplay = null; wallet = null; renderWallet(); refreshWallet().catch(() => {}); } },
     async open(view) {
       if (!user || !['overview', 'slot', 'gift'].includes(view)) return;
       if (view === 'slot' && busy) return;

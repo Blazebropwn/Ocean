@@ -144,6 +144,25 @@ dvojkliku a přepnutí sekce se změnou rozlišení během animace. Produkční 
 ani emise nejsou součástí těchto kontrol.
 
 
+## Animace a zobrazení zůstatku
+
+Válce se posouvají shora dolů přes pět opakování produkčních stripů. Před
+animací se pozice přesune na shodné pozdější opakování a pak klesá index
+buňky; hodnota translateY proto roste. Konečné symboly určuje server.
+
+Kliknutí na novou sázku ihned zobrazí zůstatek mínus 10 TIDE. Po potvrzení
+serverem se mezistav opře o `balanceBefore - bet`; případná výhra se zobrazí
+až po zastavení všech válců. Běžné načítání peněženky tuto prezentaci
+nepřeruší. Jde pouze o UI: skutečné odečtení a připsání zůstávají atomické
+na serveru. Zamítnutí obnoví serverový zůstatek; nejasná odpověď ukáže pomlčku
+a zachová stejný klíč pro ověření. Replay nezobrazuje nový odečet a používá
+aktuální `balance`, nikdy historický `balanceAfter`.
+
+Regrese `test/slot-presentation.test.ts` ověřují okamžitý odečet, směr pohybu,
+připsání až po posledním válci i souběžné načítání, prohru, reduced motion,
+zamítnutí, ztracenou odpověď/reload a nesouladnou účtenku. Chromium ověřilo
+sekvenci 1000 → 990 → 1090 a směr všech tří válců.
+
 ## Admin prostor
 
 - `/invites.html`: pozvánky a členové, včetně původních účtových akcí.
@@ -202,7 +221,7 @@ Testy pokrývají přesnou distribuci, všechny slot kombinace, oba procesové
 závody (redeem i issuance), idempotenci, reálnou výši všech tier odměn,
 rollback kreditu/issuance/exportu, legacy migraci s historií, promo wave,
 HMAC bez plaintextu, auth/owner/Origin, limity přes účty/IP a CLI export 0600.
-Ověřeno: build, 192 Node testů, 132 Python testů a restore drill 24 tabulek.
+Ověřeno: build, 196 Node testů, 132 Python testů a restore drill 24 tabulek.
 Prohlížeč ověřuje skutečné API/DB při aktivaci a změně admin součtů, filtry,
 nezpřístupnění dat členům a mobilní rozložení. Restore drill zahrnuje emisi,
 aktivace a slot ledger.
