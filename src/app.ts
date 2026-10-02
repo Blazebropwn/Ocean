@@ -15,6 +15,7 @@ import { registerKryptotronRoutes } from "./routes/kryptotron.js";
 import { registerMemberRoutes } from "./routes/members.js";
 import { registerTelegramRoutes } from "./routes/telegram.js";
 import { registerAgentRoutes } from "./routes/agents.js";
+import { registerEconomyRoutes } from "./routes/economy.js";
 import { buildVersionedPages, versionAssetReferences } from "./asset-versioning.js";
 import type { PortfolioProvider } from "./portfolio/provider.js";
 
@@ -72,6 +73,7 @@ export function buildApp(config: Config, database?: OceanDatabase, dependencies:
   registerTelegramRoutes(app, db, config);
   registerKryptotronRoutes(app, db, config);
   registerAgentRoutes(app, db, config, dependencies.portfolioProvider);
+  registerEconomyRoutes(app, db, config);
 
   app.addHook("onClose", async () => db.close());
   return app;

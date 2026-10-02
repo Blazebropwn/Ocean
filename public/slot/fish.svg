@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs>
+<linearGradient id="a" x2=".7" y2="1"><stop stop-color="#c9ffe6"/><stop offset=".45" stop-color="#5dd5c1"/><stop offset="1" stop-color="#167b90"/></linearGradient><linearGradient id="b" x2=".8" y2="1"><stop stop-color="#ffead4"/><stop offset=".45" stop-color="#e5b8b7"/><stop offset="1" stop-color="#977ca2"/></linearGradient><radialGradient id="c" cx=".35" cy=".3"><stop stop-color="#e6ffff"/><stop offset=".35" stop-color="#84f9df"/><stop offset=".8" stop-color="#178f9a"/><stop offset="1" stop-color="#0b4e6b"/></radialGradient>
+
+<symbol id="fish" viewBox="0 0 100 100"><path d="M66 48L88 29L83 51L88 72L66 57" fill="url(#a)" stroke="#a9efdf"/><path d="M18 51Q35 20 66 38Q83 53 62 68Q33 82 18 51Z" fill="url(#a)" stroke="#bcfbe2" stroke-width="1.3"/><path d="M39 33L49 20L59 35M40 70L54 78L57 69" fill="#57bdae"/><path d="M47 38Q57 53 46 66" fill="none" stroke="#187985" stroke-width="2"/><circle cx="32" cy="48" r="5" fill="#dbfff0"/><circle cx="31" cy="48" r="2.5" fill="#123a4a"/></symbol>
+
+
+
+</defs><use href="#fish"/></svg>

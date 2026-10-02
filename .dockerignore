@@ -15,3 +15,6 @@ logs
 **/logs
 *.log
 state.json
+
+# One-time private Genesis code exports
+**/genesis-codes-*.csv

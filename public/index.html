@@ -4,18 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Ocean</title>
-    <meta name="theme-color" content="#0c1014"><link rel="stylesheet" href="/command-deck.css"><link rel="stylesheet" href="/ocean-theme.css"><link rel="stylesheet" href="/ocean-workspace.css">
+    <meta name="theme-color" content="#0c1014"><link rel="stylesheet" href="/command-deck.css"><link rel="stylesheet" href="/ocean-theme.css"><link rel="stylesheet" href="/ocean-workspace.css"><link rel="stylesheet" href="/economy.css">
   </head>
   <body class="ocean-ui ocean-workspace">
     <header class="nav">
       <a class="brand" href="/">Ocean<span>.</span></a>
       <div class="nav-account hidden" id="nav-account">
+        <div class="header-tide" id="header-tide-status" role="status" aria-label="Zůstatek TIDE">
+          <img src="/tide-coin.svg" width="30" height="30" alt="TIDE"><span id="header-tide">—</span>
+        </div>
         <button class="profile-button" id="profile-button" type="button" aria-haspopup="true" aria-expanded="false">
           <span id="nav-avatar">O</span><b id="nav-username">Účet</b><i>⌄</i>
         </button>
         <div class="profile-menu hidden" id="profile-menu">
           <strong id="menu-username"></strong><small id="email"></small
           ><small class="internal-id" id="display-id"></small
+          ><small id="profile-genesis" class="hidden"></small
+          ><a href="#redeem" data-open-view="gift">Redeem code <b>→</b></a
           ><a class="hidden" id="invite-admin-link" href="/invites.html">Správa <b>→</b></a
           ><a href="/change-password.html">Nastavení účtu <b>→</b></a
           ><a href="/telegram.html">Telegram <b>→</b></a
@@ -80,14 +85,15 @@
       </section>
       <section class="dashboard hidden" id="dashboard">
         <aside class="side-nav">
-          <a class="side-link active" href="#dashboard" data-view="overview" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><b>Přehled</b></a
+          <a class="side-link active" href="#home" data-view="overview" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><b>Home</b></a
           ><a class="side-link" href="#arcade" data-view="arcade"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M7 7h10l4 10a2 2 0 0 1-3 2l-3-3H9l-3 3a2 2 0 0 1-3-2Z"/><path d="M7 10v4m-2-2h4m7-1h.01m2 3h.01"/></svg><b>Arcade</b></a
+          ><a class="side-link" href="#gamble" data-view="slot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1"/><circle cx="16" cy="8" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="8" cy="16" r="1"/><circle cx="16" cy="16" r="1"/></svg><b>Gamble</b></a
           ><a class="side-link" href="#vault" data-view="vault"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="12" cy="12" r="4"/><path d="m9 9 6 6m0-6-6 6"/></svg><b>Vault</b></a
           >
         </aside>
         <div class="workspace">
           <div class="workspace-head">
-            <div><h1 id="workspace-title">Přehled</h1><p id="workspace-subtitle" class="hidden"></p></div>
+            <div><h1 id="workspace-title">Home</h1><p id="workspace-subtitle" class="hidden"></p></div>
             <span class="system-state" id="system-state" role="status"><i></i><span id="system-state-text">Načítám stav</span></span>
           </div>
           <div class="verify-banner hidden" id="verify-banner">
@@ -144,9 +150,26 @@
           >
             <div class="arcade-game" id="arcade-game"><div class="game-top"><div class="game-score"><small>SKÓRE</small><strong id="game-score">0</strong></div></div><div class="game-canvas-wrap"><canvas id="game-canvas" aria-label="Herní plocha Sonaru"></canvas><button id="game-tap" type="button">Spustit</button></div><div class="game-bottom"><span id="game-hint">Pingni ve chvíli, kdy paprsek protne zelený sektor.</span><strong>OSOBNÍ REKORD · <span id="game-best">0</span></strong></div></div>
           </section>
+          <section class="gift-view app-view hidden" id="gift-view" aria-label="Redeem code">
+            <form id="genesis-form">
+              <input id="genesis-code" name="code" aria-label="Genesis code" aria-describedby="genesis-message" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" placeholder="OCN-XXXXX-XXXXX-XXXXX-XXXXX" required>
+              <button type="submit" id="genesis-submit" disabled>ACTIVATE</button>
+              <p id="genesis-message" role="status" aria-live="polite"></p>
+            </form>
+          </section>
+          <section class="slot-view app-view hidden" id="slot-view" aria-label="OCEAN Slot">
+            <div class="slot-machine" id="slot-machine">
+              <div class="slot-monitor"><div class="slot-reels" id="slot-reels" aria-label="Tři válce"><div class="slot-reel"><div class="slot-track"></div></div><div class="slot-reel"><div class="slot-track"></div></div><div class="slot-reel"><div class="slot-track"></div></div></div><p id="slot-message" role="status" aria-live="polite">Načítám…</p></div>
+              <div class="slot-paytable" id="slot-paytable" aria-label="Výhry za tři stejné symboly"></div>
+              <div class="slot-console">
+                <div class="slot-wallet"><div class="slot-balance" role="status" aria-label="Zůstatek TIDE"><img src="/tide-coin.svg" width="28" height="28" alt=""><span id="slot-balance">—</span></div></div>
+                <div class="slot-control"><button type="button" id="slot-spin" aria-label="Roztočit za 10 TIDE" aria-describedby="slot-message" disabled><svg viewBox="0 0 64 48" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="7" width="48" height="32" rx="7"/><path d="M21 9v28m16-28v28M14 20v6m15-6v6m15-6v6m10-7h5v13"/><circle cx="59" cy="13" r="3"/></svg></button></div>
+              </div>
+            </div>
+          </section>
           <section class="vault-view app-view hidden" id="vault-view" aria-labelledby="vault-title">
             <div class="vault-intro"><div><span class="section-kicker">DLOUHODOBÝ PŘEHLED</span><h2 id="vault-title">Historie nákupů</h2><p>Přehled pravidelných investic.</p></div><span class="vault-emblem" aria-hidden="true">V</span></div>
-            <p class="vault-notice" id="vault-notice" role="status">Připoj Binance v Přehledu a načti historii nákupů.</p>
+            <p class="vault-notice" id="vault-notice" role="status">Připoj Binance na Home a načti historii nákupů.</p>
             <div class="vault-metrics"><article><small>Evidované investice</small><strong id="vault-invested">—</strong><p>Součet uložených DCA nákupů</p></article><article><small>Dokončené nákupy</small><strong id="vault-count">—</strong><p>Úspěšně provedené objednávky</p></article><article><small>Pravidelný nákup</small><strong id="vault-amount">—</strong><p id="vault-schedule">Nastavení se načte z tvého účtu</p></article></div>
             <section class="vault-history" aria-labelledby="vault-history-title"><header><div><small>TVŮJ ARCHIV</small><h3 id="vault-history-title">Historie nákupů</h3></div><label>Aktivum<select id="vault-filter"><option value="all">Všechna aktiva</option></select></label></header><div class="vault-table-scroll"><table><thead><tr><th scope="col">Aktivum</th><th scope="col">Datum</th><th scope="col">Množství</th><th scope="col">Investováno</th></tr></thead><tbody id="vault-purchases"></tbody></table></div><div class="vault-pagination"><button id="vault-prev" type="button" aria-label="Předchozí stránka">←</button><span id="vault-page">1 / 1</span><button id="vault-next" type="button" aria-label="Další stránka">→</button></div><p class="vault-empty" id="vault-empty">Zatím tu nejsou žádné načtené nákupy.</p></section>
             <p class="vault-footnote">Vault zobrazuje uloženou historii DCA, nejvýše 156 posledních nákupů. Nejde o aktuální zůstatky ani tržní hodnotu portfolia. Prostředky zůstávají na tvém Binance účtu.</p>
@@ -248,6 +271,6 @@
 <div class="agent-buttons"><button id="agent-run" type="button">Spustit analýzu</button><button class="hidden" id="agent-ledger-open" type="button">Zobrazit report</button></div>
 <p class="agent-message" id="agent-message" role="status"></p>
 </section><button class="connection-disconnect hidden" id="disconnect-binance" type="button">Odpojit Binance</button></dialog>
-    <script src="/app.js" defer></script>
+    <script src="/economy.js" defer></script><script src="/app.js" defer></script>
   </body>
 </html>

@@ -761,9 +761,7 @@ input:focus { border-color: var(--cyan); background: rgba(2, 17, 23, 0.9); box-s
 .invite-head small { color: var(--cyan); font: 700 8px/1 ui-monospace, monospace; letter-spacing: 0.16em; }
 .invite-head h1 { margin: 7px 0 0; font-size: 36px; letter-spacing: -0.045em; }
 .invite-head > span { padding: 7px 10px; border: 1px solid var(--line-hot); border-radius: 20px; color: var(--cyan); background: rgba(84, 238, 226, 0.06); font: 800 8px/1 ui-monospace, monospace; }
-.invite-create { display: grid; grid-template-columns: 1fr 180px; align-items: end; gap: 12px; margin-top: 30px; }
-.invite-create label { margin: 0; }
-.invite-create label small { color: var(--muted); font-weight: 400; }
+.invite-create { display: grid; grid-template-columns: max-content; align-items: end; gap: 12px; margin-top: 30px; }
 .invite-create .primary { margin: 0; }
 .invite-result { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 14px; }
 .invite-result input { margin: 0; }
@@ -1018,7 +1016,7 @@ input:focus { border-color: var(--cyan); background: rgba(2, 17, 23, 0.9); box-s
 .balance-block strong { font-size: clamp(52px, 4.8vw, 76px); }
 .invite-shell:not(.telegram-shell) { width: min(880px, 100%); }
 .invite-head h1 { font-size: 42px; }
-.invite-create { grid-template-columns: 1fr 200px; }
+
 .invite-list article { padding: 16px 0; }
 
 @keyframes status-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
