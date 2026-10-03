@@ -1,4 +1,5 @@
 from decimal import Decimal, ROUND_DOWN
+from datetime import datetime, timezone
 from uuid import uuid4
 
 
@@ -71,10 +72,30 @@ def trailing_delta_filter(symbol_info):
     raise ValueError("Symbol nemá Binance TRAILING_DELTA filtr")
 
 
-def store_protection(position, response, request):
+def store_protection(position, response, request, state):
     order_list_id = response.get("orderListId")
     if order_list_id is None:
         raise ValueError("Binance nevrátila ID ochranné OCO objednávky")
+    recorded = Decimal(str(position["position_qty"]))
+    protected = Decimal(str(request["quantity"]))
+    if not recorded.is_finite() or not protected.is_finite() or protected <= 0 or protected > recorded:
+        raise ValueError("Množství ochrany neodpovídá evidované pozici")
+    remainder = recorded - protected
+    if remainder:
+        previous = state.get("strategy_residuals", {}).get(request["symbol"], {})
+        quantity = Decimal(str(previous.get("quantity", 0)))
+        cost = Decimal(str(previous.get("cost_quote", 0)))
+        price = Decimal(str(position["entry_price"]))
+        if not all(v.is_finite() and v >= 0 for v in (quantity, cost, price)) or price == 0:
+            raise ValueError("Neplatná evidence zbytku po zaokrouhlení")
+        # Persist the unsellable part alongside the rounded position. Replaying
+        # the same confirmed OCO sees the rounded quantity and adds nothing.
+        state.setdefault("strategy_residuals", {})[request["symbol"]] = {
+            **previous, "quantity": str(quantity + remainder),
+            "cost_quote": str(cost + remainder * price),
+            "last_protection_client_id": request["listClientOrderId"],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
     position.update(
         position_qty=float(request["quantity"]),
         protection_order_list_id=order_list_id,

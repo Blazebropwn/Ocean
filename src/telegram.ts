@@ -60,11 +60,17 @@ export async function processTelegramMessage(db: OceanDatabase, config: Config, 
   if (parsed.name === "/pause") {
     if (!connection.remote_state_key || !config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return send(chatId, "Kryptotron teď není dostupný.");
     await setKryptotronEntriesPaused(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, true, connection.remote_state_key);
-    return send(chatId, "⏸ Nové obchody jsou pozastavené. Otevřená pozice zůstává chráněná.");
+    return send(chatId, "⏸ Nové obchody jsou pozastavené. Pozastavení neuzavírá pozice ani neruší ochranné objednávky. Stav ochrany ověř v Oceanu.");
   }
   if (parsed.name === "/resume") {
     if (!connection.remote_state_key || connection.status !== "connected" || !config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return send(chatId, "Kryptotron teď není dostupný.");
-    await setKryptotronEntriesPaused(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, false, connection.remote_state_key);
+    try {
+      await setKryptotronEntriesPaused(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, false, connection.remote_state_key);
+    } catch (error) {
+      return send(chatId, error instanceof Error && error.message.startsWith("Obnovení blokuje bezpečnostní režim.")
+        ? "⛔ Obnovení blokuje bezpečnostní režim. Nejdřív je nutné vyřešit nesoulad účtu a ověřit ochranné objednávky."
+        : "⚠️ Obnovení obchodování se nepodařilo potvrdit. Ověř aktuální stav v Oceanu.");
+    }
     return send(chatId, "▶️ Obchodování obnoveno. Kryptotron zase může otevírat nové obchody.");
   }
   if (["/dca_on", "/dca_off", "/streak_on", "/streak_off"].includes(parsed.name)) {
@@ -105,8 +111,10 @@ export async function processTelegramMessage(db: OceanDatabase, config: Config, 
     if (!connection.remote_state_key || connection.status !== "connected" || !config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return send(chatId, "Kryptotron zatím není připojený.");
     const snapshot = await loadKryptotronSnapshot(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, connection.remote_state_key);
     const balance = snapshot.balance.amount === null ? "—" : `${snapshot.balance.amount.toFixed(2)} ${snapshot.balance.asset}`;
-    const position = snapshot.positions.find((item) => item.inPosition)?.symbol ?? "bez pozice";
-    return send(chatId, `🌊 Ocean\nKryptotron: ${snapshot.entriesPaused ? "pozastaven" : snapshot.status}\nBalance: ${balance}\nPozice: ${position}`);
+    const positions = snapshot.positions.filter((item) => item.inPosition);
+    const position = positions.map((item) => `${item.symbol} (${item.protectionActive ? "ochrana ověřena" : "ověř ochranu"})`).join(", ") || "bez pozice";
+    const status = snapshot.transparency?.safeMode ? "bezpečnostní režim · nové nákupy blokované" : snapshot.entriesPaused ? "pozastaven" : snapshot.status;
+    return send(chatId, `🌊 Ocean\nKryptotron: ${status}\nBalance: ${balance}\nPozice: ${position}`);
   }
   return send(chatId, HELP_TEXT);
 }

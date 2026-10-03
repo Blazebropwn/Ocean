@@ -145,7 +145,9 @@ class SecureProtectionOrExitTests(BotStateTestCase):
         ps = self.position()
         ps["protection_failures"] = 1
         client = FakeProtectionClient()
-        result = bot.secure_protection_or_exit(client, self.state(), "BTCUSDC", ps, "BTC", 0.000001, 0.01, (10, 2000))
+        state = self.state()
+        state["positions"]["BTCUSDC"] = ps
+        result = bot.secure_protection_or_exit(client, state, "BTCUSDC", ps, "BTC", 0.000001, 0.01, (10, 2000))
         self.assertTrue(result)
         self.assertEqual(ps["protection_failures"], 0)
         self.assertEqual(client.sell_calls, 0)
