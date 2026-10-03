@@ -30,7 +30,13 @@ export function workerStateIssues(state: Record<string, unknown> | null, label: 
   const heartbeat = typeof state.last_heartbeat_at === "string" ? Date.parse(state.last_heartbeat_at) : NaN;
   const issues: string[] = [];
   if (!Number.isFinite(heartbeat) || now-heartbeat > 180_000 || heartbeat > now+60_000) issues.push(`${label}: heartbeat není aktuální.`);
-  if (state.safe_mode === true) issues.push(`${label}: bezpečnostní režim, ověř stav účtu a ochrany.`);
+  if (state.safe_mode === true) {
+    const check = state.reconciliation as { issues?: Array<{ code?: string }> } | undefined;
+    const onlyProtection = Array.isArray(check?.issues) && check.issues.length > 0 && check.issues.every(i => i?.code === "PROTECTION_ERROR");
+    issues.push(onlyProtection
+      ? `${label}: bezpečnostní režim — chybí ochranné objednávky. Vlastník účtu musí v Oceanu potvrdit obnovení ochrany; samotné /resume nestačí.`
+      : `${label}: bezpečnostní režim, ověř stav účtu a ochrany.`);
+  }
   if (Array.isArray(state.pending_trade_logs) && state.pending_trade_logs.length) issues.push(`${label}: historie obchodů čeká na uložení.`);
   if (state.runtime_status === "degraded" && state.safe_mode !== true) issues.push(`${label}: worker hlásí provozní chybu.`);
   return issues;

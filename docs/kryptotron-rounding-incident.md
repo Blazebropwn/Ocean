@@ -29,3 +29,28 @@ ověřenou ochranu bez její kontroly.
 Ověření: build, 197 Node testů, 135 Python testů. Regrese zahrnují opakované
 zaokrouhlení a uzavření, neplatné množství, ztracenou odpověď při ukládání
 OCO a restart bez druhého příkazu nebo dvojího zaúčtování zbytku.
+
+## Výslovné obnovení zrušené ochrany
+
+Po ručním zrušení OCO se zachovává původní identita a parametry. Běžná smyčka
+ji automaticky neobnovuje. Home nabídne vlastníkovi pozice `Obnovit ochranu`
+a dialog s množstvím, stopem a trailing parametry. POST vyžaduje autentizaci,
+schválený účet, přesný Origin, potvrzení a identitu pozice i původní ochrany.
+
+Požadavek lze přijmout pouze při pozastavených nákupech, aktuálním heartbeat,
+bez čekajících exekucí a s rekonciliací, kde zbývají výhradně chybějící
+ochrany. Worker znovu ověří zůstatky, původní zrušenou OCO, burzovní filtry,
+volné množství a cenu mezi původním stopem a aktivací. Ostatní mince ani
+parametry strategie nepřebírá z HTTP těla. Požadavek expiruje po 10 minutách
+před odesláním; již odeslaný příkaz se dále ověřuje pod stejným ID.
+
+Záměr i nové ID ochrany se uloží před burzovním voláním. Nejasná odpověď
+nikdy nespustí opakované odeslání. Souběžná starší kopie workeru nemůže
+smazat, přesměrovat nebo vrátit dokončený požadavek. Obnova ponechá pauzu
+nových nákupů; bezpečnostní režim zruší až běžná úplná kontrola účtu.
+K obnovení obchodování je potom potřeba samostatné rozhodnutí vlastníka.
+
+Regrese zahrnují autorizační a Origin kontroly, vazbu na instanci,
+souběh/deduplicitu, zastaralý stav, neznámé zůstatky a objednávky, změnu ceny,
+ztracenou odpověď burzy, neúspěšný zápis záměru a zákaz automatického
+obnovení zrušených příkazů. Prohlížeč používá výhradně falešná data.
