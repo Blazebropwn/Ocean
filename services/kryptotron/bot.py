@@ -44,6 +44,7 @@ from order_safety import apply_filled_buy, classify_order, new_buy_intent, with_
 from reconciliation import inspect_account
 from risk import entry_permission, position_budget, decision_snapshot
 from manual_close import active_request, position_id
+from protection_restore import active_restore, process_restore
 from events import add_event
 from dca import run_weekly_dca, settle_pending_dca
 from streak import can_trade as streak_can_trade, close_trade as streak_close_trade, ensure_session as ensure_streak_session, open_trade as streak_open_trade
@@ -217,6 +218,7 @@ def reconcile_account(client, state, pair_filters):
                 outcome = sync_protection(client, state, symbol)
                 if outcome["status"] == "filled":
                     close_from_protection(state, symbol, outcome)
+        process_restore(client, state, pair_filters, save=save_state, sync=sync_protection, place=place_protection)
         process_manual_close(client, state, pair_filters)
         pairs = [{"symbol": symbol, "base": symbol.removesuffix(QUOTE_ASSET),
                   "step_size": filters[0]} for symbol, filters in pair_filters.items()]
@@ -238,8 +240,10 @@ def reconcile_account(client, state, pair_filters):
         if not save_state(state):
             raise RuntimeError("Výsledek rekonciliace se nepodařilo uložit")
         if state["safe_mode"]:
-            tg_alert(state, "reconciliation", "🚨 <b>Kryptotron: kontrola účtu vyžaduje pozornost</b>\n"
-                     "Nové nákupy jsou zablokované. Zkontroluj stav účtu a ochranných objednávek.")
+            only_protection = bool(result["issues"]) and all(i["code"] == "PROTECTION_ERROR" for i in result["issues"])
+            tg_alert(state, "reconciliation", "🚨 <b>Kryptotron: kontrola účtu vyžaduje pozornost</b>\n" + (
+                "Ochranné objednávky chybí nebo byly zrušené. V Oceanu u pozic potvrď Obnovit ochranu. Nové nákupy zůstávají zablokované; samotné /resume nestačí."
+                if only_protection else "Nové nákupy jsou zablokované. Zkontroluj stav účtu a ochranných objednávek."))
         return not state["safe_mode"]
     except Exception as exc:
         safety_failure(state, "RECONCILIATION_REQUIRED", str(exc))
@@ -294,6 +298,14 @@ def refresh_entries_control(state):
                 and not remote_state.get("pending_order")):
             state.clear()
             state.update(copy.deepcopy(remote_state))
+        local_restore = state.get("protection_restore") or {}
+        remote_restore = remote_state.get("protection_restore") or {}
+        if (remote_restore.get("id") and local_restore.get("id") == remote_restore.get("id")
+                and remote_restore.get("status") == "completed" and local_restore.get("status") != "completed"):
+            state.clear()
+            state.update(copy.deepcopy(remote_state))
+        elif remote_restore.get("id") != local_restore.get("id"):
+            state["protection_restore"] = copy.deepcopy(remote_restore)
         state["entries_paused"] = remote_state.get("entries_paused", True)
         remote_close = remote_state.get("manual_close")
         if remote_close and remote_close.get("id") != (state.get("manual_close") or {}).get("id"):
@@ -372,6 +384,8 @@ MAX_PROTECTION_FAILURES = 2
 
 def secure_protection_or_exit(client, state, symbol, ps, base, step_size, tick_size, trailing_bounds):
     """Protect a known fill; uncertainty blocks execution instead of guessing a sell."""
+    if ps.get("protection_status") in ("CANCELLED", "FAILED"):
+        raise RuntimeError("Zrušená ochrana vyžaduje výslovné potvrzení obnovení")
     if state.get("pending_protection"):
         raise RuntimeError("Předchozí OCO čeká na ověření; další příkaz je zakázán")
     if state.get("safe_mode"):
@@ -1010,6 +1024,7 @@ def run():
     db.init()
     state = load_state()
     state["manual_close_version"] = 1
+    state["protection_restore_version"] = 1
 
     current_ip = None
     try:
@@ -1133,7 +1148,7 @@ def run():
 
                     # ── V POZICI ─────────────────────────────────────────────
                     if ps["in_position"]:
-                        if (active_request(state) or {}).get("symbol") == symbol:
+                        if (active_request(state) or {}).get("symbol") == symbol or (active_restore(state) or {}).get("symbol") == symbol:
                             continue
                         if not ps.get("protection_client_id"):
                             if not secure_protection_or_exit(
@@ -1147,15 +1162,11 @@ def run():
                             state = close_from_protection(state, symbol, protection)
                             continue
                         if protection["status"] in ("cancelled", "failed"):
-                            clear_protection(ps)
+                            # Retain the old OCO identity and terms for audit and
+                            # explicit user consent; never silently re-arm it.
                             if not save_state(state):
                                 raise RuntimeError("Zrušenou ochranu se nepodařilo bezpečně uložit")
-                            if not secure_protection_or_exit(
-                                client, state, symbol, ps, base,
-                                step_size, tick_size, protection_filters[symbol]
-                            ):
-                                continue
-                            protection = sync_protection(client, state, symbol)
+                            raise RuntimeError("Zrušená ochrana vyžaduje potvrzené obnovení v Oceanu")
                         if protection["status"] != "active":
                             raise RuntimeError("Pozice nemá aktivní burzovní ochranu")
 

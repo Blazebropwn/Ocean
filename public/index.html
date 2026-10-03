@@ -218,6 +218,15 @@
   <p class="message" id="close-position-message" role="status" aria-live="polite"></p>
   <div class="dca-dialog-actions"><button type="button" data-close-dialog>Zpět</button><button type="button" class="danger" id="close-position-confirm">Potvrdit prodej</button></div>
 </dialog>
+<dialog class="workspace-dialog" id="restore-protection-dialog" aria-labelledby="restore-protection-title">
+  <header class="dialog-heading"><h2 id="restore-protection-title">Obnovit ochranu</h2><button type="button" data-close-dialog aria-label="Zavřít">×</button></header>
+  <p id="restore-protection-quantity"></p>
+  <dl class="close-estimate"><dt>Nouzový stop</dt><dd id="restore-protection-stop"></dd><dt>Aktivace trailing stopu</dt><dd id="restore-protection-trail"></dd></dl>
+  <p>Na Binance vznikne nová dvojice ochranných prodejních příkazů pro uvedené množství. Použijí se parametry původní zrušené ochrany; při dosažení podmínek může burza pozici prodat.</p>
+  <p>Nové nákupy zůstanou pozastavené. Evidované zbytky a ostatní mince nejsou součástí těchto příkazů.</p>
+  <p class="message" id="restore-protection-message" role="status" aria-live="polite"></p>
+  <div class="dca-dialog-actions"><button type="button" data-close-dialog>Zpět</button><button type="button" class="primary" id="restore-protection-confirm">Potvrdit obnovení ochrany</button></div>
+</dialog>
 <dialog class="workspace-dialog" id="position-dialog"><header class="dialog-heading"><h2><span id="bot-position">Detail pozice</span></h2><button type="button" data-close-dialog aria-label="Zavřít">×</button></header><div class="live-detail"><div class="detail-header">
 <div>
 <small>KRYPTOTRON · STRATEGIE</small>

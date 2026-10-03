@@ -24,7 +24,8 @@ export function manualCloseView(data: Record<string, unknown>, now = Date.now())
   return {
     available: data.manual_close_version === 1 && data.api_permissions_safe === true && data.safe_mode === false
       && check.status === "OK" && fresh(check.checked_at, 90_000) && fresh(data.last_heartbeat_at, 90_000)
-      && !data.pending_order && !data.pending_protection && !record(data.dca).pending && !closeActive(request),
+      && !data.pending_order && !data.pending_protection && !record(data.dca).pending && !closeActive(request)
+      && !["queued", "submitting"].includes(String(record(data.protection_restore).status)),
     request: typeof request.id === "string" && stages.includes(String(request.status)) ? {
       id: request.id, symbol: String(request.symbol), positionId: String(request.position_id), status: String(request.status),
       requestedAt: request.requested_at, completedAt: request.completed_at, cooldownUntil: request.cooldown_until,

@@ -1,4 +1,5 @@
 import { readHoldings } from "./holdings.js";
+import { mergeProtectionRestore, protectionRestoreView, queueProtectionRestore, restoreWouldRewind } from "./protection-restore.js";
 import { readKryptotronTransparency } from "./kryptotron-transparency.js";
 import { completedCloseWouldRewind, manualCloseView, mergeManualClose, positionId, queueManualClose } from "./manual-close.js";
 type SupabaseRow = Record<string, unknown>;
@@ -15,6 +16,7 @@ export type KryptotronOctoPresentation = {
 };
 
 export type KryptotronSnapshot = {
+  protectionRestore?: ReturnType<typeof protectionRestoreView>;
   manualClose?: ReturnType<typeof manualCloseView>;
   transparency?: ReturnType<typeof readKryptotronTransparency>;
   connected: boolean;
@@ -178,6 +180,7 @@ async function saveKryptotronStateUnlocked(url: string, key: string, stateKey: s
   if (completedCloseWouldRewind(data.manual_close, latest.manual_close)) {
     throw new Error("Ruční prodej je již potvrzený; worker musí obnovit autoritativní stav");
   }
+  if (restoreWouldRewind(data.protection_restore, latest.protection_restore)) throw new Error("Obnovení ochrany je již potvrzené; worker musí obnovit autoritativní stav");
   const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
   const dca = object(data.dca), savedDca = object(latest.dca);
   const request = object(dca.test_request), savedRequest = object(savedDca.test_request);
@@ -188,6 +191,7 @@ async function saveKryptotronStateUnlocked(url: string, key: string, stateKey: s
   data = { ...data, environment: latest.environment, entries_paused: latest.entries_paused !== false,
     events,
     manual_close: mergeManualClose(data.manual_close, latest.manual_close),
+    protection_restore: mergeProtectionRestore(data.protection_restore, latest.protection_restore),
     dca: { ...dca, enabled: savedDca.enabled === true, amount: savedDca.amount,
       test_request: savedRequest.id && savedRequest.id !== request.id ? savedRequest : dca.test_request },
     streak: { ...object(data.streak), enabled: object(latest.streak).enabled === true } };
@@ -386,6 +390,7 @@ export async function loadKryptotronSnapshot(url: string, key: string, stateKey 
   const dcaTargets: Record<string, number> = { BTCUSDC: 1, ETHUSDC: 10, SOLUSDC: 100 };
   const dcaSymbols = Array.isArray(rawDca.symbols) ? rawDca.symbols.filter((symbol): symbol is string => typeof symbol === "string") : [];
   const snapshot: Omit<KryptotronSnapshot, "octo"> = {
+    protectionRestore: protectionRestoreView(data),
     transparency,
     manualClose: manualCloseView(data),
     connected: Boolean(state),
@@ -530,6 +535,22 @@ export function requestManualClose(url: string, key: string, stateKey: string, s
       body: JSON.stringify({ data, updated_at: new Date().toISOString() }), signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) throw new Error("Požadavek se nepodařilo uložit. Obnovte stav před dalším pokusem.");
+    return request;
+  });
+}
+
+export function requestProtectionRestore(url: string, key: string, stateKey: string, symbol: string, position: string, protection: string) {
+  return withStateLock(url, stateKey, async () => {
+    const data = await loadKryptotronState(url, key, stateKey);
+    if (!data) throw new Error("Stav instance není dostupný.");
+    const previous = data.protection_restore;
+    const request = queueProtectionRestore(data, symbol, position, protection);
+    if (previous === request) return request;
+    const response = await fetch(`${url}/rest/v1/bot_state?key=eq.${encodeURIComponent(stateKey)}`, {
+      method: "PATCH", headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify({ data, updated_at: new Date().toISOString() }), signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) throw new Error("Požadavek se nepodařilo potvrdit. Obnovte stav.");
     return request;
   });
 }

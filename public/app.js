@@ -18,6 +18,7 @@ let selectedPositionSymbol = null;
 let closePositionSelection = null;
 let closePositionSubmitting = false;
 let closePositionPoll = null;
+let restoreSelection = null, restoreSubmitting = false;
 
 function setProfileOpen(open) {
   $("#profile-menu").classList.toggle("hidden", !open);
@@ -530,7 +531,7 @@ function renderPortfolio(snapshot) {
     const row = node("button", "position-row"); row.type = "button";
     const info = node("span"); info.append(node("strong", "", asset), node("small", "", `${formatQuantity(position.quantity)} ${asset}`));
     const result = node("span", "position-result");
-    result.append(node("strong", pnl == null ? "" : pnl >= 0 ? "positive" : "negative", pnl == null ? "—" : `${pnl >= 0 ? "+" : ""}${formatPrice(pnl, snapshot.balance.asset)}`), node("small", position.protectionActive ? "" : "unprotected", position.protectionActive ? "Ochrana aktivní" : "Ověř ochranu"));
+    result.append(node("strong", pnl == null ? "" : pnl >= 0 ? "positive" : "negative", pnl == null ? "—" : `${pnl >= 0 ? "+" : ""}${formatPrice(pnl, snapshot.balance.asset)}`), node("small", position.protectionActive ? "" : "unprotected", position.protectionActive ? "Ochrana aktivní" : position.protectionStatus === "CANCELLED" ? "Ochrana zrušena" : "Ověř ochranu"));
     result.title = pnl == null ? "Aktuální ocenění není dostupné" : `Orientační výsledek bez poplatků. Cena z ${formatDate(snapshot.holdings.capturedAt)}.`;
     row.append(node("i", `asset-icon ${asset.toLowerCase()}`, symbols[asset] || asset.slice(0,1)), info, result, node("b", "", "›"));
     row.setAttribute("aria-label", `Detail pozice ${asset}`);
@@ -543,19 +544,47 @@ function renderPortfolio(snapshot) {
     if (pending?.positionId === position.positionId && ["queued", "cancelling", "ready", "selling"].includes(pending.status)) close.textContent = "Uzavírání…";
     close.title = close.disabled ? "Uzavření čeká na ověřený stav nebo dokončení předchozího požadavku." : "Prodat tuto pozici a pozastavit pár na 60 minut";
     close.addEventListener("click", () => openClosePosition(position, snapshot));
-    wrapper.append(row, close); list.append(wrapper);
+    if (position.protectionStatus === "CANCELLED") {
+      const restore = node("button", "position-close", "Obnovit ochranu"); restore.type = "button";
+      const target = snapshot.protectionRestore?.targets.find(p => p.symbol === position.symbol);
+      restore.disabled = !snapshot.protectionRestore?.available || !target || restoreSubmitting;
+      restore.title = restore.disabled ? "Pozastavte nové nákupy a vyčkejte na ověřenou evidenci účtu." : "Potvrdit nové ochranné příkazy s původními parametry";
+      restore.addEventListener("click", () => {
+        restoreSelection = { symbol: target.symbol, positionId: target.positionId, protectionId: target.protectionId };
+        $("#restore-protection-title").textContent = `Obnovit ochranu ${asset}`;
+        $("#restore-protection-quantity").textContent = `${formatQuantity(target.quantity)} ${asset} · ${snapshot.environment === "testnet" ? "Zkušební provoz" : "Ostrý provoz"}`;
+        $("#restore-protection-stop").textContent = formatPrice(target.stopPrice, snapshot.balance.asset);
+        $("#restore-protection-trail").textContent = `${formatPrice(target.activationPrice, snapshot.balance.asset)} · trail ${target.trailingBips / 100} %`;
+        $("#restore-protection-message").textContent = "";
+        $("#restore-protection-confirm").disabled = false;
+        $("#restore-protection-dialog").showModal();
+      });
+      wrapper.append(row, restore);
+    } else wrapper.append(row, close);
+    list.append(wrapper);
   }
   for (const cooldown of snapshot.manualClose?.cooldowns || []) {
     list.append(node("p", "position-cooldown", `${cooldown.symbol.replace(snapshot.balance.asset, "")} · Pauza po ručním uzavření do ${formatDate(cooldown.until)}. ${snapshot.entriesPaused ? "Bot je dál celkově pozastavený." : "Poté rozhodne další pravidelná kontrola."}`));
   }
   for (const residual of snapshot.manualClose?.residuals || []) {
     const asset = residual.symbol.replace(snapshot.balance.asset, "");
-    list.append(node("p", "position-cooldown", `${asset} · Zbytek po prodeji: ${formatQuantity(residual.quantity)} ${asset}. Zůstává na účtu mimo otevřené pozice.`));
+    list.append(node("p", "position-cooldown", `${asset} · Evidovaný zbytek: ${formatQuantity(residual.quantity)} ${asset}. Zůstává na účtu mimo otevřené pozice.`));
   }
   const closeRequest = snapshot.manualClose?.request;
   if (closeRequest && ["queued", "cancelling", "ready", "selling"].includes(closeRequest.status)) {
     list.append(node("p", "position-cooldown", snapshot.transparency?.safeMode ? "Ruční uzavření čeká na ověření burzou. Nový prodej se neodesílá." : "Ruční uzavření se zpracovává. Potvrzení může trvat přibližně minutu."));
     if (!closePositionPoll) closePositionPoll = setTimeout(() => { closePositionPoll = null; loadKryptotron(); }, 5000);
+  }
+  const restoreRequest = snapshot.protectionRestore?.request;
+  if (restoreRequest && ["queued", "submitting"].includes(restoreRequest.status)) {
+    list.append(node("p", "position-cooldown", "Obnovení ochrany čeká na potvrzení burzou. Nové nákupy zůstávají pozastavené."));
+    if (!closePositionPoll) closePositionPoll = setTimeout(() => { closePositionPoll = null; loadKryptotron(); }, 5000);
+  }
+  if (restoreSelection && $("#restore-protection-dialog").open && !restoreSubmitting) {
+    const matches = restoreRequest?.symbol === restoreSelection.symbol && restoreRequest?.protectionId === restoreSelection.protectionId;
+    const messages = { queued: "Požadavek je uložený. Čekám na kontrolu workeru.", submitting: "Čekám na potvrzení ochrany burzou. Další příkaz se neodesílá.", completed: "Ochrana byla potvrzena. Nové nákupy zůstávají pozastavené.", superseded: "Pozice se mezitím změnila. Obnovte přehled.", rejected: "Obnovení neproběhlo: stav účtu, cena nebo parametry se změnily. Zkontrolujte přehled." };
+    if (matches) $("#restore-protection-message").textContent = messages[restoreRequest.status];
+    $("#restore-protection-confirm").disabled = Boolean(matches) || !snapshot.protectionRestore?.available || !snapshot.protectionRestore.targets.some(p => p.symbol === restoreSelection.symbol && p.positionId === restoreSelection.positionId && p.protectionId === restoreSelection.protectionId);
   }
   updateClosePositionStatus(snapshot);
   $("#next-check-short").textContent = snapshot.nextCheckAt ? `Další kontrola ${new Intl.DateTimeFormat("cs-CZ",{hour:"2-digit",minute:"2-digit",timeZone:"Europe/Prague"}).format(new Date(snapshot.nextCheckAt))}` : "Čekám na kontrolu";
@@ -666,6 +695,19 @@ $("#close-position-confirm").addEventListener("click", async () => {
     // Keep confirmation disabled after an ambiguous response; server deduplicates retries.
     await loadKryptotron();
   }
+});
+
+$("#restore-protection-confirm").addEventListener("click", async () => {
+  if (!restoreSelection || restoreSubmitting || $("#restore-protection-confirm").disabled) return;
+  restoreSubmitting = true;
+  $("#restore-protection-confirm").disabled = true;
+  $("#restore-protection-message").textContent = "Ukládám požadavek…";
+  try {
+    await request("/api/kryptotron/protection/restore", { method: "POST", body: JSON.stringify({ ...restoreSelection, confirmed: true }) });
+    $("#restore-protection-message").textContent = "Požadavek je uložený. Čekám na potvrzení ochrany.";
+  } catch (error) {
+    $("#restore-protection-message").textContent = `${error.message} Ověřte stav v přehledu.`;
+  } finally { restoreSubmitting = false; await loadKryptotron(); }
 });
 
 function updatePositionDetail() {

@@ -66,3 +66,11 @@ test("evaluateOpsAlert re-alerts immediately when the set of problems changes, e
   const changed = evaluateOpsAlert(state, ["problem A", "problem B"], 1_000_100);
   assert.match(changed.message ?? "", /problem B/);
 });
+
+test('missing protection alerts name the required owner action without hiding mixed issues', async () => {
+  const { workerStateIssues } = await import('../src/ops-monitor.js');
+  const state = { last_heartbeat_at: new Date().toISOString(), safe_mode: true, reconciliation: { issues: [{code:'PROTECTION_ERROR'}] } };
+  assert.match(workerStateIssues(state,'Client')[0]!, /potvrdit obnovení ochrany/);
+  state.reconciliation.issues.push({code:'UNATTRIBUTED_BALANCE'});
+  assert.doesNotMatch(workerStateIssues(state,'Client')[0]!, /samotné \/resume/);
+});
