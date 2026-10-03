@@ -9,8 +9,36 @@ from reconciliation import inspect_account
 from risk import entry_permission, decision_snapshot, position_budget
 from order_safety import apply_filled_buy, classify_order
 from dca import settle_pending_dca
+from protection import build_protection_oco, store_protection
+from decimal import Decimal
 
 NOW = datetime(2026, 9, 26, 12, tzinfo=timezone.utc)
+
+
+class ProtectionResidualRecovery(BotStateTestCase):
+    def test_lost_save_response_and_restart_do_not_duplicate_rounding_residual(self):
+        state = self.state()
+        state["positions"]["BTCUSDC"] = {"in_position": True, "position_qty": .00024976, "entry_price": 84250.01}
+        request = build_protection_oco("BTCUSDC", .00024, 84250.01, .01, 10, 3, 1.5, 10, 2000)
+        saved = []
+        def save(value):
+            saved.append(copy.deepcopy(value))
+            return len(saved) != 2
+        client = Mock()
+        client.create_oco_order.return_value = {"orderListId": 4}
+        client.v3_get_order_list.return_value = {"orderListId": 4}
+        with patch.object(bot.db, "save_state", side_effect=save):
+            with self.assertRaisesRegex(RuntimeError, "stav se nepodařilo potvrdit"):
+                bot.place_protection(client, state, "BTCUSDC", request)
+        # Recovery works whether the last successful write was the original
+        # intent, the settlement whose reply was lost, or the following retry.
+        for persisted in saved:
+            restored = copy.deepcopy(persisted)
+            bot.reconcile_pending_protection(client, restored)
+            self.assertEqual(Decimal(restored["strategy_residuals"]["BTCUSDC"]["quantity"]), Decimal(".00000976"))
+            self.assertIsNone(restored["pending_protection"])
+            self.assertEqual(restored["positions"]["BTCUSDC"]["position_qty"], .00024)
+        self.assertEqual(client.create_oco_order.call_count, 1)
 
 
 class AccountInvariants(unittest.TestCase):
@@ -65,6 +93,38 @@ class AccountInvariants(unittest.TestCase):
         self.assertIn("UNATTRIBUTED_BALANCE", [i["code"] for i in self.inspect()["issues"]])
         self.state["unmanaged_inventory"] = {"BTC": .02}
         self.assertEqual(self.inspect()["status"], "OK")
+
+    def test_repeated_protection_rounding_preserves_inventory_and_replay_is_idempotent(self):
+        state = {"positions": {}}
+        for n in range(6):
+            ps = {"in_position": True, "position_qty": .00024976, "entry_price": 84250.01}
+            state["positions"]["BTCUSDC"] = ps
+            request = build_protection_oco("BTCUSDC", .00024, ps["entry_price"], .01, 10, 3, 1.5, 10, 2000)
+            store_protection(ps, {"orderListId": 4}, request, state)
+            snapshot = copy.deepcopy(state)
+            store_protection(ps, {"orderListId": 4}, request, state)
+            self.assertEqual(state, snapshot)
+            residual = Decimal(".00000976") * (n + 1)
+            self.assertEqual(Decimal(state["strategy_residuals"]["BTCUSDC"]["quantity"]), residual)
+            self.client.get_account.return_value["balances"][0].update(free=str(residual), locked=".00024")
+            for order in self.orders:
+                order["origQty"] = ".00024"
+            self.assertEqual(inspect_account(self.client, state, self.pairs, now=NOW)["status"], "OK")
+            # Closing only the protected quantity must leave every prior remainder.
+            ps.update(in_position=False, position_qty=0)
+            self.client.get_account.return_value["balances"][0]["locked"] = "0"
+            self.client.get_open_orders.return_value = []
+            self.assertEqual(inspect_account(self.client, state, self.pairs, now=NOW)["status"], "OK")
+            self.client.get_open_orders.return_value = self.orders
+
+    def test_invalid_protection_quantity_cannot_mutate_inventory(self):
+        ps = {"position_qty": .00024, "entry_price": 84250.01}
+        state = {"positions": {"BTCUSDC": ps}}
+        before = copy.deepcopy(state)
+        request = build_protection_oco("BTCUSDC", .00025, ps["entry_price"], .01, 10, 3, 1.5, 10, 2000)
+        with self.assertRaises(ValueError):
+            store_protection(ps, {"orderListId": 4}, request, state)
+        self.assertEqual(state, before)
 
 
 class RiskInvariants(unittest.TestCase):

@@ -146,3 +146,40 @@ test("failed Risk Agent notification contains a concise reason", () => {
   assert.match(text, /Kontrolu portfolia se nepodařilo dokončit/);
   assert.doesNotMatch(text, /Portfolio snapshot není dostupný/);
 });
+
+test("Telegram explains blocked resume and never promises unverified protection", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let state = { entries_paused: true, safe_mode: true, events: [], positions: {
+    BTCUSDC: { in_position: true, position_qty: .00024, protection_status: "CANCELLED" },
+    ETHUSDC: { in_position: true, position_qty: .0071, protection_status: "CANCELLED" },
+  } };
+  let writes = 0;
+  globalThis.fetch = async (input, init) => {
+    if (init?.method === "PATCH") { writes++; state = JSON.parse(String(init.body)).data; return new Response(null, { status: 204 }); }
+    return Response.json(String(input).includes("bot_trades?") ? [] : [{ data: state }]);
+  };
+  const db = openDatabase(":memory:");
+  const config = { port: 0, host: "127.0.0.1", databasePath: ":memory:", appOrigin: "http://localhost", isProduction: false, kryptotronSupabaseUrl: "https://example.supabase.co", kryptotronSupabaseKey: "key" };
+  const app = buildApp(config, db);
+  t.after(() => app.close());
+  const registration = await app.inject({ method: "POST", url: "/api/auth/register", payload: { username: "captain", password: "safe password" } });
+  const userId = registration.json().user.id as string;
+  db.prepare("UPDATE kryptotron_instances SET remote_state_key = id, status = 'connected' WHERE user_id = ?").run(userId);
+  db.prepare("INSERT INTO telegram_connections (user_id, chat_id) VALUES (?, '77')").run(userId);
+  const messages: string[] = [];
+  const send = async (_chat: string, text: string) => { messages.push(text); };
+  await processTelegramMessage(db, config, { chat: { id: 77 }, text: "/resume" }, send);
+  assert.match(messages.at(-1)!, /Obnovení blokuje bezpečnostní režim/);
+  assert.equal(writes, 0);
+  await processTelegramMessage(db, config, { chat: { id: 77 }, text: "/pause" }, send);
+  assert.doesNotMatch(messages.at(-1)!, /zůstává chráněná/);
+  assert.equal(state.entries_paused, true);
+  await processTelegramMessage(db, config, { chat: { id: 77 }, text: "/status" }, send);
+  assert.match(messages.at(-1)!, /bezpečnostní režim/);
+  assert.match(messages.at(-1)!, /BTCUSDC \(ověř ochranu\), ETHUSDC \(ověř ochranu\)/);
+  globalThis.fetch = async () => { throw new Error("private transport details"); };
+  await processTelegramMessage(db, config, { chat: { id: 77 }, text: "/resume" }, send);
+  assert.match(messages.at(-1)!, /nepodařilo potvrdit/);
+  assert.doesNotMatch(messages.at(-1)!, /private/);
+});

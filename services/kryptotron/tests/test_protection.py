@@ -52,9 +52,9 @@ class ProtectionTests(unittest.TestCase):
         self.assertEqual(trailing_delta_filter(info), (10, 2000))
 
     def test_stores_exchange_order_list_identity(self):
-        position = {}
+        position = {"position_qty": .01}
         request = build_protection_oco("ETHUSDC", 0.01, 2500, 0.01, 10, 3, 1.5, 10, 2000)
-        store_protection(position, {"orderListId": 77}, request)
+        store_protection(position, {"orderListId": 77}, request, {})
         self.assertEqual(position["protection_order_list_id"], 77)
         self.assertEqual(position["protection_status"], "ACTIVE")
         self.assertEqual(position["position_qty"], 0.01)

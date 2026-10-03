@@ -336,7 +336,7 @@ def place_protection(client, state, symbol, request):
         raise RuntimeError("Bezpečný zápis ochrany selhal — OCO nebyla odeslána")
 
     response = client.create_oco_order(**request)
-    store_protection(ps, response, request)
+    store_protection(ps, response, request, state)
     state["pending_protection"] = None
     add_event(state, "PROTECTION", f"{symbol} · OCO ochrana aktivní")
     if not save_state(state):
@@ -358,7 +358,7 @@ def reconcile_pending_protection(client, state):
         if exc.code != -2013:
             raise
         raise RuntimeError("OCO nebyla nalezena; nejednoznačný záměr vyžaduje kontrolu") from exc
-    store_protection(ps, response, request)
+    store_protection(ps, response, request, state)
     state["pending_protection"] = None
     if not save_state(state):
         state["pending_protection"] = request
