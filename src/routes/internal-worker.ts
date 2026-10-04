@@ -5,8 +5,10 @@ import { credentialsKey } from "../credentials.js";
 import { validWorkerAccessToken } from "../worker-auth.js";
 import { loadKryptotronState, logKryptotronTrade, saveKryptotronState } from "../kryptotron.js";
 import { isMainnetEnabled } from "../supervisor.js";
+import { pausedAutomation } from "../account-pause.js";
 
 export function registerInternalWorkerRoutes(app: FastifyInstance, db: OceanDatabase, config: Config) {
+  const suspended = (instanceId: string) => Boolean((db.prepare("SELECT u.suspended_at FROM users u JOIN kryptotron_instances i ON i.user_id = u.id WHERE i.id = ?").get(instanceId) as { suspended_at: string | null } | undefined)?.suspended_at);
   function internalWorker(request: FastifyRequest) {
     const instanceId = request.headers["x-ocean-instance"];
     const authorization = request.headers.authorization;
@@ -27,7 +29,7 @@ export function registerInternalWorkerRoutes(app: FastifyInstance, db: OceanData
     if (!instanceId) return reply.code(401).send({ error: "Unauthorized" });
     if (!config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return reply.code(503).send({ error: "Unavailable" });
     const state = await loadKryptotronState(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, instanceId);
-    return state ? { state } : reply.code(404).send({ error: "Not found" });
+    return state ? { state: suspended(instanceId) ? pausedAutomation(state) : state } : reply.code(404).send({ error: "Not found" });
   });
 
   app.put("/internal/kryptotron/state", { config: { rateLimit: { max: 180, timeWindow: "1 minute" } } }, async (request, reply) => {
@@ -36,7 +38,7 @@ export function registerInternalWorkerRoutes(app: FastifyInstance, db: OceanData
     const body = request.body as { state?: unknown } | null;
     if (!body?.state || typeof body.state !== "object" || Array.isArray(body.state)) return reply.code(400).send({ error: "Invalid state" });
     if (!config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return reply.code(503).send({ error: "Unavailable" });
-    await saveKryptotronState(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, instanceId, body.state as Record<string, unknown>);
+    await saveKryptotronState(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, instanceId, body.state as Record<string, unknown>, () => suspended(instanceId));
     return reply.code(204).send();
   });
 

@@ -26,5 +26,5 @@ export function approvalMode(config: Config): "owner" | "email" {
 }
 
 export function hasApprovedAccess(user: UserRecord, config: Config) {
-  return config.manualApprovalEnabled ? Boolean(user.approved_at) : Boolean(user.email_verified_at);
+  return !user.suspended_at && (config.manualApprovalEnabled ? Boolean(user.approved_at) : Boolean(user.email_verified_at));
 }

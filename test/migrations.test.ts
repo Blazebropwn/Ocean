@@ -25,6 +25,7 @@ test("a new database receives the versioned Ocean schema exactly once", () => {
     { version: 4, name: "worker_notifications" },
     { version: 5, name: "tide_economy" },
     { version: 6, name: "genesis_waves" },
+    { version: 7, name: "account_suspension" },
   ]);
   assert.equal((db.pragma("foreign_keys", { simple: true }) as number), 1);
   db.close();
@@ -39,7 +40,7 @@ test("reopening a database is idempotent and preserves rows", () => {
 
   db = openDatabase(path);
   assert.equal((db.prepare("SELECT COUNT(*) AS count FROM users WHERE id = 'usr_preserved'").get() as { count: number }).count, 1);
-  assert.equal((db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get() as { count: number }).count, 6);
+  assert.equal((db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get() as { count: number }).count, 7);
   assert.equal(String(db.pragma("journal_mode", { simple: true })).toLowerCase(), "wal");
   db.close();
   rmSync(directory, { recursive: true, force: true });

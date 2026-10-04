@@ -18,6 +18,7 @@ import { registerAgentRoutes } from "./routes/agents.js";
 import { registerEconomyRoutes } from "./routes/economy.js";
 import { buildVersionedPages, versionAssetReferences } from "./asset-versioning.js";
 import type { PortfolioProvider } from "./portfolio/provider.js";
+import { currentUser } from "./routes/shared.js";
 
 export type AppDependencies = {
   portfolioProvider?: PortfolioProvider;
@@ -60,6 +61,11 @@ export function buildApp(config: Config, database?: OceanDatabase, dependencies:
   }
 
   app.addHook("onRequest", async (request, reply) => {
+    const path = request.url.split("?")[0]!;
+    const suspensionAllowed = new Set(["/api/me", "/api/tide", "/api/health", "/api/ready", "/api/auth/login", "/api/auth/logout", "/api/auth/recovery/request", "/api/auth/recovery/confirm", "/api/account/password"]);
+    if (path.startsWith("/api/") && !suspensionAllowed.has(path) && currentUser(db, request)?.suspended_at) {
+      return reply.code(403).send({ code: "ACCOUNT_SUSPENDED", error: "Tvůj účet je pozastavený správcem. Pro odblokování kontaktuj správce." });
+    }
     if (!["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return;
     const origin = request.headers.origin;
     if (origin && !isAllowedOrigin(origin, config)) return reply.code(403).send({ error: "Požadavek byl odmítnut." });

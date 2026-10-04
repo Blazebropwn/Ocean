@@ -227,6 +227,7 @@ export function registerAuthRoutes(app: FastifyInstance, db: OceanDatabase, conf
   });
 
   app.get("/api/me", async (request, reply) => {
+    reply.header("cache-control", "no-store");
     const token = request.cookies[COOKIE_NAME];
     const user = currentUser(db, request);
     if (!user) {

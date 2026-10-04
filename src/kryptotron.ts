@@ -1,4 +1,5 @@
 import { readHoldings } from "./holdings.js";
+import { pausedAutomation } from "./account-pause.js";
 import { mergeProtectionRestore, protectionRestoreView, queueProtectionRestore, restoreWouldRewind } from "./protection-restore.js";
 import { readKryptotronTransparency } from "./kryptotron-transparency.js";
 import { completedCloseWouldRewind, manualCloseView, mergeManualClose, positionId, queueManualClose } from "./manual-close.js";
@@ -174,7 +175,7 @@ export async function loadKryptotronState(url: string, key: string, stateKey: st
   return data && typeof data === "object" ? data as Record<string, unknown> : null;
 }
 
-async function saveKryptotronStateUnlocked(url: string, key: string, stateKey: string, data: Record<string, unknown>) {
+async function saveKryptotronStateUnlocked(url: string, key: string, stateKey: string, data: Record<string, unknown>, mustPause?: () => boolean) {
   const latest = await loadKryptotronState(url, key, stateKey);
   if (!latest) throw new Error("Stav instance neexistuje; zápis byl odmítnut");
   if (completedCloseWouldRewind(data.manual_close, latest.manual_close)) {
@@ -195,6 +196,7 @@ async function saveKryptotronStateUnlocked(url: string, key: string, stateKey: s
     dca: { ...dca, enabled: savedDca.enabled === true, amount: savedDca.amount,
       test_request: savedRequest.id && savedRequest.id !== request.id ? savedRequest : dca.test_request },
     streak: { ...object(data.streak), enabled: object(latest.streak).enabled === true } };
+  if (mustPause?.()) data = pausedAutomation(data);
   const response = await fetch(`${url}/rest/v1/bot_state?key=eq.${encodeURIComponent(stateKey)}`, {
     method: "PATCH",
     headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=minimal" },
@@ -552,5 +554,17 @@ export function requestProtectionRestore(url: string, key: string, stateKey: str
     });
     if (!response.ok) throw new Error("Požadavek se nepodařilo potvrdit. Obnovte stav.");
     return request;
+  });
+}
+
+export function pauseKryptotronAutomation(url: string, key: string, stateKey: string) {
+  return withStateLock(url, stateKey, async () => {
+    const data = await loadKryptotronState(url, key, stateKey);
+    if (!data) throw new Error("Stav instance není dostupný.");
+    const response = await fetch(`${url}/rest/v1/bot_state?key=eq.${encodeURIComponent(stateKey)}`, {
+      method: "PATCH", headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify({ data: pausedAutomation(data), updated_at: new Date().toISOString() }), signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) throw new Error("Pozastavení automatizace se nepodařilo uložit.");
   });
 }

@@ -43,6 +43,7 @@ export async function processTelegramMessage(db: OceanDatabase, config: Config, 
     const pairing = db.prepare("SELECT user_id FROM telegram_pairings WHERE token_hash = ? AND expires_at > datetime('now')")
       .get(hashToken(parsed.argument)) as { user_id: string } | undefined;
     if (!pairing) return send(chatId, "Párovací kód není platný nebo už vypršel.");
+    if ((db.prepare("SELECT suspended_at FROM users WHERE id = ?").get(pairing.user_id) as { suspended_at: string | null })?.suspended_at) return send(chatId, "🔒 Tvůj účet je pozastavený správcem.");
     const link = db.transaction(() => {
       db.prepare("DELETE FROM telegram_connections WHERE chat_id = ? OR user_id = ?").run(chatId, pairing.user_id);
       db.prepare("INSERT INTO telegram_connections (user_id, chat_id, telegram_username) VALUES (?, ?, ?)")
@@ -57,6 +58,7 @@ export async function processTelegramMessage(db: OceanDatabase, config: Config, 
 
   const connection = connectionForChat(db, chatId);
   if (!connection) return send(chatId, "Telegram není propojený s účtem Ocean. Otevři Ocean → profil → Telegram a propoj účet.");
+  if ((db.prepare("SELECT suspended_at FROM users WHERE id = ?").get(connection.user_id) as { suspended_at: string | null })?.suspended_at) return send(chatId, "🔒 Tvůj účet je pozastavený správcem. Pro odblokování kontaktuj správce.");
   if (parsed.name === "/pause") {
     if (!connection.remote_state_key || !config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return send(chatId, "Kryptotron teď není dostupný.");
     await setKryptotronEntriesPaused(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, true, connection.remote_state_key);

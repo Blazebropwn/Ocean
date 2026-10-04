@@ -22,6 +22,7 @@
 .admin-workspace .invite-list article { display:flex; flex-wrap:wrap; gap:12px; }
 .admin-workspace .invite-list article > div:first-child { min-width:160px; flex:1; }
 .admin-workspace .invite-list article button { padding:8px 10px; }
+.admin-workspace .invite-list article button.unblock-member { color:var(--good); }
 .admin-actions { display:flex; gap:8px; flex-wrap:wrap; }
 .admin-workspace .genesis-admin { margin:0; }
 .admin-help { margin-top:16px; color:var(--muted); font-size:12px; line-height:1.7; }
