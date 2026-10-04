@@ -1,0 +1,44 @@
+/* One monitor: HUD, playable display, live ranking strip. */
+.ocean-workspace.arcade-mode .workspace-head { display:none; }
+.ocean-workspace.arcade-mode .workspace { overflow:hidden; gap:0; }
+.ocean-workspace .arcade-view { flex:1 1 0; width:100%; min-height:0; min-width:0; border:1px solid #31494c; border-radius:16px; background:#0c191e; box-shadow:inset 0 1px rgba(181,237,222,.05); }
+.sonar-monitor { height:100%; min-height:0; display:grid; grid-template-rows:auto minmax(0,1fr) 52px; overflow:hidden; }
+.sonar-hud { display:flex; justify-content:space-between; align-items:flex-start; padding:24px 28px 0; pointer-events:none; z-index:1; }
+.sonar-name { font-size:14px; font-weight:650; letter-spacing:.24em; color:#c7dfdc; }
+.sonar-name > span { color:#83ddc7; }
+.sonar-score { display:grid; justify-items:end; gap:5px; font-variant-numeric:tabular-nums; }
+.sonar-score > span { font-size:9px; letter-spacing:.2em; color:#8da7ac; }
+.sonar-score strong { font:500 clamp(24px,3vw,36px)/1 ui-monospace,monospace; letter-spacing:.04em; color:#d2f2e9; }
+.ocean-ui .sonar-surface { position:relative; display:block; min-height:0; width:100%; height:100%; margin:0; padding:0; border:0; border-radius:0; background:transparent; color:#bde6db; cursor:pointer; touch-action:manipulation; -webkit-tap-highlight-color:transparent; user-select:none; overflow:hidden; }
+.sonar-surface canvas { display:block; position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+.ocean-workspace .sonar-surface:focus-visible { outline:1px solid #83ddc7; outline-offset:-7px; }
+.sonar-prompt,.sonar-feedback { position:absolute; bottom:6%; left:12px; right:12px; font:500 12px/1.5 ui-monospace,monospace; letter-spacing:.1em; text-align:center; pointer-events:none; }
+.sonar-prompt { color:#89b1ab; }
+.sonar-prompt:empty,.sonar-feedback:empty { display:none; }
+.sonar-feedback { color:#ccffec; }
+.sonar-ticker { min-width:0; display:flex; align-items:center; overflow:hidden; border-top:1px solid #2b4246; background:#0a1419; color:#a9c5c4; font:12px/1 ui-monospace,monospace; }
+.sonar-ticker:focus-visible { outline:1px solid #83ddc7; outline-offset:-3px; }
+.sonar-ticker-track { display:flex; width:max-content; min-width:100%; }
+.sonar-ticker-track.is-running { animation:sonar-ticker var(--ticker-duration,40s) linear infinite; will-change:transform; }
+.sonar-ticker-group { display:flex; flex-shrink:0; align-items:center; }
+.sonar-ticker-entry { display:inline-flex; align-items:center; gap:10px; flex:none; padding:0 24px; white-space:nowrap; }
+.sonar-ticker-entry b { color:#ddede8; font-weight:500; }
+.sonar-ticker-entry i { font-style:normal; color:#60817e; }
+.sonar-ticker-empty { padding:0 24px; color:#708e90; font-size:11px; }
+.sonar-ticker:hover .sonar-ticker-track,.sonar-ticker:focus .sonar-ticker-track { animation-play-state:paused; }
+.sonar-sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; }
+@keyframes sonar-ticker { to { transform:translateX(-50%); } }
+@media(max-width:900px) {
+ .ocean-workspace.arcade-mode .workspace { padding:12px; }
+ .ocean-workspace .arcade-view { border-radius:12px; }
+ .sonar-hud { padding:20px 20px 0; }
+ .sonar-monitor { grid-template-rows:auto minmax(0,1fr) 44px; }
+ .sonar-ticker { font-size:11px; }
+ .sonar-ticker-entry { padding-inline:18px; }
+}
+@media(max-height:500px) { .sonar-hud { padding:12px 18px 0; }.sonar-score strong { font-size:22px; }.sonar-monitor { grid-template-rows:auto minmax(0,1fr) 34px; }.sonar-prompt,.sonar-feedback { bottom:3%; font-size:10px; } }
+@media(prefers-reduced-motion:reduce) {
+ .sonar-ticker-track.is-running { animation:none; transform:none; }
+ .sonar-ticker { overflow-x:auto; }
+ .sonar-ticker-group[aria-hidden=true] { display:none; }
+}

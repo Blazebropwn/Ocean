@@ -10,7 +10,7 @@ import { migrateDatabase, type DatabaseMigration } from "../src/database/migrate
 const expectedTables = [
   "admin_audit_log", "agent_ledger_entries", "agent_runs", "agents", "email_verification_tokens", "genesis_codes", "genesis_redemptions", "genesis_waves", "invitations",
   "kryptotron_credentials", "kryptotron_instances", "mail_outbox", "password_reset_tokens",
-  "schema_migrations", "security_events", "sessions", "slot_spins", "telegram_bot_state",
+  "schema_migrations", "security_events", "sessions", "slot_spins", "sonar_records", "sonar_runs", "telegram_bot_state",
   "telegram_confirmations", "telegram_connections", "telegram_pairings", "tide_ledger", "users", "worker_notifications",
 ];
 
@@ -26,6 +26,7 @@ test("a new database receives the versioned Ocean schema exactly once", () => {
     { version: 5, name: "tide_economy" },
     { version: 6, name: "genesis_waves" },
     { version: 7, name: "account_suspension" },
+    { version: 8, name: "sonar_leaderboard" },
   ]);
   assert.equal((db.pragma("foreign_keys", { simple: true }) as number), 1);
   db.close();
@@ -40,7 +41,7 @@ test("reopening a database is idempotent and preserves rows", () => {
 
   db = openDatabase(path);
   assert.equal((db.prepare("SELECT COUNT(*) AS count FROM users WHERE id = 'usr_preserved'").get() as { count: number }).count, 1);
-  assert.equal((db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get() as { count: number }).count, 7);
+  assert.equal((db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get() as { count: number }).count, 8);
   assert.equal(String(db.pragma("journal_mode", { simple: true })).toLowerCase(), "wal");
   db.close();
   rmSync(directory, { recursive: true, force: true });

@@ -692,36 +692,6 @@ input:focus { border-color: var(--cyan); background: rgba(2, 17, 23, 0.9); box-s
   background: linear-gradient(145deg, rgba(13, 43, 54, 0.94), rgba(5, 23, 31, 0.96));
   box-shadow: var(--shadow);
 }
-.arcade-game { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; padding: 20px 24px; }
-.game-top, .game-bottom { display: flex; align-items: center; gap: 18px; }
-.game-score small { color: var(--muted); font: 700 9px/1 ui-monospace, monospace; letter-spacing: 0.12em; }
-.game-score { margin-left: auto; text-align: right; }
-.game-score strong { display: block; margin-top: 5px; color: var(--cyan); font: 800 28px/1 ui-monospace, monospace; text-shadow: 0 0 20px rgba(84, 238, 226, .28); }
-.game-canvas-wrap {
-  min-height: 0;
-  display: grid;
-  place-items: center;
-  position: relative;
-  margin: 12px 0;
-  overflow: hidden;
-  border: 1px solid var(--line-hot);
-  border-radius: 12px;
-  background: #03151c;
-  box-shadow: inset 0 0 80px rgba(0, 5, 8, .65);
-}
-.game-canvas-wrap::before,
-.game-canvas-wrap::after { content: ""; width: 38px; height: 38px; position: absolute; z-index: 2; pointer-events: none; }
-.game-canvas-wrap::before { left: 12px; top: 12px; border-left: 2px solid var(--cyan); border-top: 2px solid var(--cyan); }
-.game-canvas-wrap::after { right: 12px; bottom: 12px; border-right: 2px solid var(--cyan); border-bottom: 2px solid var(--cyan); }
-.game-canvas-wrap canvas { width: 100%; height: 100%; display: block; position: absolute; inset: 0; touch-action: none; }
-.game-canvas-wrap button { position: absolute; left: 50%; bottom: 18px; z-index: 3; min-width: 168px; padding: 13px 20px; transform: translateX(-50%); border: 1px solid var(--line-hot); border-radius: 9px; color: #032128; background: var(--cyan); box-shadow: 0 0 28px rgba(84, 238, 226, .18); font-weight: 900; letter-spacing: .04em; cursor: pointer; }
-.game-canvas-wrap button:hover { background: #8ff9f0; }
-.game-bottom { justify-content: space-between; color: var(--muted); font-size: var(--text-sm); }
-.game-bottom strong { color: var(--ink-soft); }
-@media (max-height: 760px) and (min-width: 881px) {
-  .arcade-game { padding: 14px 18px; }
-  .game-canvas-wrap { margin: 9px 0; }
-}
 .vault-view { display: grid; place-items: center; }
 .vault-preview { display: grid; place-items: center; }
 .vault-core { width: 220px; height: 220px; display: grid; place-items: center; position: relative; border: 1px solid var(--line-hot); border-radius: 50%; box-shadow: 0 0 0 42px rgba(84, 238, 226, 0.025), 0 0 0 84px rgba(84, 238, 226, 0.018); animation: vault-float 5s ease-in-out infinite; }
