@@ -107,14 +107,14 @@ async function loadMembers() {
     const state = document.createElement("span");
     name.textContent = `@${member.username}`;
     detail.textContent = member.email || member.displayId;
-    state.textContent = member.approved ? "Schválen" : "Čeká";
-    state.className = `invite-status ${member.approved ? "active" : "pending"}`;
+    state.textContent = member.suspended ? "🔒 Pozastaven" : member.approved ? "Schválen" : "Čeká";
+    state.className = `invite-status ${member.suspended ? "pending" : member.approved ? "active" : "pending"}`;
     const bot = document.createElement("div");
     bot.className = "member-bot";
     const botChip = document.createElement("span");
     const status = botStatus(member.instance);
-    botChip.className = `bot-status ${status.className}`;
-    botChip.textContent = status.label;
+    botChip.className = `bot-status ${member.suspended ? "pending" : status.className}`;
+    botChip.textContent = member.suspended ? "Nákupy pozastaveny" : status.label;
     bot.append(botChip);
     if (member.instance) {
       const environment = document.createElement("small");
@@ -123,6 +123,21 @@ async function loadMembers() {
     }
     info.append(name, detail, bot);
     row.append(info, state);
+    const suspension = document.createElement("button");
+    suspension.type = "button";
+    suspension.className = `suspend-member${member.suspended ? " unblock-member" : ""}`;
+    suspension.textContent = member.suspended ? "Odblokovat účet" : "Pozastavit účet";
+    suspension.addEventListener("click", async () => {
+      const action = member.suspended ? `Odblokovat @${member.username}? Nové nákupy zůstanou pozastavené, dokud si je uživatel sám nezapne.` : `Pozastavit @${member.username}? Funkce účtu se zamknou a nové nákupy se pozastaví. Ochranné objednávky na Binance zůstanou zachované.`;
+      if (!window.confirm(action)) return;
+      suspension.disabled = true;
+      try {
+        const result = await inviteRequest(`/api/members/${member.id}/suspension`, { method: "POST", body: JSON.stringify({ suspended: !member.suspended }) });
+        await loadMembers();
+        setInviteMessage(result.automationPausePending ? "Účet je zablokovaný. Uložení pauzy automatizace čeká na dostupnost úložiště; ověř stav v detailu." : member.suspended ? "Účet je odblokovaný. Nové nákupy zůstávají pozastavené." : "Účet je pozastavený.", !result.automationPausePending);
+      } catch (error) { setInviteMessage(error.message); suspension.disabled = false; }
+    });
+    row.append(suspension);
     if (!member.approved) {
       const approve = document.createElement("button");
       approve.type = "button";

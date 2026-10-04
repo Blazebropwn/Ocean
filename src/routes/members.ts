@@ -3,12 +3,56 @@ import { z } from "zod";
 import type { Config } from "../config.js";
 import { publicUser, type KryptotronInstanceRecord, type OceanDatabase, type UserRecord } from "../db.js";
 import { hashToken, newVerificationToken } from "../security.js";
-import { loadKryptotronSnapshot } from "../kryptotron.js";
+import { loadKryptotronSnapshot, pauseKryptotronAutomation } from "../kryptotron.js";
 import { approvalMode, currentUser, requestMeta } from "./shared.js";
 
 const memberDeletionSchema = z.object({ confirmation: z.string().trim().min(1).max(64) }).strict();
 
 export function registerMemberRoutes(app: FastifyInstance, db: OceanDatabase, config: Config) {
+  const changing = new Set<string>();
+  app.post("/api/members/:id/suspension", { config: { rateLimit: { max: 30, timeWindow: "1 hour" } } }, async (request, reply) => {
+    const owner = currentUser(db, request);
+    if (!owner) return reply.code(401).send({ error: "Nejste přihlášeni." });
+    if (owner.role !== "owner" || owner.suspended_at) return reply.code(403).send({ error: "Účty může pozastavovat pouze vlastník." });
+    if (request.headers.origin !== config.appOrigin) return reply.code(403).send({ error: "Neplatný původ požadavku." });
+    const id = (request.params as { id: string }).id;
+    const parsed = z.object({ suspended: z.boolean() }).strict().safeParse(request.body);
+    if (!/^usr_[a-f0-9]{32}$/.test(id) || !parsed.success) return reply.code(400).send({ error: "Neplatný požadavek." });
+    const member = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'member'").get(id) as UserRecord | undefined;
+    if (!member) return reply.code(404).send({ error: "Člen nebyl nalezen." });
+    if (changing.has(id)) return reply.code(409).send({ error: "Změna účtu právě probíhá. Obnovte seznam." });
+    if (Boolean(member.suspended_at) === parsed.data.suspended) return { member: publicUser(member, approvalMode(config)) };
+    changing.add(id);
+    const meta = requestMeta(request);
+    const change = (suspended: boolean) => db.transaction(() => {
+      db.prepare("UPDATE users SET suspended_at = ?, suspended_by = ?, updated_at = datetime('now') WHERE id = ? AND role = 'member'")
+        .run(suspended ? new Date().toISOString() : null, suspended ? owner.id : null, id);
+      db.prepare("DELETE FROM telegram_confirmations WHERE user_id = ?").run(id);
+      db.prepare("DELETE FROM telegram_pairings WHERE user_id = ?").run(id);
+      db.prepare(`INSERT INTO admin_audit_log (actor_user_id, action, subject_user_id, subject_username, details_json, ip_address, user_agent)
+        VALUES (?, ?, ?, ?, '{}', ?, ?)`).run(owner.id, suspended ? "MEMBER_SUSPENDED" : "MEMBER_UNSUSPENDED", id, member.username, meta.ip, meta.agent);
+    })();
+    try {
+      // Block access first. Broker GET/PUT enforce the pause even if storage is unavailable.
+      if (parsed.data.suspended) change(true);
+      let automationPausePending = false;
+      const instance = db.prepare("SELECT remote_state_key FROM kryptotron_instances WHERE user_id = ?").get(id) as { remote_state_key: string | null } | undefined;
+      if (instance?.remote_state_key) {
+        try {
+          if (!config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) throw new Error("Unavailable");
+          await pauseKryptotronAutomation(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, instance.remote_state_key);
+        } catch {
+          if (!parsed.data.suspended) return reply.code(503).send({ error: "Účet zůstává pozastavený: nejprve je nutné potvrdit pauzu automatizace. Zkus odblokování později." });
+          automationPausePending = true;
+        }
+      }
+      // Unblocking never silently restarts purchases, including after an outage.
+      if (!parsed.data.suspended) change(false);
+      const updated = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRecord | undefined;
+      if (!updated) return reply.code(404).send({ error: "Člen již neexistuje." });
+      return { member: publicUser(updated, approvalMode(config)), automationPausePending };
+    } finally { changing.delete(id); }
+  });
   app.get("/api/members", async (request, reply) => {
     const owner = currentUser(db, request);
     if (!owner) return reply.code(401).send({ error: "Nejste přihlášeni." });

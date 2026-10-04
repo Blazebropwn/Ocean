@@ -19,6 +19,15 @@ let closePositionSelection = null;
 let closePositionSubmitting = false;
 let closePositionPoll = null;
 let restoreSelection = null, restoreSubmitting = false;
+let signedInUser = null;
+window.addEventListener("ocean-account-suspended", () => { if (signedInUser && !signedInUser.suspended) showUser({ ...signedInUser, suspended: true, accessApproved: false }); });
+
+async function refreshAccountAccess() {
+  try {
+    const { user } = await request("/api/me");
+    if (user && signedInUser && (Boolean(user.suspended) !== Boolean(signedInUser.suspended) || user.accessApproved !== signedInUser.accessApproved)) showUser(user);
+  } catch { /* Keep the current lock until the server confirms a change. */ }
+}
 
 function setProfileOpen(open) {
   $("#profile-menu").classList.toggle("hidden", !open);
@@ -38,6 +47,7 @@ async function request(path, options = {}) {
   if (response.status === 204) return null;
   const body = await response.json();
   if (!response.ok) {
+    if (body.code === "ACCOUNT_SUSPENDED" && signedInUser && !signedInUser.suspended) showUser({ ...signedInUser, suspended: true, accessApproved: false });
     const error = new Error(body.error || "Něco se nepovedlo.");
     error.status = response.status;
     if (body.runId) error.runId = body.runId;
@@ -47,10 +57,19 @@ async function request(path, options = {}) {
 }
 
 function showUser(user) {
+  signedInUser = user;
   window.OceanEconomy.setUser(user);
   const accessApproved = user.accessApproved ?? user.emailVerified;
   document.body.classList.add("dashboard-active");
-  document.body.classList.toggle("access-pending", !accessApproved);
+  document.body.classList.toggle("access-pending", !accessApproved && !user.suspended);
+  document.body.classList.toggle("account-suspended", Boolean(user.suspended));
+  $("#account-suspended").classList.toggle("hidden", !user.suspended);
+  if (user.suspended) {
+    document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close());
+    clearTimeout(closePositionPoll); closePositionPoll = null;
+    cancelAnimationFrame(arcadeFrame);
+    if (arcadeState) arcadeState.active = false;
+  }
   $("#welcome").classList.add("hidden");
   $("#dashboard").classList.remove("hidden");
   $("#nav-account").classList.remove("hidden");
@@ -65,17 +84,15 @@ function showUser(user) {
   $("#email-status").textContent = user.emailVerified ? "✓ OVĚŘENO" : "ČEKÁ NA OVĚŘENÍ";
   $("#email-status").className = user.emailVerified ? "hidden verified" : "hidden pending";
   $("#invite-admin-link").classList.toggle("hidden", user.role !== "owner");
-  $("#verify-banner").classList.toggle("hidden", accessApproved);
+  $("#verify-banner").classList.toggle("hidden", accessApproved || Boolean(user.suspended));
   $("#verify-banner-text").textContent = user.approvalMode === "owner" ? "Účet čeká na schválení vlastníkem." : "Ověřte svůj e-mail.";
   $("#verify-mailbox-link").classList.toggle("hidden", user.approvalMode === "owner");
   $("#resend-verification").classList.toggle("hidden", user.approvalMode === "owner");
   showAppView(viewFromHash());
   clearInterval(kryptotronRefresh);
   clearInterval(approvalRefresh);
+  approvalRefresh = setInterval(refreshAccountAccess, 15_000);
   if (!accessApproved) {
-    approvalRefresh = setInterval(() => request("/api/me").then(({ user: refreshedUser }) => {
-      if (refreshedUser.accessApproved) showUser(refreshedUser);
-    }).catch(() => {}), 10_000);
     return;
   }
   initializeKryptotron();
@@ -230,9 +247,13 @@ function showAppView(view, activeLink = null) {
   $("#workspace-subtitle").textContent = selected === "vault"
     ? "Tvoje pravidelné nákupy a jejich historie."
     : selected === "arcade" ? "Malá pauza pod hladinou." : "Peníze, strategie a poslední dění. Na jednom místě.";
-  if (selected === "arcade") openArcade();
-  window.OceanEconomy.open(selected);
+  if (!signedInUser?.suspended) {
+    if (selected === "arcade") openArcade();
+    window.OceanEconomy.open(selected);
+  }
 }
+
+document.addEventListener("visibilitychange", () => { if (!document.hidden && signedInUser) refreshAccountAccess(); });
 
 document.querySelectorAll("[data-open-view]").forEach(link => link.addEventListener("click", event => {
   event.preventDefault();

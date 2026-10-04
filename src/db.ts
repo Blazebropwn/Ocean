@@ -14,6 +14,8 @@ export type UserRecord = {
   email_verified_at: string | null;
   approved_at: string | null;
   approved_by: string | null;
+  suspended_at?: string | null;
+  suspended_by?: string | null;
   created_at: string;
 };
 
@@ -25,6 +27,8 @@ export type PublicUser = {
   emailVerified: boolean;
   approved: boolean;
   accessApproved: boolean;
+  suspended: boolean;
+  suspendedAt: string | null;
   approvalMode: "owner" | "email";
   role: "owner" | "member";
   createdAt: string;
@@ -49,7 +53,9 @@ export function publicUser(user: UserRecord, approvalMode: "owner" | "email" = "
     username: user.username,
     emailVerified: Boolean(user.email_verified_at),
     approved: Boolean(user.approved_at),
-    accessApproved: approvalMode === "owner" ? Boolean(user.approved_at) : Boolean(user.email_verified_at),
+    accessApproved: !user.suspended_at && (approvalMode === "owner" ? Boolean(user.approved_at) : Boolean(user.email_verified_at)),
+    suspended: Boolean(user.suspended_at),
+    suspendedAt: user.suspended_at ?? null,
     approvalMode,
     role: user.role,
     createdAt: user.created_at,

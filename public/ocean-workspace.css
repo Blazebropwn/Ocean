@@ -1,4 +1,15 @@
 /* A compact workspace that can scroll when text or controls need more room. */
+.account-suspended .app-view,.ocean-workspace.account-suspended .workspace-head { display:none !important; }
+.account-lock { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:28px 0; gap:16px; }
+.account-lock-icon { font-size:32px; }
+.account-lock h1 { font-size:clamp(23px,3vw,30px); margin:0; }
+.account-lock p { max-width:480px; margin:0; color:var(--ink-soft); font-size:14px; line-height:1.7; }
+.account-lock .account-lock-note { color:var(--muted); font-size:12px; }
+.account-lock-sections { width:min(100%,480px); display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-block:8px; }
+.account-lock-sections span { padding:20px 12px; border:1px solid var(--line); border-radius:12px; background:var(--panel); color:var(--muted); }
+.account-suspended .side-link::after { content:"🔒"; font-size:11px; margin-left:auto; }
+.account-suspended #profile-menu a[data-open-view]::before,.account-suspended #profile-menu a[href="/telegram.html"]::before { content:"🔒 "; }
+@media (max-width:900px) { .account-suspended .side-link::after { margin:0; }.account-suspended .side-link svg { display:none; } }
 .ocean-workspace { height:100dvh; overflow:hidden; background:var(--abyss); }
 .ocean-workspace::before,.ocean-workspace .nav::after { display:none; }
 .ocean-workspace .nav { height:64px; padding-inline:28px; background:#10151a; backdrop-filter:none; }

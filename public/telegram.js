@@ -4,6 +4,7 @@ async function api(path, options = {}) {
   const response = await fetch(path, { ...options, headers: { ...headers, ...options.headers } });
   if (response.status === 204) return null;
   const body = await response.json().catch(() => ({}));
+  if (body.code === "ACCOUNT_SUSPENDED") location.replace("/#home");
   if (!response.ok) throw new Error(body.error || "Něco se nepovedlo.");
   return body;
 }

@@ -19,6 +19,7 @@
     const response = await fetch(path, { method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin',
       headers: body === undefined ? {} : { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(15000) });
     const data = await response.json();
+    if (data.code === 'ACCOUNT_SUSPENDED') window.dispatchEvent(new Event('ocean-account-suspended'));
     if (!response.ok) throw Object.assign(new Error(data.error || 'Spojení není dostupné.'), { status: response.status, code: data.code });
     return data;
   }
@@ -194,7 +195,7 @@
   });
   window.addEventListener('resize', () => { if (!busy) positions.forEach((p, i) => place(i, p)); });
   window.OceanEconomy = {
-    setUser(value) { user = { ...value, accessApproved: value.accessApproved ?? value.emailVerified }; if (loadedUser !== user.id) { loadedUser = user.id; spinDisplay = null; wallet = null; renderWallet(); refreshWallet().catch(() => {}); } },
+    setUser(value) { user = { ...value, accessApproved: !value.suspended && (value.accessApproved ?? value.emailVerified) }; controls(); if (loadedUser !== user.id) { loadedUser = user.id; spinDisplay = null; wallet = null; renderWallet(); refreshWallet().catch(() => {}); } },
     async open(view) {
       if (!user || !['overview', 'slot', 'gift'].includes(view)) return;
       if (view === 'slot' && busy) return;
