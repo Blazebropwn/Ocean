@@ -209,6 +209,10 @@ function viewFromHash() {
 
 function showAppView(view, activeLink = null) {
   const selected = ["overview", "arcade", "vault", "gift", "slot"].includes(view) ? view : "overview";
+  document.body.classList.toggle("home-mode", selected === "overview");
+  const connectionStatus = $("#system-state");
+  if (selected === "overview") $(".overview-footer").insertBefore(connectionStatus, $(".overview-footer > div"));
+  else $(".workspace-head").append(connectionStatus);
   document.body.classList.toggle("slot-mode", selected === "slot");
   document.body.classList.toggle("redeem-mode", selected === "gift");
   if (selected !== "arcade") {

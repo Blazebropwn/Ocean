@@ -13,12 +13,13 @@
 .ocean-workspace .side-link.active { color:#b5edde; background:#20352f; border-color:transparent; box-shadow:none; }
 .ocean-workspace .workspace { width:100%; max-width:1680px; margin-inline:auto; height:100%; min-height:0; padding:28px 32px; gap:24px; overflow:auto; scrollbar-color:var(--line-hot) var(--abyss); }
 .ocean-workspace .workspace-head { min-height:36px; flex:none; align-items:center; }
+.ocean-workspace.home-mode .workspace-head { display:none; }
 .ocean-workspace .workspace-head h1 { font-size:28px; font-weight:550; margin:0; line-height:1.2; letter-spacing:-.035em; }
 .ocean-workspace .system-state { padding:8px 12px; border:1px solid var(--line); border-radius:20px; background:var(--deep); font-size:12px; color:var(--ink-soft); }
 .ocean-workspace .system-state i,.ocean-workspace .app-status i { box-shadow:none; animation:none; width:6px; height:6px; }
 .ocean-workspace .system-state.warning { color:var(--warn); }
 .system-state.warning i { background:var(--warn); }
-.ocean-workspace .dashboard-grid { display:block; flex:1 0 auto; min-height:0; }
+.ocean-workspace .dashboard-grid { display:block; flex:1 1 0; min-height:0; }
 .ocean-workspace .kryptotron-card { display:block; height:100%; min-height:0; border:0; border-radius:0; box-shadow:none; background:none; overflow:visible; }
 .ocean-workspace .kryptotron-card::before,.ocean-workspace .kryptotron-card::after { display:none; }
 .portfolio-surface { height:100%; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.12fr); grid-template-rows:minmax(156px,auto) minmax(390px,1fr) auto; gap:20px; grid-template-areas:"assets assets" "goals positions" "footer footer"; position:relative; }
@@ -205,7 +206,7 @@
 }
 @media (max-height:730px) and (min-width:761px) {
  .ocean-workspace .workspace { padding-block:16px; gap:12px; }
- .portfolio-surface { grid-template-rows:minmax(132px,auto) auto minmax(390px,1fr) auto; gap:16px; }
+ .portfolio-surface { grid-template-rows:minmax(132px,auto) minmax(390px,1fr) auto; gap:16px; }
  .asset-card { padding:12px 18px; }
  .goals-card,.positions-card { padding:16px 20px; }
 }
