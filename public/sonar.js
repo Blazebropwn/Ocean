@@ -12,7 +12,7 @@
       headers:data === undefined ? {} : {'Content-Type':'application/json'}, body:data === undefined ? undefined : JSON.stringify(data), signal:AbortSignal.timeout(10000) });
     const body = await response.json();
     if (body.code === 'ACCOUNT_SUSPENDED') window.dispatchEvent(new Event('ocean-account-suspended'));
-    if (!response.ok) throw new Error(body.error || 'Spojení není dostupné.');
+    if (!response.ok) throw new Error(response.status===404 ? 'Hra čeká na aktualizaci serveru. Obnov stránku za chvíli.' : body.error || 'Spojení není dostupné.');
     return body;
   }
   function renderTicker() {
@@ -86,7 +86,7 @@
     state.taps.push(time); state.angle=angle%(Math.PI*2); state.lastTap=time;
     if(gap>round.width/2) { finish(); return; }
     const perfect=gap<=round.perfectWidth/2, points=perfect?round.perfectPoints:round.hitPoints;
-    state.score+=points; state.hits++; scoreLabel.textContent=scoreText(state.score);
+    state.score+=points; state.hits++; state.flashUntil=performance.now()+180; scoreLabel.textContent=scoreText(state.score);
     showFeedback(perfect?`PERFECT · +${points}`:`+${points}`);
     if(state.hits===state.rounds.length) finish();
   }
@@ -97,24 +97,43 @@
     const w=Math.max(1,Math.round(bounds.width*ratio)),h=Math.max(1,Math.round(bounds.height*ratio));
     if(canvas.width!==w)canvas.width=w; if(canvas.height!==h)canvas.height=h;
     const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,w,h);
-    const x=w/2,y=h/2,r=Math.min(w*.4,h*.4), active=state?.active;
-    if(active && elapsed(now)>=state.maxDurationMs) { finish(); }
-    const round=active?state.rounds[state.hits]:{target:-.5,width:.8,perfectWidth:.24};
-    const angle=active?angleAt(elapsed(now)):-Math.PI/2, perfect=active && distance(angle,round.target)<=round.perfectWidth/2;
-    const glow=ctx.createRadialGradient(x,y,0,x,y,r*1.4); glow.addColorStop(0,'rgba(49,135,128,.12)');glow.addColorStop(1,'rgba(9,23,29,0)');
-    ctx.fillStyle=glow;ctx.fillRect(0,0,w,h);ctx.save();ctx.translate(x,y);
-    ctx.strokeStyle='rgba(126,197,183,.14)';ctx.lineWidth=ratio;
-    for(const ring of [.25,.5,.75,1]) {ctx.beginPath();ctx.arc(0,0,r*ring,0,Math.PI*2);ctx.stroke();}
-    ctx.strokeStyle='rgba(126,197,183,.09)';
-    for(let i=0;i<8;i++){const a=i*Math.PI/4;ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r);ctx.stroke();}
-    for(let i=0;i<60;i++){const a=i*Math.PI/30,inner=i%5===0?1.035:1.045;ctx.strokeStyle=i%5===0?'rgba(157,214,201,.35)':'rgba(157,214,201,.14)';ctx.beginPath();ctx.moveTo(Math.cos(a)*r*inner,Math.sin(a)*r*inner);ctx.lineTo(Math.cos(a)*r*1.06,Math.sin(a)*r*1.06);ctx.stroke();}
-    function zone(width,inner,color){ctx.fillStyle=color;ctx.beginPath();ctx.arc(0,0,r,width[0],width[1]);ctx.arc(0,0,r*inner,width[1],width[0],true);ctx.closePath();ctx.fill();}
-    zone([round.target-round.width/2,round.target+round.width/2],.79,'rgba(93,175,169,.25)');
-    zone([round.target-round.perfectWidth/2,round.target+round.perfectWidth/2],.77,perfect?'rgba(191,255,222,.8)':'rgba(110,230,185,.47)');
-    ctx.strokeStyle=perfect?'#d4ffe9':'#84e5bf';ctx.lineWidth=ratio*3;ctx.beginPath();ctx.arc(0,0,r,round.target-round.perfectWidth/2,round.target+round.perfectWidth/2);ctx.stroke();
-    if(active && !reducedMotion.matches){ for(let i=16;i>=1;i--){const a=angle-i*.012;ctx.strokeStyle=`rgba(110,217,195,${.06*(1-i/17)})`;ctx.lineWidth=r*.014;ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r);ctx.stroke();} }
-    ctx.strokeStyle=perfect?'#e3fff3':'#8cdcc9';ctx.lineWidth=ratio*1.5;ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(Math.cos(angle)*r,Math.sin(angle)*r);ctx.stroke();
-    ctx.fillStyle=perfect?'#effff6':'#a5eedb';ctx.beginPath();ctx.arc(0,0,ratio*3,0,Math.PI*2);ctx.fill();ctx.restore();
+    // Preserve the original SONAR palette, grid and luminous arc.
+    const background=ctx.createLinearGradient(0,0,w,h);
+    background.addColorStop(0,'#151c22');background.addColorStop(.55,'#151c22');background.addColorStop(1,'#10161b');
+    ctx.fillStyle=background;ctx.fillRect(0,0,w,h);
+    ctx.strokeStyle='rgba(111,226,224,.055)';ctx.lineWidth=ratio*.5;
+    const grid=Math.max(32*ratio,w/22);ctx.beginPath();
+    for(let x=grid;x<w;x+=grid){ctx.moveTo(x,0);ctx.lineTo(x,h);}
+    for(let y=grid;y<h;y+=grid){ctx.moveTo(0,y);ctx.lineTo(w,y);}ctx.stroke();
+    ctx.fillStyle='rgba(119,216,196,.16)';
+    const drift=reducedMotion.matches?0:now;
+    for(let i=0;i<16;i++){const px=((i*.173+drift/90000)%1)*w,py=((i*.311+drift/140000)%1)*h;ctx.beginPath();ctx.arc(px,py,(.6+(i%3)*.4)*ratio,0,Math.PI*2);ctx.fill();}
+    const vignette=ctx.createRadialGradient(w/2,h/2,h*.1,w/2,h/2,Math.max(w,h)*.72);
+    vignette.addColorStop(0,'rgba(2,18,24,0)');vignette.addColorStop(1,'rgba(0,8,12,.64)');ctx.fillStyle=vignette;ctx.fillRect(0,0,w,h);
+    const x=w/2,y=h/2,r=Math.min(w,h)*.36;
+    if(state?.active && elapsed(now)>=state.maxDurationMs)finish();
+    ctx.save();ctx.translate(x,y);
+    if(!state){
+      ctx.strokeStyle='rgba(119,216,196,.34)';ctx.lineWidth=ratio;
+      for(const size of [.08,.17,.27]){ctx.beginPath();ctx.arc(0,0,Math.min(w,h)*size,0,Math.PI*2);ctx.stroke();}
+      ctx.fillStyle='#77d8c4';ctx.beginPath();ctx.arc(0,0,3*ratio,0,Math.PI*2);ctx.fill();ctx.restore();return;
+    }
+    const round=state.rounds[Math.min(state.hits,state.rounds.length-1)];
+    const angle=state.active?angleAt(elapsed(now)):state.angle;
+    const perfect=state.active && distance(angle,round.target)<=round.perfectWidth/2;
+    ctx.strokeStyle='rgba(119,216,196,.13)';ctx.lineWidth=ratio*.75;
+    for(const ring of [.25,.5,.75,1]){ctx.beginPath();ctx.arc(0,0,r*ring,0,Math.PI*2);ctx.stroke();}
+    for(let a=0;a<Math.PI*2;a+=Math.PI/4){ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r);ctx.stroke();}
+    ctx.shadowColor='rgba(92,229,168,.75)';ctx.shadowBlur=14*ratio;ctx.strokeStyle='#5ce5a8';ctx.lineWidth=Math.max(6*ratio,w/125);
+    ctx.beginPath();ctx.arc(0,0,r,round.target-round.width/2,round.target+round.width/2);ctx.stroke();
+    // Perfect stays on the original arc, rather than filling a large wedge.
+    ctx.strokeStyle=perfect?'#e0ffe9':'#a1f8ca';ctx.shadowBlur=(perfect?20:10)*ratio;ctx.lineWidth=Math.max(9*ratio,w/95);
+    ctx.beginPath();ctx.arc(0,0,r,round.target-round.perfectWidth/2,round.target+round.perfectWidth/2);ctx.stroke();
+    const sweep=ctx.createLinearGradient(0,0,Math.cos(angle)*r,Math.sin(angle)*r);
+    sweep.addColorStop(0,'rgba(84,238,226,.12)');sweep.addColorStop(1,perfect?'#d4ffe6':'#77d8c4');
+    ctx.strokeStyle=sweep;ctx.shadowColor='rgba(119,216,196,.8)';ctx.shadowBlur=12*ratio;ctx.lineWidth=Math.max(1.4*ratio,w/800);
+    ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(Math.cos(angle)*r,Math.sin(angle)*r);ctx.stroke();
+    ctx.fillStyle=now<(state.flashUntil||0)?'#fff':'#77d8c4';ctx.beginPath();ctx.arc(0,0,Math.max(3*ratio,w/400),0,Math.PI*2);ctx.fill();ctx.restore();
     if(state?.active)frame=requestAnimationFrame(draw);
   }
   surface.addEventListener('pointerdown',event=>{if(!event.isPrimary || event.button!==0)return;tap();});

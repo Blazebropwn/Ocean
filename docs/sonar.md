@@ -1,6 +1,8 @@
 # SONAR monitor
 
-Arcade obsahuje jediný monitor: SONAR, SCORE, herní plochu a spodní žebříček.
+Arcade zachovává původní vzhled sonaru: tmavou mřížku, světelné body, jemný
+paprsek a zelený svítící oblouk. Horní lišta obsahuje SONAR a SCORE, dole je
+kompaktní žebříček. Perfect Zone je světlejší část původního oblouku.
 Tap / mezerník / Enter spustí pokus, další tapy zachycují paprsek ve vyznačeném
 sektoru. Běžný zásah dává 50 bodů, užší Perfect Zone 100. Chybný tap ukončí pokus.
 Rychlost postupně roste a sektor se zužuje. Nápověda Tap při startu zmizí;
@@ -36,3 +38,8 @@ Před zavedením hodnotných odměn by bylo nutné řešit anti-cheat samostatn�
 časové limity a leaderboard. `test/sonar-browser-state.test.ts` kontroluje
 skutečný JS ovladač s virtuálním časem, vstupy a shodou klientského bodování.
 Tyto testy nenahrazují vizuální kontrolu skutečného mobilního prohlížeče.
+
+Při vývoji používej `npm run dev` (`tsx watch`), aby se při změně serverových
+rout znovu načetl také backend. Samostatný dlouho běžící `node --import tsx
+src/server.ts` může obsluhovat nová statická aktiva, ale stále staré API. Při
+404 herního API už rozhraní ukáže informaci o čekající aktualizaci serveru.
