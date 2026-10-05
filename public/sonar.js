@@ -42,7 +42,7 @@
     try {
       if(saving) await saving.catch(()=>{});
       if(!visible || !enabled || current!==generation) return;
-      const run=await api('runs',{});
+      const run=await api('runs',{version:'sonar-classic-v1'});
       if(!visible || !enabled || current!==generation) return;
       state={...run,active:true,started:performance.now(),angle:-Math.PI/2,lastTap:0,taps:[],score:0,hits:0};
       scoreLabel.textContent=scoreText(0); feedback.textContent='';
@@ -76,7 +76,8 @@
     const round=state.rounds[state.hits], angle=angleAt(time), gap=distance(angle,round.target);
     state.taps.push(time); state.angle=angle%(Math.PI*2); state.lastTap=time;
     if(gap>round.width/2) { finish(); return; }
-    const perfect=gap<=round.perfectWidth/2, points=perfect?round.perfectPoints:round.hitPoints;
+    const accuracy=1-gap/(round.width/2);
+    const points=Math.round(100+accuracy*100+state.hits*10);
     state.score+=points; state.hits++; state.flashUntil=performance.now()+180; scoreLabel.textContent=scoreText(state.score);
     showFeedback(`+${points}`);
     if(state.hits===state.rounds.length) finish();
@@ -90,13 +91,13 @@
     const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,w,h);
     // Preserve the original SONAR palette, grid and luminous arc.
     const background=ctx.createLinearGradient(0,0,w,h);
-    background.addColorStop(0,'#151c22');background.addColorStop(.55,'#151c22');background.addColorStop(1,'#10161b');
+    background.addColorStop(0,'#091810');background.addColorStop(.55,'#091810');background.addColorStop(1,'#050c08');
     ctx.fillStyle=background;ctx.fillRect(0,0,w,h);
-    ctx.strokeStyle='rgba(111,226,224,.055)';ctx.lineWidth=ratio*.5;
+    ctx.strokeStyle='rgba(130,192,126,.055)';ctx.lineWidth=ratio*.5;
     const grid=Math.max(32*ratio,w/22);ctx.beginPath();
     for(let x=grid;x<w;x+=grid){ctx.moveTo(x,0);ctx.lineTo(x,h);}
     for(let y=grid;y<h;y+=grid){ctx.moveTo(0,y);ctx.lineTo(w,y);}ctx.stroke();
-    ctx.fillStyle='rgba(119,216,196,.16)';
+    ctx.fillStyle='rgba(148,210,139,.16)';
     const drift=reducedMotion.matches?0:now;
     for(let i=0;i<16;i++){const px=((i*.173+drift/90000)%1)*w,py=((i*.311+drift/140000)%1)*h;ctx.beginPath();ctx.arc(px,py,(.6+(i%3)*.4)*ratio,0,Math.PI*2);ctx.fill();}
     const vignette=ctx.createRadialGradient(w/2,h/2,h*.1,w/2,h/2,Math.max(w,h)*.72);
@@ -105,22 +106,22 @@
     if(state?.active && elapsed(now)>=state.maxDurationMs)finish();
     ctx.save();ctx.translate(x,y);
     if(!state){
-      ctx.strokeStyle='rgba(119,216,196,.34)';ctx.lineWidth=ratio;
+      ctx.strokeStyle='rgba(148,210,139,.34)';ctx.lineWidth=ratio;
       for(const size of [.08,.17,.27]){ctx.beginPath();ctx.arc(0,0,Math.min(w,h)*size,0,Math.PI*2);ctx.stroke();}
-      ctx.fillStyle='#77d8c4';ctx.beginPath();ctx.arc(0,0,3*ratio,0,Math.PI*2);ctx.fill();ctx.restore();return;
+      ctx.fillStyle='#9ad58b';ctx.beginPath();ctx.arc(0,0,3*ratio,0,Math.PI*2);ctx.fill();ctx.restore();return;
     }
     const round=state.rounds[Math.min(state.hits,state.rounds.length-1)];
     const angle=state.active?angleAt(elapsed(now)):state.angle;
-    ctx.strokeStyle='rgba(119,216,196,.13)';ctx.lineWidth=ratio*.75;
+    ctx.strokeStyle='rgba(148,210,139,.13)';ctx.lineWidth=ratio*.75;
     for(const ring of [.25,.5,.75,1]){ctx.beginPath();ctx.arc(0,0,r*ring,0,Math.PI*2);ctx.stroke();}
     for(let a=0;a<Math.PI*2;a+=Math.PI/4){ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r);ctx.stroke();}
-    ctx.shadowColor='rgba(92,229,168,.75)';ctx.shadowBlur=14*ratio;ctx.strokeStyle='#5ce5a8';ctx.lineWidth=Math.max(6*ratio,w/125);
+    ctx.shadowColor='rgba(155,220,135,.75)';ctx.shadowBlur=14*ratio;ctx.strokeStyle='#a0d88d';ctx.lineWidth=Math.max(6*ratio,w/125);
     ctx.beginPath();ctx.arc(0,0,r,round.target-round.width/2,round.target+round.width/2);ctx.stroke();
     const sweep=ctx.createLinearGradient(0,0,Math.cos(angle)*r,Math.sin(angle)*r);
-    sweep.addColorStop(0,'rgba(84,238,226,.12)');sweep.addColorStop(1,'#77d8c4');
-    ctx.strokeStyle=sweep;ctx.shadowColor='rgba(119,216,196,.8)';ctx.shadowBlur=12*ratio;ctx.lineWidth=Math.max(1.4*ratio,w/800);
+    sweep.addColorStop(0,'rgba(140,210,135,.12)');sweep.addColorStop(1,'#9ad58b');
+    ctx.strokeStyle=sweep;ctx.shadowColor='rgba(148,210,139,.8)';ctx.shadowBlur=12*ratio;ctx.lineWidth=Math.max(1.4*ratio,w/800);
     ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(Math.cos(angle)*r,Math.sin(angle)*r);ctx.stroke();
-    ctx.fillStyle=now<(state.flashUntil||0)?'#fff':'#77d8c4';ctx.beginPath();ctx.arc(0,0,Math.max(3*ratio,w/400),0,Math.PI*2);ctx.fill();ctx.restore();
+    ctx.fillStyle=now<(state.flashUntil||0)?'#fff':'#9ad58b';ctx.beginPath();ctx.arc(0,0,Math.max(3*ratio,w/400),0,Math.PI*2);ctx.fill();ctx.restore();
     if(state?.active)frame=requestAnimationFrame(draw);
   }
   surface.addEventListener('pointerdown',event=>{if(!event.isPrimary || event.button!==0)return;tap();});

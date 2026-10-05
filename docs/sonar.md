@@ -1,21 +1,29 @@
-# SONAR monitor
+# SONAR · Classic
 
-Arcade zachovává původní vzhled sonaru: tmavou mřížku, světelné body, jemný
-paprsek a souvislý zelený svítící oblouk bez zvýrazněného středu.
-Horní lišta obsahuje jen SONAR a skóre bez úvodních nul. Herní panel má
-omezenou šířku a výšku a přizpůsobuje se dostupnému prostoru i na telefonu.
-Tap / mezerník / Enter spustí pokus, další tapy zachycují paprsek v oblouku.
-Běžný zásah dává 50 bodů, přesný zásah uprostřed 100; bodování se nemění.
-Chybný tap ukončí pokus. Rychlost postupně roste a sektor se zužuje.
-Nápověda Tap při startu zmizí; po zásahu se na 280 ms objeví pouze +50 / +100.
-Herní plocha je zároveň ovládací tlačítko.
+SONAR je zasazený do jednoduché tmavé retro bedny s hlubším rámem obrazovky,
+tlumenou zelenou kresbou a statickými řádky CRT. Žádné blikání ani další panely.
+Nahoře je SONAR a malé číselné skóre, dole jediný nejlepší hráč se skóre.
+Rám se vejde do dostupného prostoru na počítači i telefonu.
 
-Pod hrou je jediný statický řádek: symbol koruny, nejlepší hráč a jeho skóre.
-Žádné rolování ani opakování výsledků. Pozastavené a neschválené účty se
-nezobrazují; při shodě rozhoduje čas dosažení. Pokud nejsou výsledky dostupné,
-řádek zůstane prázdný. API nadále poskytuje nejlepších deset účtů.
+Tap / mezerník / Enter spustí pokus. Další tapy zachycují paprsek v souvislém
+oblouku, bez viditelné Perfect Zone. Původní bodování je obnoveno přesně:
+`round(100 + přesnost * 100 + (počet zásahů - 1) * 10)`, kde přesnost je
+`1 - úhlová vzdálenost od středu / polovina šířky oblouku`.
+První zásah tedy dává 100–200 bodů, další mají bonus +10, +20, …
+Chybný tap ukončí pokus. Rychlost začíná na 1,45 rad/s a roste o 0,14 až na 3,5;
+šířka začíná na 0,72 rad a klesá o 0,025 až na 0,3. Tap po startu zmizí,
+po zásahu se na 280 ms objeví pouze přidané body.
+
+Pod hrou je jediný statický řádek. Pozastavené a neschválené účty se nezobrazují;
+při shodě rozhoduje čas dosažení. Bez výsledků zůstane řádek prázdný.
 
 ## Výsledky
+
+Aktuální pravidla mají verzi `sonar-classic-v1`. Migrace 009 zachovává existující
+rekordy pod `sonar-v2` a odděluje rekordy podle verze bodování. Starý rozehraný
+pokus lze dokončit s původními pravidly 50/100; nový pokus vyžaduje aktuální
+verzi v POST těle. Starý klient dostane pokyn k obnovení stránky. Žebříček
+zobrazuje jen aktuální pravidla, historické rekordy se nemažou.
 
 Migrace 008 přidává `sonar_runs` a `sonar_records`. Start vydá kurz se serverem
 vygenerovanými sektory. Klient odevzdává časy tapů; server vypočítá skóre znovu,
