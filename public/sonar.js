@@ -4,9 +4,9 @@
   const feedback = $('#sonar-feedback'), scoreLabel = $('#game-score'), ticker = $('#sonar-ticker-track');
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   let visible = false, enabled = false, generation = 0, state = null, frame = 0, refresh = 0, flash = 0, starting = false;
-  let leaders = [], tickerMessage = '—', saving = null;
+  let leaders = [], saving = null;
   const distance = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
-  const scoreText = score => String(score).padStart(6, '0');
+  const scoreText = score => Number(score).toLocaleString('cs-CZ');
   async function api(path, data) {
     const response = await fetch('/api/arcade/sonar/' + path, { credentials:'same-origin', method:data === undefined ? 'GET' : 'POST',
       headers:data === undefined ? {} : {'Content-Type':'application/json'}, body:data === undefined ? undefined : JSON.stringify(data), signal:AbortSignal.timeout(10000) });
@@ -16,31 +16,22 @@
     return body;
   }
   function renderTicker() {
-    ticker.replaceChildren(); ticker.classList.remove('is-running');
-    if (!leaders.length) { const empty=document.createElement('span'); empty.className='sonar-ticker-empty'; empty.textContent=tickerMessage; ticker.append(empty); return; }
-    const group=document.createElement('div'); group.className='sonar-ticker-group';
-    leaders.forEach((entry,index) => {
-      const item=document.createElement('span'); item.className='sonar-ticker-entry';
-      const name=document.createElement('b'), number=document.createElement('span'), dot=document.createElement('i');
-      name.textContent=`${['🥇','🥈','🥉'][index] || String(index+1).padStart(2,'0')} ${entry.username}`;
-      dot.textContent='·'; number.textContent=Number(entry.score).toLocaleString('cs-CZ'); item.append(name,dot,number); group.append(item);
-    });
-    ticker.append(group);
-    if (reducedMotion.matches) return;
-    // Two equally wide groups make the seam continuous at any viewport width.
-    const originals=[...group.children];
-    for(let repeat=0; group.getBoundingClientRect().width < $('#sonar-ticker').clientWidth && repeat<12; repeat++) {
-      originals.forEach(item=>{const copy=item.cloneNode(true); copy.setAttribute('aria-hidden','true'); group.append(copy);});
-    }
-    const copy=group.cloneNode(true); copy.setAttribute('aria-hidden','true'); ticker.append(copy);
-    ticker.style.setProperty('--ticker-duration', Math.max(24,group.getBoundingClientRect().width/24)+'s'); ticker.classList.add('is-running');
+    ticker.replaceChildren();
+    const entry=leaders[0];
+    if(!entry) return;
+    const item=document.createElement('span'); item.className='sonar-ticker-entry';
+    const mark=document.createElement('span'),name=document.createElement('b'),number=document.createElement('span');
+    mark.textContent='♛'; mark.setAttribute('aria-hidden','true');
+    name.textContent=entry.username; number.textContent=scoreText(entry.score);
+    item.append(mark,name,number); ticker.append(item);
   }
   async function loadLeaders() {
     const current=generation;
     try { const result=await api('leaderboard'); if(!visible || current!==generation) return;
-      leaders=result.leaders; tickerMessage='První místo čeká na tebe.'; renderTicker();
-    } catch { if(visible && current===generation && !leaders.length) { tickerMessage='Žebříček není dostupný.'; renderTicker(); } }
+      leaders=result.leaders; renderTicker();
+    } catch { /* An unavailable ranking must not interrupt the game. */ }
   }
+
   function announce(text) { $('#sonar-announcement').textContent=text; }
   function showFeedback(text) { clearTimeout(flash); feedback.textContent=text; flash=setTimeout(()=>{feedback.textContent='';},280); }
   function elapsed(now=performance.now()) { return state ? Math.min(state.maxDurationMs,now-state.started) : 0; }
@@ -87,7 +78,7 @@
     if(gap>round.width/2) { finish(); return; }
     const perfect=gap<=round.perfectWidth/2, points=perfect?round.perfectPoints:round.hitPoints;
     state.score+=points; state.hits++; state.flashUntil=performance.now()+180; scoreLabel.textContent=scoreText(state.score);
-    showFeedback(perfect?`PERFECT · +${points}`:`+${points}`);
+    showFeedback(`+${points}`);
     if(state.hits===state.rounds.length) finish();
   }
   function draw(now=performance.now()) {
@@ -120,17 +111,13 @@
     }
     const round=state.rounds[Math.min(state.hits,state.rounds.length-1)];
     const angle=state.active?angleAt(elapsed(now)):state.angle;
-    const perfect=state.active && distance(angle,round.target)<=round.perfectWidth/2;
     ctx.strokeStyle='rgba(119,216,196,.13)';ctx.lineWidth=ratio*.75;
     for(const ring of [.25,.5,.75,1]){ctx.beginPath();ctx.arc(0,0,r*ring,0,Math.PI*2);ctx.stroke();}
     for(let a=0;a<Math.PI*2;a+=Math.PI/4){ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r);ctx.stroke();}
     ctx.shadowColor='rgba(92,229,168,.75)';ctx.shadowBlur=14*ratio;ctx.strokeStyle='#5ce5a8';ctx.lineWidth=Math.max(6*ratio,w/125);
     ctx.beginPath();ctx.arc(0,0,r,round.target-round.width/2,round.target+round.width/2);ctx.stroke();
-    // Perfect stays on the original arc, rather than filling a large wedge.
-    ctx.strokeStyle=perfect?'#e0ffe9':'#a1f8ca';ctx.shadowBlur=(perfect?20:10)*ratio;ctx.lineWidth=Math.max(9*ratio,w/95);
-    ctx.beginPath();ctx.arc(0,0,r,round.target-round.perfectWidth/2,round.target+round.perfectWidth/2);ctx.stroke();
     const sweep=ctx.createLinearGradient(0,0,Math.cos(angle)*r,Math.sin(angle)*r);
-    sweep.addColorStop(0,'rgba(84,238,226,.12)');sweep.addColorStop(1,perfect?'#d4ffe6':'#77d8c4');
+    sweep.addColorStop(0,'rgba(84,238,226,.12)');sweep.addColorStop(1,'#77d8c4');
     ctx.strokeStyle=sweep;ctx.shadowColor='rgba(119,216,196,.8)';ctx.shadowBlur=12*ratio;ctx.lineWidth=Math.max(1.4*ratio,w/800);
     ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(Math.cos(angle)*r,Math.sin(angle)*r);ctx.stroke();
     ctx.fillStyle=now<(state.flashUntil||0)?'#fff':'#77d8c4';ctx.beginPath();ctx.arc(0,0,Math.max(3*ratio,w/400),0,Math.PI*2);ctx.fill();ctx.restore();
@@ -145,10 +132,9 @@
     event.preventDefault();if(!event.repeat)tap();
   });
   document.addEventListener('visibilitychange',()=>{if(document.hidden){finish();clearInterval(refresh);}else if(visible){loadLeaders();refresh=setInterval(loadLeaders,60000);}});
-  const observer=new ResizeObserver(()=>{if(visible){draw();renderTicker();}});observer.observe(surface);
-  reducedMotion.addEventListener('change',()=>{if(visible)renderTicker();});
+  const observer=new ResizeObserver(()=>{if(visible)draw();});observer.observe(surface);
   window.OceanSonar={
-    open(options){ this.close(); visible=true;enabled=Boolean(options.enabled);state=null;scoreLabel.textContent=scoreText(0);prompt.textContent='Tap';surface.removeAttribute('aria-busy');surface.setAttribute('aria-label','Spustit SONAR. Klepni nebo stiskni mezerník.');leaders=[];tickerMessage='—';renderTicker();frame=requestAnimationFrame(()=>{if(visible){draw();loadLeaders();}});refresh=setInterval(loadLeaders,60000); },
+    open(options){ this.close(); visible=true;enabled=Boolean(options.enabled);state=null;scoreLabel.textContent=scoreText(0);prompt.textContent='Tap';surface.removeAttribute('aria-busy');surface.setAttribute('aria-label','Spustit SONAR. Klepni nebo stiskni mezerník.');leaders=[];renderTicker();frame=requestAnimationFrame(()=>{if(visible){draw();loadLeaders();}});refresh=setInterval(loadLeaders,60000); },
     close(){finish();visible=false;enabled=false;generation++;starting=false;clearInterval(refresh);cancelAnimationFrame(frame);clearTimeout(flash);feedback.textContent='';}
   };
 })();
