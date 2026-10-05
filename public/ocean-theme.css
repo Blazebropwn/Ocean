@@ -34,12 +34,16 @@
 .ocean-ui :is(.profile-menu,.agent-dialog) { border-color:#35434b; box-shadow:0 18px 60px #0005; }
 .ocean-ui .profile-menu::before { display:none; }
 .ocean-ui .profile-button span { background:#253d39; color:var(--cyan); border-color:var(--line-hot); border-radius:50%; box-shadow:none; }
-.ocean-ui :is(.telegram-code,.member-detail,.connection-panel,.agent-summary,.agent-report,.agent-ledger li) { background:var(--deep); border-color:var(--line); box-shadow:none; }
+.ocean-ui :is(.telegram-code,.member-detail,.connection-panel,.game-canvas-wrap,.agent-summary,.agent-report,.agent-ledger li) { background:var(--deep); border-color:var(--line); box-shadow:none; }
 .ocean-ui :is(.utility-identity,.admin-heading,.section-heading) small { color:var(--muted); font-family:inherit; font-size:10px; font-weight:500; letter-spacing:.06em; }
 .ocean-ui .admin-heading > span { display:none; }
 .ocean-ui :is(.utility-identity > span,.bot-status,.invite-status) { font-family:inherit; font-size:10px; font-weight:500; letter-spacing:0; }
 .ocean-ui .utility-mark { background:#20352f; border-color:var(--line); }
-.ocean-ui :is(.telegram-mark i,.connection-state > i) { box-shadow:none; text-shadow:none; }
+.ocean-ui :is(.telegram-mark i,.connection-state > i,.game-score strong) { box-shadow:none; text-shadow:none; }
+.ocean-ui .game-canvas-wrap::before,.ocean-ui .game-canvas-wrap::after { display:none; }
+.ocean-ui .game-canvas-wrap button { background:var(--cyan); color:#122b25; box-shadow:none; font-weight:600; letter-spacing:0; }
+.ocean-ui .game-score strong { font-family:inherit; font-weight:500; }
+.ocean-ui .game-bottom { line-height:1.5; }
 .ocean-ui .agent-dialog::backdrop { background:#03080bb0; backdrop-filter:blur(8px); }
 .ocean-ui .agent-dialog button { box-shadow:none; }
 .ocean-ui .agent-card button.primary { background:var(--cyan); }
@@ -53,6 +57,7 @@
  .ocean-ui .auth-card { padding:24px; }
  .ocean-ui :is(.form-page,.result-page,.mailbox) { padding:28px 18px; }
  .ocean-ui .standalone-form { padding:22px; }
+ .ocean-ui .game-bottom { flex-wrap:wrap; gap:8px; font-size:11px; }
  .ocean-ui .utility-identity { gap:12px; }
  .ocean-ui .utility-identity h1 { font-size:25px; }
 }

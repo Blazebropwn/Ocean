@@ -9,6 +9,8 @@ let dcaEnabled = false;
 let dcaDraftAmount = null;
 let dcaSaving = false;
 let streakEnabled = false;
+let arcadeState = null;
+let arcadeFrame = null;
 let agentLastRunId = null;
 let vaultSnapshot = null;
 let vaultPage = 0;
@@ -65,7 +67,8 @@ function showUser(user) {
   if (user.suspended) {
     document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close());
     clearTimeout(closePositionPoll); closePositionPoll = null;
-    window.OceanSonar.close();
+    cancelAnimationFrame(arcadeFrame);
+    if (arcadeState) arcadeState.active = false;
   }
   $("#welcome").classList.add("hidden");
   $("#dashboard").classList.remove("hidden");
@@ -224,14 +227,14 @@ function viewFromHash() {
 function showAppView(view, activeLink = null) {
   const selected = ["overview", "arcade", "vault", "gift", "slot"].includes(view) ? view : "overview";
   document.body.classList.toggle("home-mode", selected === "overview");
-  document.body.classList.toggle("arcade-mode", selected === "arcade");
   const connectionStatus = $("#system-state");
   if (selected === "overview") $(".overview-footer").insertBefore(connectionStatus, $(".overview-footer > div"));
   else $(".workspace-head").append(connectionStatus);
   document.body.classList.toggle("slot-mode", selected === "slot");
   document.body.classList.toggle("redeem-mode", selected === "gift");
   if (selected !== "arcade") {
-    window.OceanSonar.close();
+    cancelAnimationFrame(arcadeFrame);
+    if (arcadeState) arcadeState.active = false;
   }
   document.querySelectorAll(".app-view").forEach((panel) => panel.classList.toggle("hidden", panel.id !== `${selected}-view`));
   document.querySelectorAll(".side-link[data-view]").forEach((link) => {
@@ -245,7 +248,7 @@ function showAppView(view, activeLink = null) {
     ? "Tvoje pravidelné nákupy a jejich historie."
     : selected === "arcade" ? "Malá pauza pod hladinou." : "Peníze, strategie a poslední dění. Na jednom místě.";
   if (!signedInUser?.suspended) {
-    if (selected === "arcade") window.OceanSonar.open({ enabled: signedInUser?.accessApproved ?? signedInUser?.emailVerified });
+    if (selected === "arcade") openArcade();
     window.OceanEconomy.open(selected);
   }
 }
@@ -267,6 +270,182 @@ document.querySelectorAll(".side-link[data-view]").forEach((link) => link.addEve
 
 window.addEventListener("hashchange", () => {
   if (!$("#dashboard").classList.contains("hidden")) showAppView(viewFromHash());
+});
+
+const sonarHint = "Pingni ve chvíli, kdy paprsek protne zelený sektor.";
+
+function arcadeBest() {
+  return Number(localStorage.getItem("ocean-sonar-best") || 0);
+}
+
+function sizeArcadeCanvas() {
+  const canvas = $("#game-canvas");
+  const bounds = canvas.getBoundingClientRect();
+  const ratio = Math.min(devicePixelRatio || 1, 2);
+  const pixelWidth = Math.max(1, Math.floor(bounds.width * ratio));
+  const pixelHeight = Math.max(1, Math.floor(bounds.height * ratio));
+  if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+  if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
+  return { canvas, ctx: canvas.getContext("2d"), width: canvas.width, height: canvas.height };
+}
+
+function openArcade() {
+  cancelAnimationFrame(arcadeFrame);
+  arcadeState = null;
+  $("#game-hint").textContent = sonarHint;
+  $("#game-score").textContent = "0";
+  $("#game-best").textContent = arcadeBest();
+  $("#game-tap").textContent = "Spustit";
+  requestAnimationFrame(drawArcadeIdle);
+}
+
+function drawArcadeSurface(ctx, width, height, now = 0) {
+  const background = ctx.createLinearGradient(0, 0, width, height);
+  background.addColorStop(0, "#151c22");
+  background.addColorStop(.55, "#151c22");
+  background.addColorStop(1, "#10161b");
+  ctx.fillStyle = background;
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.save();
+  ctx.strokeStyle = "rgba(111, 226, 224, .055)";
+  ctx.lineWidth = 1;
+  const grid = Math.max(44, Math.floor(width / 22));
+  ctx.beginPath();
+  for (let x = grid; x < width; x += grid) {
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, height);
+  }
+  for (let y = grid; y < height; y += grid) {
+    ctx.moveTo(0, y);
+    ctx.lineTo(width, y);
+  }
+  ctx.stroke();
+
+  ctx.fillStyle = "rgba(119, 216, 196, .16)";
+  for (let index = 0; index < 16; index += 1) {
+    const x = ((index * .173 + now / 90000) % 1) * width;
+    const y = ((index * .311 + now / 140000) % 1) * height;
+    const radius = 1 + (index % 3);
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const vignette = ctx.createRadialGradient(width / 2, height / 2, height * .1, width / 2, height / 2, width * .72);
+  vignette.addColorStop(0, "rgba(2, 18, 24, 0)");
+  vignette.addColorStop(1, "rgba(0, 8, 12, .64)");
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, width, height);
+  ctx.restore();
+}
+
+function drawArcadeIdle() {
+  const { ctx, width, height } = sizeArcadeCanvas();
+  drawArcadeSurface(ctx, width, height);
+  const centerX = width / 2;
+  const centerY = height / 2;
+  ctx.strokeStyle = "rgba(119, 216, 196, .34)";
+  ctx.lineWidth = 2;
+  for (const radius of [.08, .17, .27]) {
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, Math.min(width, height) * radius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.fillStyle = "#77d8c4";
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, 5, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function randomTargetAngle(previous = 0) {
+  let angle = Math.random() * Math.PI * 2;
+  while (Math.abs(Math.atan2(Math.sin(angle - previous), Math.cos(angle - previous))) < 1.05) angle = Math.random() * Math.PI * 2;
+  return angle;
+}
+
+function startArcade() {
+  const now = performance.now();
+  arcadeState = { active: true, last: now, score: 0, hits: 0, angle: -Math.PI / 2, speed: 1.45, target: randomTargetAngle(), targetWidth: .72, flashUntil: 0 };
+  $("#game-tap").textContent = "PING";
+  $("#game-hint").textContent = sonarHint;
+  cancelAnimationFrame(arcadeFrame);
+  arcadeFrame = requestAnimationFrame(runArcade);
+}
+
+function finishArcade(reason = "Pokus skončil") {
+  if (!arcadeState?.active) return;
+  arcadeState.active = false;
+  const score = Math.floor(arcadeState.score);
+  const best = Math.max(score, arcadeBest());
+  localStorage.setItem("ocean-sonar-best", String(best));
+  $("#game-score").textContent = score;
+  $("#game-best").textContent = best;
+  $("#game-tap").textContent = "Hrát znovu";
+  $("#game-hint").textContent = `${reason} · ${score} bodů`;
+}
+
+function arcadeTap() {
+  if (!arcadeState?.active) return startArcade();
+  const now = performance.now();
+  const distance = Math.abs(Math.atan2(Math.sin(arcadeState.angle - arcadeState.target), Math.cos(arcadeState.angle - arcadeState.target)));
+  if (distance > arcadeState.targetWidth / 2) return finishArcade("Signál minul sektor");
+  const accuracy = 1 - distance / (arcadeState.targetWidth / 2);
+  arcadeState.hits += 1;
+  arcadeState.score += Math.round(100 + accuracy * 100 + Math.max(0, arcadeState.hits - 1) * 10);
+  arcadeState.speed = Math.min(3.5, arcadeState.speed + .14);
+  arcadeState.targetWidth = Math.max(.3, arcadeState.targetWidth - .025);
+  arcadeState.target = randomTargetAngle(arcadeState.target);
+  arcadeState.flashUntil = now + 180;
+  $("#game-hint").textContent = `Zásah ${arcadeState.hits} · ${accuracy > .78 ? "PERFEKTNÍ" : "SIGNÁL ZACHYCEN"}`;
+  $("#game-score").textContent = Math.floor(arcadeState.score);
+}
+
+function drawSonar(ctx, width, height, now, delta) {
+  const state = arcadeState;
+  state.angle = (state.angle + state.speed * delta) % (Math.PI * 2);
+  const x = width / 2;
+  const y = height / 2;
+  const radius = Math.min(width, height) * .36;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.strokeStyle = "rgba(119, 216, 196, .13)";
+  ctx.lineWidth = Math.max(1, width / 1100);
+  for (const ring of [.25, .5, .75, 1]) { ctx.beginPath(); ctx.arc(0, 0, radius * ring, 0, Math.PI * 2); ctx.stroke(); }
+  for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 4) { ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius); ctx.stroke(); }
+  ctx.shadowColor = "rgba(92, 229, 168, .75)";
+  ctx.shadowBlur = 18;
+  ctx.strokeStyle = "#5ce5a8";
+  ctx.lineWidth = Math.max(8, width / 100);
+  ctx.beginPath(); ctx.arc(0, 0, radius, state.target - state.targetWidth / 2, state.target + state.targetWidth / 2); ctx.stroke();
+  const sweep = ctx.createLinearGradient(0, 0, Math.cos(state.angle) * radius, Math.sin(state.angle) * radius);
+  sweep.addColorStop(0, "rgba(84,238,226,.12)"); sweep.addColorStop(1, "#77d8c4");
+  ctx.shadowColor = "rgba(119, 216, 196, .8)";
+  ctx.lineWidth = Math.max(2, width / 650);
+  ctx.strokeStyle = sweep;
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(state.angle) * radius, Math.sin(state.angle) * radius); ctx.stroke();
+  ctx.fillStyle = now < state.flashUntil ? "#ffffff" : "#77d8c4";
+  ctx.beginPath(); ctx.arc(0, 0, Math.max(5, width / 290), 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function runArcade(now) {
+  if (!arcadeState?.active) return;
+  const delta = Math.min((now - arcadeState.last) / 1000, .035);
+  arcadeState.last = now;
+  const { ctx, width, height } = sizeArcadeCanvas();
+  drawArcadeSurface(ctx, width, height, now);
+  drawSonar(ctx, width, height, now, delta);
+  if (!arcadeState?.active) return;
+  $("#game-score").textContent = Math.floor(arcadeState.score);
+  arcadeFrame = requestAnimationFrame(runArcade);
+}
+
+$("#game-tap").addEventListener("click", arcadeTap);
+$("#game-canvas").addEventListener("pointerdown", arcadeTap);
+window.addEventListener("keydown", (event) => { if (event.code === "Space" && !$("#arcade-view").classList.contains("hidden") && !event.target.closest("button,a,input,textarea,select,dialog")) { event.preventDefault(); arcadeTap(); } });
+window.addEventListener("resize", () => {
+  if (!arcadeState?.active && !$("#arcade-game").classList.contains("hidden")) requestAnimationFrame(drawArcadeIdle);
 });
 
 function setSystemState(message, warning) {
