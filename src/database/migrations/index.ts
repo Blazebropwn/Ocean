@@ -6,5 +6,6 @@ import { tideEconomy } from "./005_tide_economy.js";
 
 import { genesisWaves } from "./006_genesis_waves.js";
 import { accountSuspension } from "./007_account_suspension.js";
+import { sonarLeaderboard } from "./008_sonar_leaderboard.js";
 
-export const databaseMigrations = [existingOceanSchema, agent001Foundation, adminAuditLog, workerNotifications, tideEconomy, genesisWaves, accountSuspension];
+export const databaseMigrations = [existingOceanSchema, agent001Foundation, adminAuditLog, workerNotifications, tideEconomy, genesisWaves, accountSuspension, sonarLeaderboard];

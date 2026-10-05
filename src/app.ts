@@ -19,6 +19,7 @@ import { registerEconomyRoutes } from "./routes/economy.js";
 import { buildVersionedPages, versionAssetReferences } from "./asset-versioning.js";
 import type { PortfolioProvider } from "./portfolio/provider.js";
 import { currentUser } from "./routes/shared.js";
+import { registerArcadeRoutes } from "./routes/arcade.js";
 
 export type AppDependencies = {
   portfolioProvider?: PortfolioProvider;
@@ -80,6 +81,7 @@ export function buildApp(config: Config, database?: OceanDatabase, dependencies:
   registerKryptotronRoutes(app, db, config);
   registerAgentRoutes(app, db, config, dependencies.portfolioProvider);
   registerEconomyRoutes(app, db, config);
+  registerArcadeRoutes(app, db, config);
 
   app.addHook("onClose", async () => db.close());
   return app;

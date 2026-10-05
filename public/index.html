@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Ocean</title>
     <meta name="theme-color" content="#0c1014"><link rel="stylesheet" href="/command-deck.css"><link rel="stylesheet" href="/ocean-theme.css"><link rel="stylesheet" href="/ocean-workspace.css"><link rel="stylesheet" href="/economy.css">
+    <link rel="stylesheet" href="/sonar.css" />
   </head>
   <body class="ocean-ui ocean-workspace">
     <header class="nav">
@@ -157,7 +158,16 @@
             class="ocean-module arcade-view app-view hidden"
             id="arcade-view"
           >
-            <div class="arcade-game" id="arcade-game"><div class="game-top"><div class="game-score"><small>SKÓRE</small><strong id="game-score">0</strong></div></div><div class="game-canvas-wrap"><canvas id="game-canvas" aria-label="Herní plocha Sonaru"></canvas><button id="game-tap" type="button">Spustit</button></div><div class="game-bottom"><span id="game-hint">Pingni ve chvíli, kdy paprsek protne zelený sektor.</span><strong>OSOBNÍ REKORD · <span id="game-best">0</span></strong></div></div>
+            <div class="sonar-monitor" id="arcade-game">
+              <header class="sonar-hud"><span class="sonar-name">SONAR<span aria-hidden="true">.</span></span><div class="sonar-score"><span>SCORE</span><strong id="game-score">000000</strong></div></header>
+              <button class="sonar-surface" id="game-tap" type="button" aria-label="Spustit SONAR. Klepni nebo stiskni mezerník, když paprsek protne vyznačenou zónu.">
+                <canvas id="game-canvas" aria-hidden="true"></canvas>
+                <span class="sonar-prompt" id="game-hint">Tap</span>
+                <span class="sonar-feedback" id="sonar-feedback" aria-hidden="true"></span>
+              </button>
+              <div class="sonar-ticker" id="sonar-ticker" tabindex="0" role="region" aria-label="Žebříček SONAR. Při najetí nebo zaměření se posouvání zastaví."><div class="sonar-ticker-track" id="sonar-ticker-track"><span class="sonar-ticker-empty">—</span></div></div>
+              <span class="sonar-sr-only" id="sonar-announcement" role="status" aria-live="polite"></span>
+            </div>
           </section>
           <section class="gift-view app-view hidden" id="gift-view" aria-label="Redeem code">
             <form id="genesis-form">
@@ -289,6 +299,6 @@
 <div class="agent-buttons"><button id="agent-run" type="button">Spustit analýzu</button><button class="hidden" id="agent-ledger-open" type="button">Zobrazit report</button></div>
 <p class="agent-message" id="agent-message" role="status"></p>
 </section><button class="connection-disconnect hidden" id="disconnect-binance" type="button">Odpojit Binance</button></dialog>
-    <script src="/economy.js" defer></script><script src="/app.js" defer></script>
+    <script src="/sonar.js" defer></script><script src="/economy.js" defer></script><script src="/app.js" defer></script>
   </body>
 </html>
