@@ -8,4 +8,6 @@ import { genesisWaves } from "./006_genesis_waves.js";
 import { accountSuspension } from "./007_account_suspension.js";
 import { sonarLeaderboard } from "./008_sonar_leaderboard.js";
 
-export const databaseMigrations = [existingOceanSchema, agent001Foundation, adminAuditLog, workerNotifications, tideEconomy, genesisWaves, accountSuspension, sonarLeaderboard];
+import { sonarRecordVersions } from "./009_sonar_record_versions.js";
+
+export const databaseMigrations = [existingOceanSchema, agent001Foundation, adminAuditLog, workerNotifications, tideEconomy, genesisWaves, accountSuspension, sonarLeaderboard, sonarRecordVersions];

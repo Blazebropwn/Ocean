@@ -15,9 +15,9 @@ export function registerArcadeRoutes(app: FastifyInstance, db: OceanDatabase, co
     if (!hasApprovedAccess(user, config)) return reply.code(403).send({ error: 'Účet nemá přístup ke hře.' });
     const approval = config.manualApprovalEnabled ? 'u.approved_at' : 'u.email_verified_at';
     const leaders = db.prepare(`SELECT u.username, r.score FROM sonar_records r JOIN users u ON u.id=r.user_id
-      WHERE u.suspended_at IS NULL AND ${approval} IS NOT NULL
-      ORDER BY r.score DESC, r.achieved_at_ms ASC, r.user_id ASC LIMIT 10`).all();
-    return { version: SONAR_VERSION, leaders, personalBest: (db.prepare('SELECT score FROM sonar_records WHERE user_id=?').get(user.id) as { score: number } | undefined)?.score ?? 0 };
+      WHERE r.version=? AND u.suspended_at IS NULL AND ${approval} IS NOT NULL
+      ORDER BY r.score DESC, r.achieved_at_ms ASC, r.user_id ASC LIMIT 10`).all(SONAR_VERSION);
+    return { version: SONAR_VERSION, leaders, personalBest: (db.prepare('SELECT score FROM sonar_records WHERE user_id=? AND version=?').get(user.id, SONAR_VERSION) as { score: number } | undefined)?.score ?? 0 };
   });
   app.post('/api/arcade/sonar/runs', { bodyLimit: 1024, config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request, reply) => {
     reply.header('Cache-Control', 'no-store');
@@ -25,6 +25,8 @@ export function registerArcadeRoutes(app: FastifyInstance, db: OceanDatabase, co
     if (!user) return reply.code(401).send({ error: 'Nejste přihlášeni.' });
     if (!hasApprovedAccess(user, config)) return reply.code(403).send({ error: 'Účet nemá přístup ke hře.' });
     if (request.headers.origin !== config.appOrigin) return reply.code(403).send({ error: 'Neplatný původ požadavku.' });
+    if ((request.body as { version?: string } | null)?.version !== SONAR_VERSION)
+      return reply.code(409).send({ error: 'Hra byla aktualizována. Obnov stránku.' });
     const id = randomUUID(), rounds = createSonarRounds(), now = Date.now();
     db.transaction(() => {
       db.prepare('DELETE FROM sonar_runs WHERE started_at_ms < ?').run(now - 7 * 86_400_000);
@@ -45,15 +47,15 @@ export function registerArcadeRoutes(app: FastifyInstance, db: OceanDatabase, co
     if (!run) return reply.code(404).send({ error: 'Pokus nebyl nalezen.' });
     if (run.finished) return { score: run.score, replayed: true };
     const age = Date.now() - run.started_at_ms;
-    if (run.version !== SONAR_VERSION || age > RUN_DURATION_MS + 60_000 || input.data.durationMs > age + 1000)
+    if (![SONAR_VERSION, 'sonar-v2'].includes(run.version) || age > RUN_DURATION_MS + 60_000 || input.data.durationMs > age + 1000)
       return reply.code(400).send({ error: 'Pokus vypršel nebo má neplatný čas.' });
-    const result = scoreSonarRun(JSON.parse(run.rounds_json) as SonarRound[], input.data.taps, input.data.durationMs);
+    const result = scoreSonarRun(JSON.parse(run.rounds_json) as SonarRound[], input.data.taps, input.data.durationMs, run.version);
     if (!result) return reply.code(400).send({ error: 'Průběh hry není platný.' });
     db.transaction(() => {
       db.prepare('UPDATE sonar_runs SET finished=1, score=? WHERE id=?').run(result.score, id);
-      if (result.score > 0) db.prepare(`INSERT INTO sonar_records (user_id,score,hits,perfects,achieved_at_ms) VALUES (?,?,?,?,?)
-        ON CONFLICT(user_id) DO UPDATE SET score=excluded.score,hits=excluded.hits,perfects=excluded.perfects,achieved_at_ms=excluded.achieved_at_ms
-        WHERE excluded.score > sonar_records.score`).run(user.id, result.score, result.hits, result.perfects, Date.now());
+      if (result.score > 0) db.prepare(`INSERT INTO sonar_records (user_id,version,score,hits,perfects,achieved_at_ms) VALUES (?,?,?,?,?,?)
+        ON CONFLICT(user_id,version) DO UPDATE SET score=excluded.score,hits=excluded.hits,perfects=excluded.perfects,achieved_at_ms=excluded.achieved_at_ms
+        WHERE excluded.score > sonar_records.score`).run(user.id, run.version, result.score, result.hits, result.perfects, Date.now());
     })();
     return { ...result, replayed: false };
   });

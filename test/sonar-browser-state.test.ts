@@ -48,11 +48,11 @@ test('SONAR browser deducts no TIDE, displays perfect feedback and submits match
   // Pointer-generated click must not count a second tap after the start.
   surface.listeners.get('click')!({detail:1});
   f.setTime(Math.PI/2*1000);surface.listeners.get('pointerdown')!({isPrimary:true,button:0,preventDefault(){}});
-  assert.equal(f.elements.get('#game-score')!.textContent,'100');
-  assert.equal(f.elements.get('#sonar-feedback')!.textContent,'+100');
+  assert.equal(f.elements.get('#game-score')!.textContent,'200');
+  assert.equal(f.elements.get('#sonar-feedback')!.textContent,'+200');
   f.setTime(1700);surface.listeners.get('pointerdown')!({isPrimary:true,button:0,preventDefault(){}});await f.flush();
   const submits=f.calls.filter(c=>c.url.endsWith('/finish'));assert.equal(submits.length,1);
-  assert.deepEqual(scoreSonarRun([{target:0,width:.8,perfectWidth:.24,speed:1,hitPoints:50,perfectPoints:100},{target:2,width:.8,perfectWidth:.24,speed:1,hitPoints:50,perfectPoints:100}],submits[0]!.data.taps,submits[0]!.data.durationMs),{score:100,hits:1,perfects:1});
+  assert.deepEqual(scoreSonarRun([{target:0,width:.8,perfectWidth:.24,speed:1,hitPoints:50,perfectPoints:100},{target:2,width:.8,perfectWidth:.24,speed:1,hitPoints:50,perfectPoints:100}],submits[0]!.data.taps,submits[0]!.data.durationMs),{score:200,hits:1,perfects:1});
   assert.equal(f.elements.get('#game-hint')!.textContent,'Tap');
   f.window.OceanSonar.close();assert.equal(f.calls.filter(c=>c.url.endsWith('/finish')).length,1);
   assert.ok(f.calls.every(c=>c.url.startsWith('/api/arcade/sonar/')));
@@ -83,4 +83,16 @@ test('SONAR draws the original surface and lets the player retry when the server
   assert.equal(f.elements.get('#game-hint')!.textContent,'');
   assert.equal(f.calls.filter(c=>c.url.endsWith('/runs')).length,2);
   f.window.OceanSonar.close();await f.flush();
+});
+
+test('SONAR browser and server agree on off-center accuracy and consecutive-hit bonus',async()=>{
+  const f=fixture(),surface=f.elements.get('#game-tap')!;
+  f.window.OceanSonar.open({enabled:true});surface.listeners.get('click')!({detail:0});await f.flush();
+  f.setTime((Math.PI/2+.25)*1000);surface.listeners.get('pointerdown')!({isPrimary:true,button:0});
+  assert.equal(f.elements.get('#game-score')!.textContent,'138');
+  f.setTime((Math.PI/2+2)*1000);surface.listeners.get('pointerdown')!({isPrimary:true,button:0});await f.flush();
+  assert.equal(f.elements.get('#game-score')!.textContent,'348');
+  assert.equal(f.calls.filter(c=>c.url.endsWith('/finish')).length,1);
+  assert.deepEqual(f.calls.find(c=>c.url.endsWith('/runs'))!.data,{version:'sonar-classic-v1'});
+  f.window.OceanSonar.close();
 });
