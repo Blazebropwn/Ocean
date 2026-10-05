@@ -1,44 +1,33 @@
-/* Original SONAR styling, with a quieter HUD and compact ranking strip. */
+/* A quiet SONAR surface with the original uninterrupted target arc. */
 .ocean-workspace.arcade-mode .workspace-head { display:none; }
-.ocean-workspace.arcade-mode .workspace { overflow:hidden; gap:0; }
-.ocean-workspace .arcade-view { flex:1 1 0; width:100%; min-height:0; min-width:0; border:1px solid var(--line); border-radius:15px; background:var(--panel); box-shadow:none; }
-.sonar-monitor { height:100%; min-height:0; display:grid; grid-template-rows:auto minmax(0,1fr) 44px; padding:20px 24px 0; gap:12px; overflow:hidden; }
-.sonar-hud { display:flex; justify-content:space-between; align-items:flex-start; padding:0; pointer-events:none; z-index:1; }
-.sonar-name { font-size:12px; font-weight:600; letter-spacing:.18em; color:var(--ink-soft); }
+.ocean-workspace.arcade-mode .workspace { overflow:hidden; gap:0; align-items:center; justify-content:center; }
+.ocean-workspace .arcade-view { flex:0 1 auto; width:100%; max-width:1040px; height:100%; max-height:780px; min-height:0; min-width:0; border:1px solid var(--line); border-radius:15px; background:var(--panel); box-shadow:none; }
+.sonar-monitor { height:100%; min-height:0; display:grid; grid-template-rows:28px minmax(0,1fr) 24px; padding:16px; gap:10px; overflow:hidden; }
+.sonar-hud { display:flex; justify-content:space-between; align-items:center; pointer-events:none; z-index:1; }
+.sonar-name { font-size:11px; font-weight:500; letter-spacing:.15em; color:var(--muted); }
 .sonar-name > span { color:#83ddc7; }
-.sonar-score { display:grid; justify-items:end; gap:5px; font-variant-numeric:tabular-nums; }
-.sonar-score > span { font-size:9px; letter-spacing:.2em; color:#8da7ac; }
-.sonar-score strong { font-family:inherit; font-size:28px; font-weight:500; line-height:1; letter-spacing:.02em; color:var(--cyan); }
-.ocean-ui .sonar-surface { position:relative; display:block; min-height:0; width:100%; height:100%; margin:0; padding:0; border:1px solid var(--line); border-radius:12px; background:#10161b; color:#bde6db; cursor:pointer; touch-action:manipulation; -webkit-tap-highlight-color:transparent; user-select:none; overflow:hidden; }
+.sonar-score { font-variant-numeric:tabular-nums; }
+.sonar-score strong { font-family:inherit; font-size:24px; font-weight:500; line-height:1; color:var(--cyan); }
+.ocean-ui .sonar-surface { position:relative; display:block; min-height:0; width:100%; height:100%; margin:0; padding:0; border:1px solid var(--line); border-radius:10px; background:#10161b; color:#bde6db; cursor:pointer; touch-action:manipulation; -webkit-tap-highlight-color:transparent; user-select:none; overflow:hidden; }
 .sonar-surface canvas { display:block; position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
 .ocean-workspace .sonar-surface:focus-visible { outline:1px solid #83ddc7; outline-offset:-7px; }
-.sonar-prompt,.sonar-feedback { position:absolute; bottom:6%; left:12px; right:12px; font:500 12px/1.5 ui-monospace,monospace; letter-spacing:.1em; text-align:center; pointer-events:none; }
+.sonar-prompt,.sonar-feedback { position:absolute; bottom:6%; left:12px; right:12px; font:500 12px/1.5 ui-monospace,monospace; letter-spacing:.05em; text-align:center; pointer-events:none; }
 .sonar-prompt { color:#89b1ab; }
 .sonar-prompt:empty,.sonar-feedback:empty { display:none; }
 .sonar-feedback { color:#ccffec; }
-.sonar-ticker { min-width:0; display:flex; align-items:center; overflow:hidden; border-top:1px solid var(--line); background:transparent; color:var(--ink-soft); font:12px/1 ui-monospace,monospace; }
-.sonar-ticker:focus-visible { outline:1px solid #83ddc7; outline-offset:-3px; }
-.sonar-ticker-track { display:flex; width:max-content; min-width:100%; }
-.sonar-ticker-track.is-running { animation:sonar-ticker var(--ticker-duration,40s) linear infinite; will-change:transform; }
-.sonar-ticker-group { display:flex; flex-shrink:0; align-items:center; }
-.sonar-ticker-entry { display:inline-flex; align-items:center; gap:10px; flex:none; padding:0 24px; white-space:nowrap; }
-.sonar-ticker-entry b { color:#ddede8; font-weight:500; }
-.sonar-ticker-entry i { font-style:normal; color:#60817e; }
-.sonar-ticker-empty { padding:0 24px; color:#708e90; font-size:11px; }
-.sonar-ticker:hover .sonar-ticker-track,.sonar-ticker:focus .sonar-ticker-track { animation-play-state:paused; }
+.sonar-ticker { min-width:0; max-width:100%; justify-self:center; align-self:center; color:var(--muted); font:11px/1.4 ui-monospace,monospace; }
+.sonar-ticker-track { min-width:0; }
+.sonar-ticker-entry { display:flex; align-items:center; gap:10px; min-width:0; }
+.sonar-ticker-entry b { max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink-soft); font-weight:400; }
+.sonar-ticker-entry > span { flex:none; white-space:nowrap; }
 .sonar-sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; }
-@keyframes sonar-ticker { to { transform:translateX(-50%); } }
 @media(max-width:900px) {
  .ocean-workspace.arcade-mode .workspace { padding:12px; }
  .ocean-workspace .arcade-view { border-radius:12px; }
- .sonar-hud { padding:0; }
- .sonar-monitor { grid-template-rows:auto minmax(0,1fr) 38px; padding:16px 14px 0; gap:10px; }
- .sonar-ticker { font-size:11px; }
- .sonar-ticker-entry { padding-inline:18px; }
+ .sonar-monitor { padding:12px; gap:8px; }
 }
-@media(max-height:500px) { .sonar-hud { padding:0; }.sonar-score strong { font-size:22px; }.sonar-monitor { grid-template-rows:auto minmax(0,1fr) 30px; padding:10px 12px 0; gap:8px; }.sonar-prompt,.sonar-feedback { bottom:3%; font-size:10px; } }
-@media(prefers-reduced-motion:reduce) {
- .sonar-ticker-track.is-running { animation:none; transform:none; }
- .sonar-ticker { overflow-x:auto; }
- .sonar-ticker-group[aria-hidden=true] { display:none; }
+@media(max-height:500px) {
+ .sonar-monitor { grid-template-rows:22px minmax(0,1fr) 18px; padding:8px; gap:6px; }
+ .sonar-score strong { font-size:20px; }
+ .sonar-prompt,.sonar-feedback { bottom:3%; font-size:10px; }
 }

@@ -159,13 +159,13 @@
             id="arcade-view"
           >
             <div class="sonar-monitor" id="arcade-game">
-              <header class="sonar-hud"><span class="sonar-name">SONAR<span aria-hidden="true">.</span></span><div class="sonar-score"><span>SCORE</span><strong id="game-score">000000</strong></div></header>
+              <header class="sonar-hud"><span class="sonar-name">SONAR<span aria-hidden="true">.</span></span><div class="sonar-score" aria-label="Skóre"><strong id="game-score">0</strong></div></header>
               <button class="sonar-surface" id="game-tap" type="button" aria-label="Spustit SONAR. Klepni nebo stiskni mezerník, když paprsek protne vyznačenou zónu.">
                 <canvas id="game-canvas" aria-hidden="true"></canvas>
                 <span class="sonar-prompt" id="game-hint">Tap</span>
                 <span class="sonar-feedback" id="sonar-feedback" aria-hidden="true"></span>
               </button>
-              <div class="sonar-ticker" id="sonar-ticker" tabindex="0" role="region" aria-label="Žebříček SONAR. Při najetí nebo zaměření se posouvání zastaví."><div class="sonar-ticker-track" id="sonar-ticker-track"><span class="sonar-ticker-empty">—</span></div></div>
+              <div class="sonar-ticker" id="sonar-ticker" role="region" aria-label="Nejlepší výsledek SONAR"><div class="sonar-ticker-track" id="sonar-ticker-track"></div></div>
               <span class="sonar-sr-only" id="sonar-announcement" role="status" aria-live="polite"></span>
             </div>
           </section>

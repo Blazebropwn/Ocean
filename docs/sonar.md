@@ -1,18 +1,19 @@
 # SONAR monitor
 
 Arcade zachovává původní vzhled sonaru: tmavou mřížku, světelné body, jemný
-paprsek a zelený svítící oblouk. Horní lišta obsahuje SONAR a SCORE, dole je
-kompaktní žebříček. Perfect Zone je světlejší část původního oblouku.
-Tap / mezerník / Enter spustí pokus, další tapy zachycují paprsek ve vyznačeném
-sektoru. Běžný zásah dává 50 bodů, užší Perfect Zone 100. Chybný tap ukončí pokus.
-Rychlost postupně roste a sektor se zužuje. Nápověda Tap při startu zmizí;
-zpětná vazba zásahu trvá 280 ms. Herní plocha je zároveň ovládací tlačítko.
+paprsek a souvislý zelený svítící oblouk bez zvýrazněného středu.
+Horní lišta obsahuje jen SONAR a skóre bez úvodních nul. Herní panel má
+omezenou šířku a výšku a přizpůsobuje se dostupnému prostoru i na telefonu.
+Tap / mezerník / Enter spustí pokus, další tapy zachycují paprsek v oblouku.
+Běžný zásah dává 50 bodů, přesný zásah uprostřed 100; bodování se nemění.
+Chybný tap ukončí pokus. Rychlost postupně roste a sektor se zužuje.
+Nápověda Tap při startu zmizí; po zásahu se na 280 ms objeví pouze +50 / +100.
+Herní plocha je zároveň ovládací tlačítko.
 
-Ticker opakuje skutečné nejlepší výsledky až deseti různých účtů. Pozastavené
-a neschválené účty v něm nejsou. Shodné skóre řadí čas dosažení. Bez výsledků
-zobrazí prázdný stav, při chybě stručnou informaci; neobsahuje ukázkové hráče.
-Posun se zastaví při najetí nebo zaměření klávesnicí. Při reduced motion se
-žebříček neposouvá automaticky a lze jej procházet vodorovně.
+Pod hrou je jediný statický řádek: symbol koruny, nejlepší hráč a jeho skóre.
+Žádné rolování ani opakování výsledků. Pozastavené a neschválené účty se
+nezobrazují; při shodě rozhoduje čas dosažení. Pokud nejsou výsledky dostupné,
+řádek zůstane prázdný. API nadále poskytuje nejlepších deset účtů.
 
 ## Výsledky
 
