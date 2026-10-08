@@ -13,6 +13,10 @@ Tap / kliknutí na radar nebo mezerník zachytává paprsek při stisku;
 držení mezerníku nevytváří další zásahy. Po skončení se vrátí tlačítko dalšího pokusu.
 Zásah se vyhodnocuje podle poslední vykreslené polohy paprsku, nikoli podle
 neviditelného posunu mezi snímky. Nový sektor se po zásahu vykreslí okamžitě.
+Nové pokusy mají hitbox rozšířený o 0,04 radiánu (přibližně 2,3 stupně)
+na každé straně viditelného sektoru. Přesah dává základní body za zásah,
+nikoli bonus za přesnost. Hodnotu vydává a ukládá server s každým kolem;
+starší rozehrané pokusy bez této hodnoty se vyhodnotí podle původních pravidel.
 Zásah dává `round(100 + přesnost * 100 + (počet zásahů - 1) * 10)` bodů.
 Chybný zásah ukončí hru. Server vydává sektory a ověřuje výsledek z časů
 zásahů přes `/api/arcade/sonar/runs`; klient neposílá důvěryhodné skóre.

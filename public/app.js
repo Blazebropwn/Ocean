@@ -453,8 +453,9 @@ function arcadeTap() {
   if (arcadeState.elapsed - (arcadeState.taps.at(-1) || 0) < 25) return;
   arcadeState.taps.push(arcadeState.elapsed);
   const distance = Math.abs(Math.atan2(Math.sin(arcadeState.angle - arcadeState.target), Math.cos(arcadeState.angle - arcadeState.target)));
-  if (distance > arcadeState.targetWidth / 2) return finishArcade("Signál minul sektor");
-  const accuracy = 1 - distance / (arcadeState.targetWidth / 2);
+  const hitPadding = arcadeState.run.rounds[arcadeState.hits].hitPadding ?? 0;
+  if (distance > arcadeState.targetWidth / 2 + hitPadding) return finishArcade("Signál minul sektor");
+  const accuracy = Math.max(0, 1 - distance / (arcadeState.targetWidth / 2));
   arcadeState.hits += 1;
   arcadeState.score += Math.round(100 + accuracy * 100 + Math.max(0, arcadeState.hits - 1) * 10);
   const next = arcadeState.run.rounds[arcadeState.hits];
