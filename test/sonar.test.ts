@@ -34,6 +34,7 @@ test('SONAR restores accuracy and streak scoring and rejects play after a miss',
   assert.equal(scoreSonarRun(rounds,[1],500),null);
   const course=createSonarRounds();
   assert.equal(course[0]!.width,.72); assert.equal(course[0]!.speed,1.45);
+  assert.equal(course[0]!.hitPadding,.04); assert.equal(course[255]!.hitPadding,.04);
   assert.equal(course[255]!.width,.3); assert.equal(course[255]!.speed,3.5);
   const taps=perfectTaps(course.slice(0,15));
   assert.deepEqual(scoreSonarRun(course,taps,taps.at(-1)!+1),{score:4050,hits:15,perfects:15});

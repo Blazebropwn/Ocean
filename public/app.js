@@ -373,10 +373,10 @@ function drawArcadeSurface(ctx, width, height, now = 0) {
   ctx.restore();
 }
 
-function drawArcadeIdle() {
+function drawArcadeIdle(now = performance.now()) {
   const { ctx, width, height } = sizeArcadeCanvas();
-  drawArcadeSurface(ctx, width, height);
-  drawSonar(ctx, width, height, performance.now());
+  drawArcadeSurface(ctx, width, height, now);
+  drawSonar(ctx, width, height, now);
 }
 
 async function startArcade() {
@@ -448,25 +448,28 @@ function arcadeTap() {
   if (arcadeState?.unsaved) return saveSonarResult(arcadeState);
   if (!arcadeState?.active) return startArcade();
   const now = performance.now();
-  advanceSonar(now);
+  // Judge the visible frame, not an unpainted position between animation frames.
   if (arcadeState.elapsed >= arcadeState.run.maxDurationMs) return finishArcade("Pokus dokončen");
   if (arcadeState.elapsed - (arcadeState.taps.at(-1) || 0) < 25) return;
   arcadeState.taps.push(arcadeState.elapsed);
   const distance = Math.abs(Math.atan2(Math.sin(arcadeState.angle - arcadeState.target), Math.cos(arcadeState.angle - arcadeState.target)));
-  if (distance > arcadeState.targetWidth / 2) return finishArcade("Signál minul sektor");
-  const accuracy = 1 - distance / (arcadeState.targetWidth / 2);
+  const hitPadding = arcadeState.run.rounds[arcadeState.hits].hitPadding ?? 0;
+  if (distance > arcadeState.targetWidth / 2 + hitPadding) return finishArcade("Signál minul sektor");
+  const accuracy = Math.max(0, 1 - distance / (arcadeState.targetWidth / 2));
   arcadeState.hits += 1;
   arcadeState.score += Math.round(100 + accuracy * 100 + Math.max(0, arcadeState.hits - 1) * 10);
   const next = arcadeState.run.rounds[arcadeState.hits];
   if (!next) return finishArcade("Pokus dokončen");
   arcadeState.roundAt = arcadeState.elapsed;
   arcadeState.roundAngle = arcadeState.angle;
+  arcadeState.last = now;
   arcadeState.speed = next.speed;
   arcadeState.targetWidth = next.width;
   arcadeState.target = next.target;
   arcadeState.flashUntil = now + 180;
   $("#game-hint").textContent = "";
   $("#game-score").textContent = Math.floor(arcadeState.score);
+  drawArcadeIdle(now);
 }
 
 function advanceSonar(now) {
@@ -509,9 +512,7 @@ function drawSonar(ctx, width, height, now) {
 function runArcade(now) {
   if (!arcadeState?.active) return;
   advanceSonar(now);
-  const { ctx, width, height } = sizeArcadeCanvas();
-  drawArcadeSurface(ctx, width, height, now);
-  drawSonar(ctx, width, height, now);
+  drawArcadeIdle(now);
   if (arcadeState.elapsed >= arcadeState.run.maxDurationMs) return finishArcade("Pokus dokončen");
   if (!arcadeState?.active) return;
   $("#game-score").textContent = Math.floor(arcadeState.score);
@@ -520,7 +521,6 @@ function runArcade(now) {
 
 $("#game-tap").addEventListener("click", arcadeTap);
 $("#sonar-leaders-open").addEventListener("click", () => {
-  advanceSonar(performance.now());
   $("#sonar-leaders-dialog").append($("#sonar-leaders"));
   $("#sonar-leaders-dialog").showModal();
   loadSonarLeaders();
