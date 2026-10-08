@@ -320,6 +320,7 @@ function sizeArcadeCanvas() {
 function openArcade() {
   cancelAnimationFrame(arcadeFrame);
   arcadeState = null;
+  $("#arcade-game").classList.remove("is-playing");
   $("#game-hint").textContent = sonarHint;
   $("#game-score").textContent = "0";
   $("#game-tap").textContent = "Spustit";
@@ -375,19 +376,7 @@ function drawArcadeSurface(ctx, width, height, now = 0) {
 function drawArcadeIdle() {
   const { ctx, width, height } = sizeArcadeCanvas();
   drawArcadeSurface(ctx, width, height);
-  const centerX = width / 2;
-  const centerY = height / 2;
-  ctx.strokeStyle = "rgba(119, 216, 196, .34)";
-  ctx.lineWidth = 2;
-  for (const radius of [.08, .17, .27]) {
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, Math.min(width, height) * radius, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-  ctx.fillStyle = "#77d8c4";
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, 5, 0, Math.PI * 2);
-  ctx.fill();
+  drawSonar(ctx, width, height, performance.now());
 }
 
 async function startArcade() {
@@ -411,7 +400,8 @@ async function startArcade() {
   const first = run.rounds[0];
   arcadeState = { active: true, last: now, score: 0, hits: 0, angle: -Math.PI / 2, speed: first.speed, target: first.target, targetWidth: first.width, flashUntil: 0, run, taps: [], elapsed: 0, roundAt: 0, roundAngle: -Math.PI / 2 };
   $("#game-score").textContent = "0";
-  $("#game-tap").textContent = "PING";
+  $("#arcade-game").classList.add("is-playing");
+  $("#game-canvas").focus({ preventScroll: true });
   $("#game-hint").textContent = sonarHint;
   cancelAnimationFrame(arcadeFrame);
   arcadeFrame = requestAnimationFrame(runArcade);
@@ -443,6 +433,7 @@ async function saveSonarResult(state) {
 function finishArcade(reason = "Pokus skončil") {
   if (!arcadeState?.active) return;
   arcadeState.active = false;
+  $("#arcade-game").classList.remove("is-playing");
   const score = Math.floor(arcadeState.score);
   $("#game-score").textContent = score;
   arcadeState.reason = reason;
@@ -489,7 +480,7 @@ function advanceSonar(now) {
 }
 
 function drawSonar(ctx, width, height, now) {
-  const state = arcadeState;
+  const state = arcadeState || { angle: -Math.PI / 2, target: Math.PI / 2, targetWidth: .72, flashUntil: 0 };
   const x = width / 2;
   const y = height / 2;
   const radius = Math.min(width, height) * .36;
@@ -542,8 +533,16 @@ $("#sonar-leaders-dialog").addEventListener("close", () => {
 $("#sonar-leaders-dialog").addEventListener("click", event => {
   if (event.target === event.currentTarget) event.currentTarget.close();
 });
-$("#game-canvas").addEventListener("pointerdown", arcadeTap);
-window.addEventListener("keydown", (event) => { if (event.code === "Space" && !$("#arcade-view").classList.contains("hidden") && !event.target.closest("button,a,input,textarea,select,dialog")) { event.preventDefault(); arcadeTap(); } });
+$("#game-canvas").addEventListener("pointerdown", event => {
+  if (!event.isPrimary || event.button !== 0) return;
+  arcadeTap();
+});
+window.addEventListener("keydown", (event) => {
+  if (event.code === "Space" && !$("#arcade-view").classList.contains("hidden") && !event.target.closest("button,a,input,textarea,select,dialog")) {
+    event.preventDefault();
+    if (!event.repeat) arcadeTap();
+  }
+});
 window.addEventListener("resize", () => {
   if (!arcadeState?.active && !$("#arcade-game").classList.contains("hidden")) requestAnimationFrame(drawArcadeIdle);
 });

@@ -7,7 +7,10 @@ Desktop zobrazuje vedle hry TOP 5 různých hráčů, každého s nejlepším v�
 Na mobilu žebříček otevírá tlačítko s pohárem; dialog pozastaví pohyb paprsku
 a zavření vrátí hru do stejného stavu. Nízké displeje mohou obsah posouvat.
 
-Tlačítko Spustit začne hru, PING / tap na radar / mezerník zachytává paprsek.
+Úvodní radar používá stejnou kresbu a velikost jako rozehraná hra.
+Tlačítko Spustit začne hru a během hraní je skryté se zachováním místa.
+Tap / kliknutí na radar nebo mezerník zachytává paprsek při stisku;
+držení mezerníku nevytváří další zásahy. Po skončení se vrátí tlačítko dalšího pokusu.
 Zásah dává `round(100 + přesnost * 100 + (počet zásahů - 1) * 10)` bodů.
 Chybný zásah ukončí hru. Server vydává sektory a ověřuje výsledek z časů
 zásahů přes `/api/arcade/sonar/runs`; klient neposílá důvěryhodné skóre.
