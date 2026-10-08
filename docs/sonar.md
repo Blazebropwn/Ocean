@@ -11,6 +11,8 @@ a zavření vrátí hru do stejného stavu. Nízké displeje mohou obsah posouva
 Tlačítko Spustit začne hru a během hraní je skryté se zachováním místa.
 Tap / kliknutí na radar nebo mezerník zachytává paprsek při stisku;
 držení mezerníku nevytváří další zásahy. Po skončení se vrátí tlačítko dalšího pokusu.
+Zásah se vyhodnocuje podle poslední vykreslené polohy paprsku, nikoli podle
+neviditelného posunu mezi snímky. Nový sektor se po zásahu vykreslí okamžitě.
 Zásah dává `round(100 + přesnost * 100 + (počet zásahů - 1) * 10)` bodů.
 Chybný zásah ukončí hru. Server vydává sektory a ověřuje výsledek z časů
 zásahů přes `/api/arcade/sonar/runs`; klient neposílá důvěryhodné skóre.

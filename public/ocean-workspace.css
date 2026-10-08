@@ -9,6 +9,8 @@
 .ocean-workspace #arcade-game .game-canvas-wrap { margin:8px 0; border-radius:8px; }
 .game-controls { display:grid; place-items:center; }
 .is-playing .game-controls button { visibility:hidden; }
+#game-canvas:focus { outline:none; }
+#arcade-game:has(#game-canvas:focus-visible) .game-top h2 { text-decoration:underline; text-decoration-color:var(--cyan); text-underline-offset:6px; }
 .game-controls button { width:168px; height:44px; padding:0 12px; border:1px solid var(--line-hot); border-radius:6px; background:var(--cyan); color:#122b25; font-family:inherit; font-size:14px; font-weight:600; line-height:1; cursor:pointer; }
 .game-controls button:disabled { opacity:.6; cursor:wait; }
 .ocean-workspace #arcade-game .game-bottom { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; font-size:12px; align-items:center; }
