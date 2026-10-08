@@ -157,7 +157,18 @@
             class="ocean-module arcade-view app-view hidden"
             id="arcade-view"
           >
-            <div class="arcade-game" id="arcade-game"><div class="game-top"><div class="game-score"><small>SKÓRE</small><strong id="game-score">0</strong></div></div><div class="game-canvas-wrap"><canvas id="game-canvas" aria-label="Herní plocha Sonaru"></canvas><button id="game-tap" type="button">Spustit</button></div><div class="game-bottom"><span id="game-hint">Pingni ve chvíli, kdy paprsek protne zelený sektor.</span><strong>OSOBNÍ REKORD · <span id="game-best">0</span></strong></div></div>
+            <div class="arcade-game" id="arcade-game">
+              <div class="game-top">
+                <h2>SONAR</h2>
+                <div class="game-score"><small>SKÓRE</small><strong id="game-score">0</strong></div>
+                <button id="sonar-leaders-open" class="sonar-icon" type="button" title="TOP 5 hráčů" aria-label="TOP 5 hráčů" aria-haspopup="dialog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 21h8m-4-4v4M7 4h10v7a5 5 0 0 1-10 0V4Z"/><path d="M7 6H4v3a4 4 0 0 0 4 4m9-7h3v3a4 4 0 0 1-4 4"/></svg></button>
+              </div>
+              <div class="game-canvas-wrap"><canvas id="game-canvas" aria-label="Herní plocha Sonaru"></canvas></div>
+              <div class="game-controls"><button id="game-tap" type="button">Spustit</button></div>
+              <div class="game-bottom"><span id="game-hint" role="status"></span><span>Osobní rekord <strong id="game-best">0</strong></span></div>
+            </div>
+            <aside id="sonar-leaders-desktop" aria-label="Nejlepší hráči"><section id="sonar-leaders"><header><h2 id="sonar-leaders-title">TOP 5</h2><button id="sonar-leaders-close" class="sonar-icon" type="button" aria-label="Zavřít žebříček" title="Zavřít"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></header><table class="sonar-table"><thead><tr><th scope="col" aria-label="Pořadí">#</th><th scope="col">Hráč</th><th scope="col">Skóre</th></tr></thead><tbody id="sonar-leaders-rows"></tbody></table><p id="sonar-leaders-status" role="status"></p></section></aside>
+            <dialog id="sonar-leaders-dialog" aria-labelledby="sonar-leaders-title"></dialog>
           </section>
           <section class="gift-view app-view hidden" id="gift-view" aria-label="Redeem code">
             <form id="genesis-form">

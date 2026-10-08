@@ -16,7 +16,7 @@ export function registerArcadeRoutes(app: FastifyInstance, db: OceanDatabase, co
     const approval = config.manualApprovalEnabled ? 'u.approved_at' : 'u.email_verified_at';
     const leaders = db.prepare(`SELECT u.username, r.score FROM sonar_records r JOIN users u ON u.id=r.user_id
       WHERE r.version=? AND u.suspended_at IS NULL AND ${approval} IS NOT NULL
-      ORDER BY r.score DESC, r.achieved_at_ms ASC, r.user_id ASC LIMIT 10`).all(SONAR_VERSION);
+      ORDER BY r.score DESC, r.achieved_at_ms ASC, r.user_id ASC LIMIT 5`).all(SONAR_VERSION);
     return { version: SONAR_VERSION, leaders, personalBest: (db.prepare('SELECT score FROM sonar_records WHERE user_id=? AND version=?').get(user.id, SONAR_VERSION) as { score: number } | undefined)?.score ?? 0 };
   });
   app.post('/api/arcade/sonar/runs', { bodyLimit: 1024, config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request, reply) => {

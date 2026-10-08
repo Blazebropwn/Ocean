@@ -87,6 +87,21 @@ test('SONAR rejects impossible timing, expired attempts and previous parallel ru
   } finally {await app.close();}
 });
 
+test('SONAR returns only five eligible players, ordered by score and earliest record',async()=>{
+  const {app,db}=fixture();
+  try {
+    for (let i=0;i<8;i++) {
+      const id=`leader_${i}`;
+      db.prepare("INSERT INTO users (id,email,username,password_hash,role,approved_at) VALUES (?,?,?,'hash','member',datetime('now'))").run(id,`${id}@example.com`,id);
+      db.prepare('INSERT INTO sonar_records (user_id,version,score,hits,perfects,achieved_at_ms) VALUES (?,?,?,1,1,?)').run(id,SONAR_VERSION,1000-Math.floor(i/2)*100,i);
+    }
+    db.prepare("UPDATE users SET suspended_at=datetime('now') WHERE id='leader_0'").run();
+    db.prepare("UPDATE users SET approved_at=NULL WHERE id='leader_1'").run();
+    const board=(await app.inject({url:'/api/arcade/sonar/leaderboard',headers})).json();
+    assert.deepEqual(board.leaders.map((row:{username:string})=>row.username),['leader_2','leader_3','leader_4','leader_5','leader_6']);
+  } finally { await app.close(); }
+});
+
 test('SONAR keeps legacy scores separate and finishes an in-flight legacy run with its original rules',async t=>{
   let now=1_900_000_000_000;t.mock.method(Date,'now',()=>now);
   const {app,db}=fixture();

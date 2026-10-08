@@ -227,6 +227,7 @@ function viewFromHash() {
 function showAppView(view, activeLink = null) {
   const selected = ["overview", "arcade", "vault", "gift", "slot"].includes(view) ? view : "overview";
   document.body.classList.toggle("home-mode", selected === "overview");
+  document.body.classList.toggle("arcade-mode", selected === "arcade");
   const connectionStatus = $("#system-state");
   if (selected === "overview") $(".overview-footer").insertBefore(connectionStatus, $(".overview-footer > div"));
   else $(".workspace-head").append(connectionStatus);
@@ -272,10 +273,37 @@ window.addEventListener("hashchange", () => {
   if (!$("#dashboard").classList.contains("hidden")) showAppView(viewFromHash());
 });
 
-const sonarHint = "Pingni ve chvíli, kdy paprsek protne zelený sektor.";
+const sonarHint = "";
+let sonarOpening = false;
+let sonarPersonalBest = 0;
+
+async function loadSonarLeaders() {
+  const user = signedInUser;
+  $("#sonar-leaders-status").textContent = "Načítání…";
+  try {
+    const data = await request("/api/arcade/sonar/leaderboard");
+    if (signedInUser !== user) return;
+    sonarPersonalBest = data.personalBest;
+    $("#game-best").textContent = arcadeBest();
+    $("#sonar-leaders-rows").replaceChildren(...Array.from({ length: 5 }, (_, index) => {
+      const leader = data.leaders[index];
+      const row = document.createElement("tr");
+      if (leader?.username === user?.username) row.classList.add("is-player");
+      for (const value of [index + 1, leader?.username ?? "—", leader ? leader.score.toLocaleString("cs-CZ") : "—"]) {
+        const cell = document.createElement("td");
+        cell.textContent = value;
+        row.append(cell);
+      }
+      return row;
+    }));
+    $("#sonar-leaders-status").textContent = data.leaders.length ? "" : "Zatím žádné výsledky.";
+  } catch {
+    $("#sonar-leaders-status").textContent = "Žebříček se nepodařilo načíst.";
+  }
+}
 
 function arcadeBest() {
-  return Number(localStorage.getItem("ocean-sonar-best") || 0);
+  return sonarPersonalBest;
 }
 
 function sizeArcadeCanvas() {
@@ -294,8 +322,12 @@ function openArcade() {
   arcadeState = null;
   $("#game-hint").textContent = sonarHint;
   $("#game-score").textContent = "0";
-  $("#game-best").textContent = arcadeBest();
   $("#game-tap").textContent = "Spustit";
+  $("#game-tap").disabled = false;
+  sonarPersonalBest = 0;
+  $("#game-best").textContent = "—";
+  $("#sonar-leaders-rows").replaceChildren();
+  loadSonarLeaders();
   requestAnimationFrame(drawArcadeIdle);
 }
 
@@ -358,52 +390,106 @@ function drawArcadeIdle() {
   ctx.fill();
 }
 
-function randomTargetAngle(previous = 0) {
-  let angle = Math.random() * Math.PI * 2;
-  while (Math.abs(Math.atan2(Math.sin(angle - previous), Math.cos(angle - previous))) < 1.05) angle = Math.random() * Math.PI * 2;
-  return angle;
-}
-
-function startArcade() {
+async function startArcade() {
+  if (sonarOpening) return;
+  const user = signedInUser;
+  sonarOpening = true;
+  $("#game-tap").disabled = true;
+  $("#game-hint").textContent = "Načítání…";
+  let run;
+  try {
+    run = await request("/api/arcade/sonar/runs", { method: "POST", body: JSON.stringify({ version: "sonar-classic-v1" }) });
+  } catch (error) {
+    $("#game-hint").textContent = error.message;
+    return;
+  } finally {
+    sonarOpening = false;
+    $("#game-tap").disabled = false;
+  }
+  if (signedInUser !== user || user?.suspended || $("#arcade-view").classList.contains("hidden")) return;
   const now = performance.now();
-  arcadeState = { active: true, last: now, score: 0, hits: 0, angle: -Math.PI / 2, speed: 1.45, target: randomTargetAngle(), targetWidth: .72, flashUntil: 0 };
+  const first = run.rounds[0];
+  arcadeState = { active: true, last: now, score: 0, hits: 0, angle: -Math.PI / 2, speed: first.speed, target: first.target, targetWidth: first.width, flashUntil: 0, run, taps: [], elapsed: 0, roundAt: 0, roundAngle: -Math.PI / 2 };
+  $("#game-score").textContent = "0";
   $("#game-tap").textContent = "PING";
   $("#game-hint").textContent = sonarHint;
   cancelAnimationFrame(arcadeFrame);
   arcadeFrame = requestAnimationFrame(runArcade);
 }
 
+async function saveSonarResult(state) {
+  if (state.saving) return;
+  state.saving = true;
+  $("#game-tap").disabled = true;
+  try {
+    const result = await request(`/api/arcade/sonar/runs/${state.run.id}/finish`, { method: "POST", body: JSON.stringify({ taps: state.taps, durationMs: state.elapsed }) });
+    if (arcadeState !== state) return;
+    state.unsaved = false;
+    $("#game-score").textContent = result.score;
+    $("#game-hint").textContent = `${state.reason} · ${result.score} bodů`;
+    $("#game-tap").textContent = "Hrát znovu";
+    await loadSonarLeaders();
+  } catch (error) {
+    if (arcadeState !== state) return;
+    state.unsaved = !error.status || error.status === 429 || error.status >= 500;
+    $("#game-hint").textContent = `Neuloženo: ${error.message}`;
+    $("#game-tap").textContent = state.unsaved ? "Uložit znovu" : "Hrát znovu";
+  } finally {
+    state.saving = false;
+    if (arcadeState === state) $("#game-tap").disabled = false;
+  }
+}
+
 function finishArcade(reason = "Pokus skončil") {
   if (!arcadeState?.active) return;
   arcadeState.active = false;
   const score = Math.floor(arcadeState.score);
-  const best = Math.max(score, arcadeBest());
-  localStorage.setItem("ocean-sonar-best", String(best));
   $("#game-score").textContent = score;
-  $("#game-best").textContent = best;
-  $("#game-tap").textContent = "Hrát znovu";
+  arcadeState.reason = reason;
+  arcadeState.unsaved = true;
+  $("#game-tap").textContent = "Ukládání…";
   $("#game-hint").textContent = `${reason} · ${score} bodů`;
+  saveSonarResult(arcadeState);
 }
 
 function arcadeTap() {
+  if ($("#sonar-leaders-dialog").open || sonarOpening || arcadeState?.saving) return;
+  if (arcadeState?.unsaved) return saveSonarResult(arcadeState);
   if (!arcadeState?.active) return startArcade();
   const now = performance.now();
+  advanceSonar(now);
+  if (arcadeState.elapsed >= arcadeState.run.maxDurationMs) return finishArcade("Pokus dokončen");
+  if (arcadeState.elapsed - (arcadeState.taps.at(-1) || 0) < 25) return;
+  arcadeState.taps.push(arcadeState.elapsed);
   const distance = Math.abs(Math.atan2(Math.sin(arcadeState.angle - arcadeState.target), Math.cos(arcadeState.angle - arcadeState.target)));
   if (distance > arcadeState.targetWidth / 2) return finishArcade("Signál minul sektor");
   const accuracy = 1 - distance / (arcadeState.targetWidth / 2);
   arcadeState.hits += 1;
   arcadeState.score += Math.round(100 + accuracy * 100 + Math.max(0, arcadeState.hits - 1) * 10);
-  arcadeState.speed = Math.min(3.5, arcadeState.speed + .14);
-  arcadeState.targetWidth = Math.max(.3, arcadeState.targetWidth - .025);
-  arcadeState.target = randomTargetAngle(arcadeState.target);
+  const next = arcadeState.run.rounds[arcadeState.hits];
+  if (!next) return finishArcade("Pokus dokončen");
+  arcadeState.roundAt = arcadeState.elapsed;
+  arcadeState.roundAngle = arcadeState.angle;
+  arcadeState.speed = next.speed;
+  arcadeState.targetWidth = next.width;
+  arcadeState.target = next.target;
   arcadeState.flashUntil = now + 180;
-  $("#game-hint").textContent = `Zásah ${arcadeState.hits} · ${accuracy > .78 ? "PERFEKTNÍ" : "SIGNÁL ZACHYCEN"}`;
+  $("#game-hint").textContent = "";
   $("#game-score").textContent = Math.floor(arcadeState.score);
 }
 
-function drawSonar(ctx, width, height, now, delta) {
+function advanceSonar(now) {
   const state = arcadeState;
-  state.angle = (state.angle + state.speed * delta) % (Math.PI * 2);
+  if (!state?.active) return;
+  if (!document.hidden && !$("#sonar-leaders-dialog").open) {
+    state.elapsed = Math.min(state.run.maxDurationMs, state.elapsed + Math.max(0, Math.min(now - state.last, 35)));
+    state.angle = (state.roundAngle + state.speed * (state.elapsed - state.roundAt) / 1000) % (Math.PI * 2);
+  }
+  state.last = now;
+}
+
+function drawSonar(ctx, width, height, now) {
+  const state = arcadeState;
   const x = width / 2;
   const y = height / 2;
   const radius = Math.min(width, height) * .36;
@@ -431,17 +517,31 @@ function drawSonar(ctx, width, height, now, delta) {
 
 function runArcade(now) {
   if (!arcadeState?.active) return;
-  const delta = Math.min((now - arcadeState.last) / 1000, .035);
-  arcadeState.last = now;
+  advanceSonar(now);
   const { ctx, width, height } = sizeArcadeCanvas();
   drawArcadeSurface(ctx, width, height, now);
-  drawSonar(ctx, width, height, now, delta);
+  drawSonar(ctx, width, height, now);
+  if (arcadeState.elapsed >= arcadeState.run.maxDurationMs) return finishArcade("Pokus dokončen");
   if (!arcadeState?.active) return;
   $("#game-score").textContent = Math.floor(arcadeState.score);
   arcadeFrame = requestAnimationFrame(runArcade);
 }
 
 $("#game-tap").addEventListener("click", arcadeTap);
+$("#sonar-leaders-open").addEventListener("click", () => {
+  advanceSonar(performance.now());
+  $("#sonar-leaders-dialog").append($("#sonar-leaders"));
+  $("#sonar-leaders-dialog").showModal();
+  loadSonarLeaders();
+});
+$("#sonar-leaders-close").addEventListener("click", () => $("#sonar-leaders-dialog").close());
+$("#sonar-leaders-dialog").addEventListener("close", () => {
+  $("#sonar-leaders-desktop").append($("#sonar-leaders"));
+  if (arcadeState) arcadeState.last = performance.now();
+});
+$("#sonar-leaders-dialog").addEventListener("click", event => {
+  if (event.target === event.currentTarget) event.currentTarget.close();
+});
 $("#game-canvas").addEventListener("pointerdown", arcadeTap);
 window.addEventListener("keydown", (event) => { if (event.code === "Space" && !$("#arcade-view").classList.contains("hidden") && !event.target.closest("button,a,input,textarea,select,dialog")) { event.preventDefault(); arcadeTap(); } });
 window.addEventListener("resize", () => {
