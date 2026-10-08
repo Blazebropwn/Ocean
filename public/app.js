@@ -387,7 +387,7 @@ async function startArcade() {
   $("#game-hint").textContent = "Načítání…";
   let run;
   try {
-    run = await request("/api/arcade/sonar/runs", { method: "POST", body: JSON.stringify({ version: "sonar-classic-v1" }) });
+    run = await request("/api/arcade/sonar/runs", { method: "POST", body: JSON.stringify({ version: "sonar-classic-v1", clientRevision: 2 }) });
   } catch (error) {
     $("#game-hint").textContent = error.message;
     return;

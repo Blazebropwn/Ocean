@@ -1,6 +1,7 @@
 import { randomInt } from 'node:crypto';
 
 export const SONAR_VERSION = 'sonar-classic-v1';
+export const SONAR_CLIENT_REVISION = 2;
 export const RUN_DURATION_MS = 600_000;
 export const SONAR_HIT_PADDING = .04;
 export type SonarRound = { target: number; width: number; hitPadding?: number; perfectWidth: number; speed: number; hitPoints: number; perfectPoints: number };
