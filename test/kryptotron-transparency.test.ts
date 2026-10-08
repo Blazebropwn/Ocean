@@ -23,6 +23,20 @@ test("missing and old reconciliation never claim a verified account", () => {
   assert.equal(result.reconciliation.status, "STALE");
 });
 
+test("reconciliation explains balance mismatches without exposing worker diagnostics", () => {
+  const result = readKryptotronTransparency({ safe_mode: true, reconciliation: { issues: [
+    { code: "INVENTORY_MISMATCH", symbol: "BTCUSDC", message: "SECRET", detail: "private account" },
+    { code: "UNKNOWN_CODE", symbol: "<script>" },
+    { code: "secret:123" },
+  ] } });
+  assert.equal(result.reconciliation.issues.length, 2);
+  assert.equal(result.reconciliation.issues[0]!.symbol, "BTCUSDC");
+  assert.match(result.reconciliation.issues[0]!.message, /méně prostředků/);
+  assert.match(result.reconciliation.issues[1]!.message, /Kontaktuj správce/);
+  assert.equal(result.reconciliation.issues[1]!.symbol, null);
+  assert.doesNotMatch(JSON.stringify(result), /SECRET|private account|script|secret:123/);
+});
+
 test("an old ACTIVE flag alone cannot advertise verified live protection", async (t) => {
   const original = globalThis.fetch;
   t.after(() => { globalThis.fetch = original; });

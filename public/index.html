@@ -142,7 +142,6 @@
   <section class="goals-card dca-card" aria-labelledby="dca-panel-title">
     <header><div class="panel-heading"><h2 id="dca-panel-title">DCA</h2><p>Pravidelné nákupy</p></div><div class="dca-toggle"><span id="dca-toggle-status">Načítám</span><button aria-label="Pravidelné nákupy" aria-checked="false" id="dca-control" role="switch" type="button" disabled></button></div></header>
     <button class="dca-amount-control" id="dca-settings-open" type="button" aria-haspopup="dialog" disabled><span>Částka na každé aktivum</span><strong><span id="dca-amount-value">—</span><b aria-hidden="true">›</b></strong></button>
-    <div class="dca-goals"><h3>Cíle nákupů</h3><div id="holdings-goals" aria-label="DCA cíle: 1 BTC, 10 ETH a 100 SOL"></div></div>
     <div class="dca-metrics"><div><span>Investováno</span><strong id="dca-invested">—</strong></div><div><span>Hodnota nákupů</span><strong id="dca-current-value">—</strong></div></div>
   </section>
   <section class="positions-card" aria-labelledby="positions-panel-title"><header><div class="panel-heading"><h2 id="positions-panel-title">Otevřené pozice <span id="position-count">0</span></h2><p>Obchody Kryptotronu</p></div><span class="app-status" id="kryptotron-status"><i></i>Načítám</span></header><div id="positions-list"></div><div class="positions-footer"><span id="next-check-short">—</span><button type="button" id="bot-control">Pozastavit</button></div></section>
@@ -211,7 +210,9 @@
   <section class="strategy-card" aria-label="Stav a pravidla strategie">
     <header><div class="panel-heading"><p>EMA50 / EMA200 · uzavřené 4h svíčky</p></div><span id="strategy-status" role="status">Čekám na ověření</span></header>
     <p class="reconciliation-note" id="reconciliation-note">Stav účtu zatím není ověřený proti burze.</p>
+    <div id="reconciliation-issues" role="status"></div>
     <div class="strategy-risk" id="strategy-risk"></div>
+    <details class="trade-explanations hidden" id="strategy-residuals-detail"><summary>Drobné zůstatky po zaokrouhlení</summary><div id="strategy-residuals"></div></details>
     <div class="decision-grid" id="decision-grid"><p>Čekám na první kontrolu trhu.</p></div>
     <details class="trade-explanations"><summary>Proč proběhly poslední obchody</summary><div id="trade-explanations"><p>Zatím nejsou dostupné záznamy.</p></div></details>
   </section>

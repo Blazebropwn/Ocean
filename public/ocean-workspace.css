@@ -92,16 +92,7 @@
 .goals-card header,.positions-card header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; flex:none; }
 .goals-card h2,.positions-card h2 { margin:0; font-size:19px; font-weight:600; letter-spacing:-.02em; }
 .panel-heading p { margin:6px 0 0; color:var(--muted); font-size:13px; line-height:1.5; }
-.dca-goals { display:flex; flex:1; flex-direction:column; gap:18px; }
-.dca-goals h3 { margin:0; color:var(--ink-soft); font-size:12px; font-weight:500; }
 .goals-card header > span { font-size:10px; color:var(--muted); }
-#holdings-goals { display:flex; flex:1; flex-direction:column; justify-content:space-evenly; min-height:0; gap:10px; padding-top:0; }
-.goal-row { display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center; }
-.goal-row > strong { font-size:14px; font-weight:550; }
-.goal-row > span { color:var(--ink-soft); text-align:right; font-size:12px; font-variant-numeric:tabular-nums; }
-.goal-row > small { color:var(--ink-soft); font-size:13px; text-align:right; min-width:49px; font-variant-numeric:tabular-nums; }
-.goal-track { grid-column:1/-1; height:6px; background:#2a3339; border-radius:8px; overflow:hidden; }
-.goal-track i { display:block; height:100%; background:var(--cyan); border-radius:inherit; }
 .positions-card { grid-area:positions; padding:24px; display:flex; flex-direction:column; min-height:0; }
 #position-count { display:inline-grid; place-items:center; color:var(--muted); background:#273037; border-radius:6px; min-width:23px; height:23px; margin-left:6px; font-size:11px; }
 .ocean-workspace .app-status { margin:0; padding:7px 10px; font-size:12px; font-weight:500; }
@@ -224,7 +215,6 @@
  .portfolio-surface[data-compact-view=positions] .positions-card { display:flex; }
  .goals-card { padding:16px 18px; }
  .goals-card h2,.positions-card h2 { font-size:18px; }
- #holdings-goals { padding-top:0; gap:10px; }
  .ocean-workspace .overview-footer { gap:8px; font-size:12px; }
  .overview-footer > div { gap:4px; }
  .vault-metrics { gap:10px; }
@@ -304,7 +294,6 @@
 .dca-card { gap:24px; }
 .dca-card .dca-amount-control { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; width:100%; }
 .dca-card .dca-amount-control strong { margin:0; }
-.dca-card #holdings-goals { min-height:110px; padding:0; }
 .dca-metrics { display:grid; grid-template-columns:1fr 1fr; gap:16px; padding-top:18px; border-top:1px solid var(--line); }
 .dca-metrics > div:last-child { text-align:right; }
 .dca-metrics > div { min-width:0; }
@@ -316,7 +305,8 @@
 #dca-dialog .dca-dialog-actions { margin-top:24px; }
 #dca-dialog .dca-dialog-actions button { margin-top:0; }
 @media (max-width:760px), (max-height:650px) {
- .portfolio-surface[data-compact-view=portfolio] .dca-card > :is(header,.dca-amount-control,.dca-metrics) { display:none; }
+ .portfolio-surface[data-compact-view=portfolio] .dca-card { display:none; }
+ .portfolio-surface[data-compact-view=portfolio] { grid-template-rows:auto minmax(min-content,1fr) auto; grid-template-areas:"tabs" "assets" "footer"; }
  .portfolio-surface[data-compact-view=automation] .dca-card { display:flex; grid-area:automation; }
  .dca-card .dca-toggle { border:0; padding:0; gap:10px; }
  .dca-card { gap:16px; }
