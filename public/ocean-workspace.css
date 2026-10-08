@@ -1,4 +1,43 @@
 /* A compact workspace that can scroll when text or controls need more room. */
+.ocean-workspace.arcade-mode .workspace-head { display:none; }
+.ocean-workspace #arcade-view { display:grid; grid-template-columns:minmax(0,1fr) 270px; gap:32px; flex:1 0 auto; min-height:520px; height:100%; border:0; border-radius:0; background:none; box-shadow:none; overflow:visible; letter-spacing:0; }
+.ocean-workspace #arcade-game { min-width:0; padding:0; grid-template-rows:56px minmax(300px,1fr) 64px 44px; }
+.ocean-workspace .game-top h2 { margin:0; font-size:16px; font-weight:600; letter-spacing:0; }
+.ocean-workspace .game-score { display:flex; align-items:center; gap:14px; }
+.ocean-workspace .game-score small { letter-spacing:0; font-family:inherit; font-size:11px; font-weight:500; line-height:1.4; }
+.ocean-workspace .game-score strong { margin:0; min-width:90px; font-size:28px; font-variant-numeric:tabular-nums; }
+.ocean-workspace #arcade-game .game-canvas-wrap { margin:8px 0; border-radius:8px; }
+.game-controls { display:grid; place-items:center; }
+.game-controls button { width:168px; height:44px; padding:0 12px; border:1px solid var(--line-hot); border-radius:6px; background:var(--cyan); color:#122b25; font-family:inherit; font-size:14px; font-weight:600; line-height:1; cursor:pointer; }
+.game-controls button:disabled { opacity:.6; cursor:wait; }
+.ocean-workspace #arcade-game .game-bottom { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; font-size:12px; align-items:center; }
+#game-hint { overflow-wrap:anywhere; line-height:1.4; }
+#game-best { margin-left:8px; font-variant-numeric:tabular-nums; }
+#sonar-leaders-desktop { border-left:1px solid var(--line); padding-left:24px; }
+#sonar-leaders header { display:flex; align-items:center; justify-content:space-between; height:56px; }
+#sonar-leaders h2 { margin:0; font-size:14px; font-weight:600; letter-spacing:0; }
+.sonar-table { width:100%; table-layout:fixed; border-collapse:collapse; font-size:13px; }
+.sonar-table th { height:40px; color:var(--muted); font-size:11px; font-weight:400; text-align:left; }
+.sonar-table td { height:56px; border-bottom:1px solid var(--line); overflow-wrap:anywhere; }
+.sonar-table th:first-child,.sonar-table td:first-child { width:28px; color:var(--muted); }
+.sonar-table th:last-child,.sonar-table td:last-child { width:78px; text-align:right; font-variant-numeric:tabular-nums; }
+.sonar-table .is-player { color:var(--cyan); background:#77d8c40a; }
+.sonar-table tbody tr:first-child td:first-child { color:#dec57b; }
+#sonar-leaders-status { min-height:36px; margin:16px 0 0; font-size:12px; line-height:1.5; color:var(--muted); }
+.sonar-icon { width:44px; height:44px; padding:10px; flex:none; align-items:center; justify-content:center; border:1px solid var(--line); border-radius:6px; background:transparent; color:var(--ink); cursor:pointer; }
+.sonar-icon svg { width:22px; height:22px; }
+#sonar-leaders-open,#sonar-leaders-close { display:none; }
+#sonar-leaders-dialog { width:min(360px,calc(100vw - 32px)); max-height:calc(100dvh - 32px); padding:16px 20px; overflow:auto; border:1px solid var(--line); border-radius:8px; background:var(--panel); color:var(--ink); }
+#sonar-leaders-dialog::backdrop { background:#03080bb0; }
+#sonar-leaders-dialog #sonar-leaders-close { display:flex; }
+@media (max-width:760px) {
+ .ocean-workspace #arcade-view { grid-template-columns:minmax(0,1fr); gap:0; min-height:460px; }
+ .ocean-workspace #arcade-game { grid-template-rows:52px minmax(270px,1fr) 60px 62px; }
+ #sonar-leaders-desktop { display:none; }
+ #sonar-leaders-open { display:flex; }
+ .ocean-workspace #arcade-game .game-bottom { grid-template-columns:1fr; grid-template-rows:32px 22px; gap:0; text-align:center; font-size:11px; }
+ .ocean-workspace .game-score strong { min-width:72px; font-size:24px; }
+}
 .account-suspended .app-view,.ocean-workspace.account-suspended .workspace-head { display:none !important; }
 .account-lock { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:28px 0; gap:16px; }
 .account-lock-icon { font-size:32px; }
