@@ -17,6 +17,9 @@ Nové pokusy mají hitbox rozšířený o 0,04 radiánu (přibližně 2,3 stupn�
 na každé straně viditelného sektoru. Přesah dává základní body za zásah,
 nikoli bonus za přesnost. Hodnotu vydává a ukládá server s každým kolem;
 starší rozehrané pokusy bez této hodnoty se vyhodnotí podle původních pravidel.
+Založení nové hry vyžaduje aktuální `clientRevision`, oddělenou od verze
+bodování. Otevřená stará stránka tak nemůže po nasazení dál zakládat hry
+s chybným ovládáním; server vyzve k obnovení. Dosavadní rekordy se zachovávají.
 Zásah dává `round(100 + přesnost * 100 + (počet zásahů - 1) * 10)` bodů.
 Chybný zásah ukončí hru. Server vydává sektory a ověřuje výsledek z časů
 zásahů přes `/api/arcade/sonar/runs`; klient neposílá důvěryhodné skóre.

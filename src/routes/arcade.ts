@@ -4,7 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Config } from '../config.js';
 import type { OceanDatabase } from '../db.js';
 import { currentUser, hasApprovedAccess } from './shared.js';
-import { createSonarRounds, RUN_DURATION_MS, scoreSonarRun, SONAR_VERSION, type SonarRound } from '../arcade/sonar.js';
+import { createSonarRounds, RUN_DURATION_MS, scoreSonarRun, SONAR_VERSION, SONAR_CLIENT_REVISION, type SonarRound } from '../arcade/sonar.js';
 
 const finishSchema = z.object({ taps: z.array(z.number().finite().min(0).max(RUN_DURATION_MS)).max(256), durationMs: z.number().finite().min(0).max(RUN_DURATION_MS) }).strict();
 export function registerArcadeRoutes(app: FastifyInstance, db: OceanDatabase, config: Config) {
@@ -25,7 +25,8 @@ export function registerArcadeRoutes(app: FastifyInstance, db: OceanDatabase, co
     if (!user) return reply.code(401).send({ error: 'Nejste přihlášeni.' });
     if (!hasApprovedAccess(user, config)) return reply.code(403).send({ error: 'Účet nemá přístup ke hře.' });
     if (request.headers.origin !== config.appOrigin) return reply.code(403).send({ error: 'Neplatný původ požadavku.' });
-    if ((request.body as { version?: string } | null)?.version !== SONAR_VERSION)
+    const client = request.body as { version?: string; clientRevision?: number } | null;
+    if (client?.version !== SONAR_VERSION || client.clientRevision !== SONAR_CLIENT_REVISION)
       return reply.code(409).send({ error: 'Hra byla aktualizována. Obnov stránku.' });
     const id = randomUUID(), rounds = createSonarRounds(), now = Date.now();
     db.transaction(() => {

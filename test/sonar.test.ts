@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import { buildApp } from '../src/app.js';
 import { openDatabase } from '../src/db.js';
 import { hashToken } from '../src/security.js';
-import { createSonarRounds, scoreSonarRun, SONAR_VERSION, type SonarRound } from '../src/arcade/sonar.js';
+import { createSonarRounds, scoreSonarRun, SONAR_VERSION, SONAR_CLIENT_REVISION, type SonarRound } from '../src/arcade/sonar.js';
 import type { Config } from '../src/config.js';
 
 const config: Config = {port:0,host:'127.0.0.1',databasePath:':memory:',appOrigin:'http://localhost',isProduction:false,manualApprovalEnabled:true};
 const uid='usr_'+'1'.repeat(32), other='usr_'+'2'.repeat(32);
 const headers={cookie:'zero_session=player',origin:config.appOrigin};
+const runPayload={version:SONAR_VERSION,clientRevision:SONAR_CLIENT_REVISION};
 function fixture() {
   const db=openDatabase(':memory:');
   for(const [id,name] of [[uid,'player'],[other,'other']]) {
@@ -44,9 +45,9 @@ test('SONAR authenticates and checks approval, origin and account suspension',as
   const {app,db}=fixture();
   try {
     assert.equal((await app.inject({url:'/api/arcade/sonar/leaderboard'})).statusCode,401);
-    assert.equal((await app.inject({method:'POST',url:'/api/arcade/sonar/runs',headers:{cookie:headers.cookie},payload:{version:SONAR_VERSION}})).statusCode,403);
+    assert.equal((await app.inject({method:'POST',url:'/api/arcade/sonar/runs',headers:{cookie:headers.cookie},payload:runPayload})).statusCode,403);
     db.prepare('UPDATE users SET approved_at=NULL WHERE id=?').run(uid);
-    assert.equal((await app.inject({method:'POST',url:'/api/arcade/sonar/runs',headers,payload:{version:SONAR_VERSION}})).statusCode,403);
+    assert.equal((await app.inject({method:'POST',url:'/api/arcade/sonar/runs',headers,payload:runPayload})).statusCode,403);
     db.prepare("UPDATE users SET approved_at=datetime('now'), suspended_at=datetime('now') WHERE id=?").run(uid);
     assert.equal((await app.inject({url:'/api/arcade/sonar/leaderboard',headers})).json().code,'ACCOUNT_SUSPENDED');
   } finally {await app.close();}
@@ -56,7 +57,7 @@ test('SONAR recomputes results, persists each player best, and makes submission 
   let now=1_900_000_000_000;t.mock.method(Date,'now',()=>now);
   const {app,db}=fixture();
   try {
-    const start=await app.inject({method:'POST',url:'/api/arcade/sonar/runs',headers,payload:{version:SONAR_VERSION}});assert.equal(start.statusCode,201);
+    const start=await app.inject({method:'POST',url:'/api/arcade/sonar/runs',headers,payload:runPayload});assert.equal(start.statusCode,201);
     const run=start.json(),taps=perfectTaps(run.rounds.slice(0,3)),durationMs=taps.at(-1)!+10;
     now+=Math.ceil(durationMs);
     const url=`/api/arcade/sonar/runs/${run.id}/finish`,payload={taps,durationMs};
@@ -65,7 +66,7 @@ test('SONAR recomputes results, persists each player best, and makes submission 
     const result=await app.inject({method:'POST',url,headers,payload});assert.equal(result.statusCode,200);assert.equal(result.json().score,630);
     assert.equal((await app.inject({method:'POST',url,headers,payload})).json().replayed,true);
     const rank=(await app.inject({url:'/api/arcade/sonar/leaderboard',headers})).json();assert.deepEqual(rank.leaders,[{username:'player',score:630}]);assert.equal(rank.personalBest,630);
-    const next=(await app.inject({method:'POST',url:'/api/arcade/sonar/runs',headers,payload:{version:SONAR_VERSION}})).json();
+    const next=(await app.inject({method:'POST',url:'/api/arcade/sonar/runs',headers,payload:runPayload})).json();
     await app.inject({method:'POST',url:`/api/arcade/sonar/runs/${next.id}/finish`,headers,payload:{taps:[],durationMs:0}});
     assert.equal((await app.inject({url:'/api/arcade/sonar/leaderboard',headers})).json().personalBest,630);
     assert.equal(db.prepare('SELECT count(*) FROM tide_ledger').pluck().get(),0,'Arcade must never mutate TIDE');
@@ -78,13 +79,28 @@ test('SONAR rejects impossible timing, expired attempts and previous parallel ru
   let now=1_900_000_000_000;t.mock.method(Date,'now',()=>now);
   const {app}=fixture();
   try {
-    const start=async()=> (await app.inject({method:'POST',url:'/api/arcade/sonar/runs',headers,payload:{version:SONAR_VERSION}})).json();
+    const start=async()=> (await app.inject({method:'POST',url:'/api/arcade/sonar/runs',headers,payload:runPayload})).json();
     const run=await start(),url=`/api/arcade/sonar/runs/${run.id}/finish`;
     assert.equal((await app.inject({method:'POST',url,headers,payload:{taps:[],durationMs:10000}})).statusCode,400);
     const next=await start();
     assert.equal((await app.inject({method:'POST',url,headers,payload:{taps:[],durationMs:0}})).json().score,0);
     now+=700_000;
     assert.equal((await app.inject({method:'POST',url:`/api/arcade/sonar/runs/${next.id}/finish`,headers,payload:{taps:[],durationMs:0}})).statusCode,400);
+  } finally {await app.close();}
+});
+
+test('SONAR rejects stale browser code without replacing an active run or resetting records',async()=>{
+  const {app,db}=fixture();
+  try {
+    const active=(await app.inject({method:'POST',url:'/api/arcade/sonar/runs',headers,payload:runPayload})).json();
+    for (const clientRevision of [undefined,0,1,3,'2']) {
+      const response=await app.inject({method:'POST',url:'/api/arcade/sonar/runs',headers,payload:{version:SONAR_VERSION,clientRevision}});
+      assert.equal(response.statusCode,409);
+      assert.match(response.json().error,/Obnov stránku/);
+    }
+    assert.equal(db.prepare('SELECT count(*) FROM sonar_runs').pluck().get(),1);
+    assert.equal(db.prepare('SELECT finished FROM sonar_runs WHERE id=?').pluck().get(active.id),0);
+    assert.equal((await app.inject({method:'POST',url:`/api/arcade/sonar/runs/${active.id}/finish`,headers,payload:{taps:[],durationMs:0}})).statusCode,200);
   } finally {await app.close();}
 });
 
@@ -117,7 +133,7 @@ test('SONAR keeps legacy scores separate and finishes an in-flight legacy run wi
     assert.equal(db.prepare("SELECT score FROM sonar_records WHERE version='sonar-v2'").pluck().get(),100);
     const board=(await app.inject({url:'/api/arcade/sonar/leaderboard',headers})).json();
     assert.deepEqual(board.leaders,[]);assert.equal(board.personalBest,0);
-    const run=(await app.inject({method:'POST',url:'/api/arcade/sonar/runs',headers,payload:{version:SONAR_VERSION}})).json();
+    const run=(await app.inject({method:'POST',url:'/api/arcade/sonar/runs',headers,payload:runPayload})).json();
     const taps=perfectTaps(run.rounds.slice(0,1)),durationMs=taps[0]!+10;now+=Math.ceil(durationMs);
     assert.equal((await app.inject({method:'POST',url:`/api/arcade/sonar/runs/${run.id}/finish`,headers,payload:{taps,durationMs}})).json().score,200);
     assert.equal(db.prepare('SELECT count(*) FROM sonar_records WHERE user_id=?').pluck().get(uid),2);
