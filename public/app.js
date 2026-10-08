@@ -646,7 +646,7 @@ function renderPortfolio(snapshot) {
   const positions = snapshot.positions.filter((position) => position.inPosition);
   $("#position-count").textContent = String(positions.length);
   list.classList.toggle("compact", positions.length >= 3);
-  if (!positions.length) list.append(node("p", "positions-empty", snapshot.entriesPaused ? "Nové obchody jsou pozastavené." : "Žádná otevřená pozice. Čekám na signál."));
+  if (!positions.length) list.append(node("p", "positions-empty", snapshot.transparency?.safeMode ? "Nové nákupy blokuje kontrola účtu." : snapshot.entriesPaused ? "Nové obchody jsou pozastavené." : "Žádná otevřená pozice. Čekám na signál."));
   for (const position of positions) {
     const asset = position.symbol.replace(snapshot.balance.asset, "");
     const holding = assets.find((item) => item.asset === asset);
@@ -690,10 +690,6 @@ function renderPortfolio(snapshot) {
   for (const cooldown of snapshot.manualClose?.cooldowns || []) {
     list.append(node("p", "position-cooldown", `${cooldown.symbol.replace(snapshot.balance.asset, "")} · Pauza po ručním uzavření do ${formatDate(cooldown.until)}. ${snapshot.entriesPaused ? "Bot je dál celkově pozastavený." : "Poté rozhodne další pravidelná kontrola."}`));
   }
-  for (const residual of snapshot.manualClose?.residuals || []) {
-    const asset = residual.symbol.replace(snapshot.balance.asset, "");
-    list.append(node("p", "position-cooldown", `${asset} · Evidovaný zbytek: ${formatQuantity(residual.quantity)} ${asset}. Zůstává na účtu mimo otevřené pozice.`));
-  }
   const closeRequest = snapshot.manualClose?.request;
   if (closeRequest && ["queued", "cancelling", "ready", "selling"].includes(closeRequest.status)) {
     list.append(node("p", "position-cooldown", snapshot.transparency?.safeMode ? "Ruční uzavření čeká na ověření burzou. Nový prodej se neodesílá." : "Ruční uzavření se zpracovává. Potvrzení může trvat přibližně minutu."));
@@ -715,6 +711,14 @@ function renderPortfolio(snapshot) {
 }
 
 function renderStrategy(snapshot) {
+  const residuals = snapshot.manualClose?.residuals || [];
+  $("#strategy-residuals-detail").classList.toggle("hidden", residuals.length === 0);
+  const residualList = $("#strategy-residuals");
+  residualList.replaceChildren();
+  for (const residual of residuals) {
+    const asset = residual.symbol.replace(snapshot.balance.asset, "");
+    residualList.append(node("p", "", `${asset}: ${formatQuantity(residual.quantity)} ${asset} · mimo otevřené pozice`));
+  }
   const transparency = snapshot.transparency;
   const statuses = { SAFE_MODE: "Bezpečnostní režim · nákupy blokované", PAUSED: "Nové obchody pozastavené", UNVERIFIED: "Čekám na ověření účtu", PERSISTENCE_REQUIRED: "Nákupy čekají na uložení historie", ACTIVE: "Strategie aktivní" };
   const status = $("#strategy-status");
@@ -727,6 +731,14 @@ function renderStrategy(snapshot) {
     : "Soulad účtu s Binance není potvrzený. Poslední údaje nepovažuj za aktuální potvrzení ochrany.";
   if (transparency?.historyPending) check.textContent += " Historie potvrzených obchodů čeká na uložení.";
   check.classList.toggle("warning", !verified || Boolean(transparency?.historyPending));
+  const issues = $("#reconciliation-issues");
+  issues.replaceChildren();
+  if (!verified || transparency?.safeMode) {
+    for (const issue of transparency?.reconciliation?.issues || []) {
+      issues.append(node("p", "warning", `${issue.symbol ? `${issue.symbol}: ` : ""}${issue.message || "Kontrola účtu vyžaduje pozornost správce Ocean."}`));
+    }
+  }
+  if (transparency?.safeMode) issues.append(node("p", "", "Obnovení nákupů je blokované do vyřešení nesouladu a úspěšné kontroly účtu. Kontaktuj správce Ocean; opakované obnovení tuto kontrolu neobejde."));
   const decisions = transparency?.decisions || [];
   const risk = $("#strategy-risk"); risk.replaceChildren();
   const limits = decisions[0]?.risk;
@@ -867,9 +879,9 @@ async function loadKryptotron() {
     const needsAttention = Boolean(kryptotron.lastError) || ["degraded", "offline", "unknown"].includes(kryptotron.status);
     setSystemState(needsAttention ? "Vyžaduje pozornost" : "Spojení aktivní", needsAttention);
     renderVault(kryptotron);
-    const status = entriesPaused ? "Pozastaveno" : open ? "V pozici" : (statuses[kryptotron.status] || "Propojeno");
+    const status = kryptotron.transparency?.safeMode ? "Nákupy blokované" : entriesPaused ? "Pozastaveno" : open ? "V pozici" : (statuses[kryptotron.status] || "Propojeno");
     $("#kryptotron-status").lastChild.textContent = ` ${status}`;
-    $("#kryptotron-status").classList.toggle("warning", kryptotron.status === "degraded" || kryptotron.status === "offline");
+    $("#kryptotron-status").classList.toggle("warning", Boolean(kryptotron.transparency?.safeMode) || kryptotron.status === "degraded" || kryptotron.status === "offline");
     const balanceAt = Date.parse(kryptotron.balance.updatedAt);
     const balanceStale = !Number.isFinite(balanceAt) || Date.now() - balanceAt > 180_000 || balanceAt > Date.now() + 60_000;
     const holdingsStale = !kryptotron.holdings || kryptotron.holdings.stale;
@@ -918,9 +930,9 @@ async function loadKryptotron() {
     $("#bot-next-check").textContent = formatDate(kryptotron.nextCheckAt);
     $("#bot-error-wrap").classList.toggle("hidden", !kryptotron.lastError);
     $("#bot-error").textContent = kryptotron.lastError || "";
-    $("#bot-control").textContent = entriesPaused ? "Obnovit" : "Pozastavit";
+    $("#bot-control").textContent = entriesPaused ? (kryptotron.transparency?.safeMode ? "Důvod blokace" : "Obnovit") : "Pozastavit";
     $("#bot-control").classList.toggle("resume", entriesPaused);
-    $("#bot-control").disabled = Boolean(kryptotron.transparency?.safeMode);
+    $("#bot-control").disabled = false;
     if (kryptotron.transparency?.historyPending) setSystemState("Čekám na uložení historie", true);
     if (kryptotron.transparency?.reconciliation?.status !== "OK") setSystemState("Čekám na ověření účtu", true);
     if (kryptotron.transparency?.safeMode) setSystemState("Bezpečnostní režim", true);
@@ -1025,7 +1037,7 @@ $("#disconnect-binance").addEventListener("click", async (event) => {
 });
 
 function renderDcaPortfolio(snapshot) {
-  // Cost, goals and valuation all use the same bounded DCA purchase ledger.
+  // Cost and valuation use the same bounded DCA purchase ledger.
   const purchases = snapshot.dca.purchases || [];
   const quantities = new Map();
   let invested = 0;
@@ -1049,21 +1061,6 @@ function renderDcaPortfolio(snapshot) {
   valuation.title = value === null ? "Čekám na aktuální ceny všech nakoupených aktiv." : `${scope} Nakoupené množství oceněné posledními dostupnými cenami (${formatDate(snapshot.holdings?.capturedAt)}). Nezohledňuje pozdější prodeje, převody ani poplatky.`;
   valuation.classList.toggle("positive", value !== null && value > invested);
   valuation.classList.toggle("negative", value !== null && value < invested);
-  const goals = $("#holdings-goals"); goals.replaceChildren();
-  for (const [asset, target] of [["BTC", 1], ["ETH", 10], ["SOL", 100]]) {
-    const quantity = quantities.get(asset) || 0;
-    const progress = Math.min(100, quantity / target * 100);
-    const row = node("div", "goal-row");
-    const percentage = progress > 0 && progress < 0.01 ? "< 0,01 %" : `${new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 2 }).format(progress)} %`;
-    row.append(node("strong", "", asset), node("small", "", percentage));
-    const track = node("div", "goal-track"); const fill = node("i"); fill.style.width = `${progress}%`;
-    track.setAttribute("role", "progressbar"); track.setAttribute("aria-label", `DCA cíl ${target} ${asset}`);
-    track.setAttribute("aria-valuemin", "0"); track.setAttribute("aria-valuemax", "100");
-    track.setAttribute("aria-valuenow", String(progress));
-    track.setAttribute("aria-valuetext", `${formatQuantity(quantity)} z ${target} ${asset}`);
-    row.title = `${formatQuantity(quantity)} / ${target} ${asset} · ${scope}`;
-    track.append(fill); row.append(track); goals.append(row);
-  }
 }
 
 function renderEvents(events) {
@@ -1084,6 +1081,10 @@ function renderEvents(events) {
 
 $("#bot-control").addEventListener("click", async () => {
   const button = $("#bot-control");
+  if (entriesPaused && vaultSnapshot?.transparency?.safeMode) {
+    $("#strategy-dialog").showModal();
+    return;
+  }
   button.disabled = true;
   try {
     const result = await request("/api/kryptotron/control", {

@@ -116,7 +116,10 @@ export async function processTelegramMessage(db: OceanDatabase, config: Config, 
     const positions = snapshot.positions.filter((item) => item.inPosition);
     const position = positions.map((item) => `${item.symbol} (${item.protectionActive ? "ochrana ověřena" : "ověř ochranu"})`).join(", ") || "bez pozice";
     const status = snapshot.transparency?.safeMode ? "bezpečnostní režim · nové nákupy blokované" : snapshot.entriesPaused ? "pozastaven" : snapshot.status;
-    return send(chatId, `🌊 Ocean\nKryptotron: ${status}\nBalance: ${balance}\nPozice: ${position}`);
+    const issues = snapshot.transparency?.safeMode
+      ? snapshot.transparency.reconciliation.issues.slice(0, 5).map(issue => `${issue.symbol ? `${issue.symbol}: ` : ""}${issue.message}`)
+      : [];
+    return send(chatId, [`🌊 Ocean\nKryptotron: ${status}\nBalance: ${balance}\nPozice: ${position}`, ...issues].join("\n"));
   }
   return send(chatId, HELP_TEXT);
 }

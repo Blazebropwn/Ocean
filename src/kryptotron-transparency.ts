@@ -25,6 +25,14 @@ const record = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const number = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? value : null;
 const date = (value: unknown) => typeof value === "string" && Number.isFinite(Date.parse(value)) ? value : null;
+const reconciliationReasons: Record<string, string> = {
+  INVENTORY_MISMATCH: "Na burze je méně prostředků než v evidenci Ocean. Je nutné porovnat historii obchodů a převodů, včetně změn mimo Ocean.",
+  UNATTRIBUTED_BALANCE: "Na burze jsou prostředky bez přiřazení v evidenci Ocean. Je nutné ověřit jejich původ.",
+  POSITION_BALANCE_MISMATCH: "Zůstatek na burze neodpovídá evidované otevřené pozici. Je nutné ověřit její množství.",
+  UNKNOWN_OPEN_ORDER: "Na burze je otevřená objednávka, kterou Ocean neeviduje. Je nutné ověřit její původ.",
+  PENDING_EXECUTION: "Objednávka čeká na potvrzení burzou. Kontrola jejího výsledku pokračuje automaticky.",
+  PROTECTION_ERROR: reasons.PROTECTION_ERROR!,
+};
 
 /** Whitelisted user explanations; raw exception text stays in the worker log. */
 export function readKryptotronTransparency(data: Record<string, unknown>, now = Date.now()) {
@@ -36,7 +44,8 @@ export function readKryptotronTransparency(data: Record<string, unknown>, now = 
   const issues = Array.isArray(rawCheck.issues) ? rawCheck.issues.flatMap((value) => {
     const issue = record(value);
     return typeof issue.code === "string" && /^[A-Z_]{1,64}$/.test(issue.code)
-      ? [{ code: issue.code, symbol: typeof issue.symbol === "string" && /^[A-Z0-9]{3,20}$/.test(issue.symbol) ? issue.symbol : null }]
+      ? [{ code: issue.code, symbol: typeof issue.symbol === "string" && /^[A-Z0-9]{3,20}$/.test(issue.symbol) ? issue.symbol : null,
+        message: reconciliationReasons[issue.code] ?? "Kontrola účtu vyžaduje ověření evidence a objednávek. Kontaktuj správce Ocean." }]
       : [];
   }).slice(0, 20) : [];
   const decisions = Object.entries(record(data.decisions)).flatMap(([symbol, value]) => {

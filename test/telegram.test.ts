@@ -150,7 +150,8 @@ test("failed Risk Agent notification contains a concise reason", () => {
 test("Telegram explains blocked resume and never promises unverified protection", async (t) => {
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });
-  let state = { entries_paused: true, safe_mode: true, events: [], positions: {
+  let state = { entries_paused: true, safe_mode: true, events: [],
+    reconciliation: { status: "UNRESOLVED", issues: [{ code: "INVENTORY_MISMATCH", symbol: "BTCUSDC", message: "PRIVATE_DIAGNOSTIC" }] }, positions: {
     BTCUSDC: { in_position: true, position_qty: .00024, protection_status: "CANCELLED" },
     ETHUSDC: { in_position: true, position_qty: .0071, protection_status: "CANCELLED" },
   } };
@@ -178,6 +179,8 @@ test("Telegram explains blocked resume and never promises unverified protection"
   await processTelegramMessage(db, config, { chat: { id: 77 }, text: "/status" }, send);
   assert.match(messages.at(-1)!, /bezpečnostní režim/);
   assert.match(messages.at(-1)!, /BTCUSDC \(ověř ochranu\), ETHUSDC \(ověř ochranu\)/);
+  assert.match(messages.at(-1)!, /BTCUSDC: Na burze je méně prostředků/);
+  assert.doesNotMatch(messages.at(-1)!, /PRIVATE_DIAGNOSTIC/);
   globalThis.fetch = async () => { throw new Error("private transport details"); };
   await processTelegramMessage(db, config, { chat: { id: 77 }, text: "/resume" }, send);
   assert.match(messages.at(-1)!, /nepodařilo potvrdit/);
