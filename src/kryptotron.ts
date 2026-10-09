@@ -1,4 +1,5 @@
 import { readHoldings } from "./holdings.js";
+import { assertNoReset, resetPending } from "./account-reset.js";
 import { pausedAutomation } from "./account-pause.js";
 import { mergeProtectionRestore, protectionRestoreView, queueProtectionRestore, restoreWouldRewind } from "./protection-restore.js";
 import { readKryptotronTransparency } from "./kryptotron-transparency.js";
@@ -178,6 +179,7 @@ export async function loadKryptotronState(url: string, key: string, stateKey: st
 async function saveKryptotronStateUnlocked(url: string, key: string, stateKey: string, data: Record<string, unknown>, mustPause?: () => boolean) {
   const latest = await loadKryptotronState(url, key, stateKey);
   if (!latest) throw new Error("Stav instance neexistuje; zápis byl odmítnut");
+  if ((data.state_epoch ?? null) !== (latest.state_epoch ?? null)) throw new Error("Období účtu se změnilo. Worker musí znovu načíst stav.");
   if (completedCloseWouldRewind(data.manual_close, latest.manual_close)) {
     throw new Error("Ruční prodej je již potvrzený; worker musí obnovit autoritativní stav");
   }
@@ -189,14 +191,15 @@ async function saveKryptotronStateUnlocked(url: string, key: string, stateKey: s
   const controls = Array.isArray(latest.events) ? latest.events.filter(value => object(value).type === "CONTROL") : [];
   const events = [...new Map([...controls, ...runtimeEvents].map(value => [JSON.stringify(value), value])).values()]
     .sort((a, b) => String(object(b).at).localeCompare(String(object(a).at))).slice(0, 20);
-  data = { ...data, environment: latest.environment, entries_paused: latest.entries_paused !== false,
+  data = { ...data, state_epoch: latest.state_epoch, history_started_at: latest.history_started_at,
+    account_reset: latest.account_reset, environment: latest.environment, entries_paused: latest.entries_paused !== false,
     events,
     manual_close: mergeManualClose(data.manual_close, latest.manual_close),
     protection_restore: mergeProtectionRestore(data.protection_restore, latest.protection_restore),
     dca: { ...dca, enabled: savedDca.enabled === true, amount: savedDca.amount,
       test_request: savedRequest.id && savedRequest.id !== request.id ? savedRequest : dca.test_request },
     streak: { ...object(data.streak), enabled: object(latest.streak).enabled === true } };
-  if (mustPause?.()) data = pausedAutomation(data);
+  if (mustPause?.() || resetPending(latest)) data = pausedAutomation(data);
   const response = await fetch(`${url}/rest/v1/bot_state?key=eq.${encodeURIComponent(stateKey)}`, {
     method: "PATCH",
     headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=minimal" },
@@ -261,6 +264,7 @@ async function setKryptotronEntriesPausedUnlocked(url: string, key: string, entr
   const states = await supabaseRows(url, key, statePath(stateKey));
   const state = states[0];
   if (!state?.data || typeof state.data !== "object") throw new Error("Stav Kryptotronu neexistuje");
+  if (!entriesPaused) assertNoReset(state.data as Record<string, unknown>);
   if (!entriesPaused && (state.data as Record<string, unknown>).safe_mode === true) {
     throw new Error("Obnovení blokuje bezpečnostní režim. Nejdřív ověř stav účtu a objednávek.");
   }
@@ -291,6 +295,7 @@ async function setDcaEnabledUnlocked(url: string, key: string, enabled: boolean,
   const state = states[0];
   if (!state?.data || typeof state.data !== "object") throw new Error("Stav Kryptotronu neexistuje");
   const data: Record<string, unknown> = { ...(state.data as Record<string, unknown>) };
+  if (enabled) assertNoReset(data);
   const dca = data.dca && typeof data.dca === "object" ? data.dca as Record<string, unknown> : {};
   data.dca = { ...dca, enabled };
   const events = Array.isArray(data.events) ? data.events : [];
@@ -329,6 +334,7 @@ async function requestTestDcaUnlocked(url: string, key: string, stateKey: string
   const state = states[0];
   if (!state?.data || typeof state.data !== "object") throw new Error("Stav Kryptotronu neexistuje");
   const data: Record<string, unknown> = { ...(state.data as Record<string, unknown>) };
+  assertNoReset(data);
   if (data.environment !== "testnet") throw new Error("Testovací nákup je dostupný pouze na Testnetu");
   const dca = data.dca && typeof data.dca === "object" ? data.dca as Record<string, unknown> : {};
   const existing = dca.test_request && typeof dca.test_request === "object" ? dca.test_request as Record<string, unknown> : null;
@@ -353,6 +359,7 @@ async function setStreakEnabledUnlocked(url: string, key: string, enabled: boole
   const state = states[0];
   if (!state?.data || typeof state.data !== "object") throw new Error("Stav Kryptotronu neexistuje");
   const data: Record<string, unknown> = { ...(state.data as Record<string, unknown>) };
+  if (enabled) assertNoReset(data);
   const streak = data.streak && typeof data.streak === "object" ? data.streak as Record<string, unknown> : {};
   data.streak = { ...streak, enabled };
   const events = Array.isArray(data.events) ? data.events : [];
@@ -384,7 +391,7 @@ export async function loadKryptotronSnapshot(url: string, key: string, stateKey 
     protectionActivationPrice: Number(position.protection_activation_price ?? 0),
     protectionTrailingBips: Number(position.protection_trailing_bips ?? 0),
   }));
-  const trade = trades[0];
+  const trade = trades.find(item => !data.history_started_at || Date.parse(String(item.exit_time)) >= Date.parse(String(data.history_started_at)));
   const rawDca = data.dca && typeof data.dca === "object" ? data.dca as Record<string, unknown> : {};
   const rawStreak = data.streak && typeof data.streak === "object" ? data.streak as Record<string, unknown> : {};
   const rawStreakSession = rawStreak.session && typeof rawStreak.session === "object" ? rawStreak.session as Record<string, unknown> : {};
@@ -500,7 +507,7 @@ function runtimeStatus(value: unknown, heartbeat: unknown): KryptotronSnapshot["
 // Ocean currently owns one supervisor/server process. Serialize read-modify-write
 // operations per instance, including user commands and worker state publication.
 const stateWrites = new Map<string, Promise<unknown>>();
-function withStateLock<T>(url: string, stateKey: string, operation: () => Promise<T>): Promise<T> {
+export function withStateLock<T>(url: string, stateKey: string, operation: () => Promise<T>): Promise<T> {
   const id = `${url}:${stateKey}`;
   const previous = stateWrites.get(id) ?? Promise.resolve();
   const current = previous.catch(() => {}).then(operation);
@@ -527,6 +534,7 @@ export function requestManualClose(url: string, key: string, stateKey: string, s
   return withStateLock(url, stateKey, async () => {
     const data = await loadKryptotronState(url, key, stateKey);
     if (!data) throw new Error("Stav instance není dostupný.");
+    assertNoReset(data);
     const previous = data.manual_close;
     const request = queueManualClose(data, symbol, position);
     if (previous === request) return request;
@@ -545,6 +553,7 @@ export function requestProtectionRestore(url: string, key: string, stateKey: str
   return withStateLock(url, stateKey, async () => {
     const data = await loadKryptotronState(url, key, stateKey);
     if (!data) throw new Error("Stav instance není dostupný.");
+    assertNoReset(data);
     const previous = data.protection_restore;
     const request = queueProtectionRestore(data, symbol, position, protection);
     if (previous === request) return request;

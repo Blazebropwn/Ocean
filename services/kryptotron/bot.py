@@ -42,6 +42,7 @@ from utils import (
 )
 from order_safety import apply_filled_buy, classify_order, new_buy_intent, with_execution_fills
 from reconciliation import inspect_account
+from account_reset import process_account_reset
 from risk import entry_permission, position_budget, decision_snapshot
 from manual_close import active_request, position_id
 from protection_restore import active_restore, process_restore
@@ -210,6 +211,8 @@ def safety_failure(state, code, diagnostic):
 def reconcile_account(client, state, pair_filters):
     """Recover executions, fulfill explicit manual exits, then inspect the account."""
     try:
+        if process_account_reset(client, state, pair_filters, db.complete_account_reset):
+            return False
         reconcile_pending_order(client, state)
         reconcile_pending_protection(client, state)
         settle_pending_dca(client, state, save_state)
@@ -288,6 +291,10 @@ def reconcile_pending_order(client, state):
 def refresh_entries_control(state):
     remote_state = db.load_state()
     if remote_state is not None:
+        if remote_state.get("state_epoch") != state.get("state_epoch"):
+            state.clear()
+            state.update(copy.deepcopy(remote_state))
+        state["account_reset"] = copy.deepcopy(remote_state.get("account_reset") or {})
         remote_close = remote_state.get("manual_close") or {}
         pending = state.get("pending_order") or {}
         # A completion PATCH can commit even when its HTTP response is lost.

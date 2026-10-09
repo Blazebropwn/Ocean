@@ -9,5 +9,6 @@ import { accountSuspension } from "./007_account_suspension.js";
 import { sonarLeaderboard } from "./008_sonar_leaderboard.js";
 
 import { sonarRecordVersions } from "./009_sonar_record_versions.js";
+import { accountResetArchives } from "./010_account_reset_archives.js";
 
-export const databaseMigrations = [existingOceanSchema, agent001Foundation, adminAuditLog, workerNotifications, tideEconomy, genesisWaves, accountSuspension, sonarLeaderboard, sonarRecordVersions];
+export const databaseMigrations = [existingOceanSchema, agent001Foundation, adminAuditLog, workerNotifications, tideEconomy, genesisWaves, accountSuspension, sonarLeaderboard, sonarRecordVersions, accountResetArchives];

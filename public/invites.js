@@ -138,6 +138,13 @@ async function loadMembers() {
       } catch (error) { setInviteMessage(error.message); suspension.disabled = false; }
     });
     row.append(suspension);
+    if (member.instance?.configured) {
+      const reset = document.createElement("button");
+      reset.type = "button";
+      reset.textContent = "Znovu nastavit účet";
+      reset.addEventListener("click", () => openAccountReset(member));
+      row.append(reset);
+    }
     if (!member.approved) {
       const approve = document.createElement("button");
       approve.type = "button";
@@ -273,5 +280,65 @@ $("#copy-member-reset").addEventListener("click", async () => {
   $("#copy-member-reset").textContent = "Zkopírováno";
 });
 
+
+async function openAccountReset(member) {
+  const dialog = document.createElement("dialog");
+  dialog.className = "account-reset-dialog";
+  dialog.setAttribute("aria-labelledby", "account-reset-title");
+  dialog.innerHTML = `<form><h2 id="account-reset-title">Znovu nastavit účet</h2>
+    <p class="reset-member-name"></p>
+    <p>Dosavadní evidence se archivuje. Binance objednávky se neprodají ani nezruší. Reset vyžaduje uzavřené pozice a pouze drobné zůstatky obchodovaných mincí.</p>
+    <p>Nové nákupy, DCA i Streak zůstanou vypnuté. Bezpečnostní limity ztrát zůstávají zachované.</p>
+    <label>Potvrď uživatelské jméno<input name="confirmation" autocomplete="off" required></label>
+    <p class="reset-status" role="status">Načítám stav…</p>
+    <div class="reset-archives"></div>
+    <div class="admin-actions"><button type="button" class="reset-close">Zavřít</button><button type="button" class="reset-refresh">Obnovit stav</button><button type="submit" class="primary" disabled>Archivovat a nastavit znovu</button></div>
+  </form>`;
+  document.body.append(dialog);
+  const status = dialog.querySelector(".reset-status"), submit = dialog.querySelector('[type="submit"]');
+  const input = dialog.querySelector("input");
+  dialog.querySelector(".reset-member-name").textContent = `@${member.username}`;
+  let snapshot = null, sending = false, timer = null;
+  let requestId = crypto.randomUUID();
+  const enable = () => { submit.disabled = sending || !snapshot || snapshot.reset.request?.status === "queued" || (snapshot.reset.request?.id === requestId && snapshot.reset.request?.status === "completed") || input.value !== member.username; };
+  input.addEventListener("input", enable);
+  async function refresh() {
+    clearTimeout(timer);
+    try {
+      snapshot = await inviteRequest(`/api/members/${member.id}/account-reset`);
+      if (!dialog.open) return;
+      const request = snapshot.reset.request;
+      if (request?.id === requestId && request.status === "rejected") requestId = crypto.randomUUID();
+      status.textContent = request?.status === "queued" ? "Čekám na kontrolu Binance. Automatizace je pozastavená."
+        : request?.status === "completed" ? "Nové období bylo založeno. Nákupy zůstávají pozastavené; před obnovením musí projít kontrola účtu."
+        : request?.status === "rejected" ? request.error : "Připraveno k potvrzení.";
+      const archives = dialog.querySelector(".reset-archives"); archives.replaceChildren();
+      for (const archive of snapshot.archives) {
+        const link = document.createElement("a");
+        link.href = `/api/members/${member.id}/account-reset/archives/${encodeURIComponent(archive.id)}`;
+        link.textContent = `Archiv evidence · ${new Date(archive.createdAt).toLocaleString("cs-CZ")}`;
+        archives.append(link);
+      }
+      if (request?.status === "queued") timer = setTimeout(refresh, 5000);
+    } catch (error) { snapshot = null; status.textContent = error.message; }
+    enable();
+  }
+  dialog.querySelector(".reset-close").addEventListener("click", () => dialog.close());
+  dialog.querySelector(".reset-refresh").addEventListener("click", refresh);
+  dialog.addEventListener("close", () => { clearTimeout(timer); dialog.remove(); });
+  dialog.querySelector("form").addEventListener("submit", async event => {
+    event.preventDefault();
+    if (submit.disabled) return;
+    sending = true; enable();
+    try {
+      const result = await inviteRequest(`/api/members/${member.id}/account-reset`, { method:"POST", body:JSON.stringify({ confirmation:input.value, requestId, instanceId:snapshot.instanceId, epoch:snapshot.reset.epoch }) });
+      requestId = result.reset.request.id;
+      await refresh();
+    } catch (error) { status.textContent = error.message; }
+    finally { sending = false; enable(); }
+  });
+  dialog.showModal();
+  await refresh();
+}
 
 window.initAdmin = () => Promise.all([loadInvitations(), loadMembers()]);

@@ -6,6 +6,7 @@ import { validWorkerAccessToken } from "../worker-auth.js";
 import { loadKryptotronState, logKryptotronTrade, saveKryptotronState } from "../kryptotron.js";
 import { isMainnetEnabled } from "../supervisor.js";
 import { pausedAutomation } from "../account-pause.js";
+import { completeAccountReset, resetReportSchema } from "../account-reset-service.js";
 
 export function registerInternalWorkerRoutes(app: FastifyInstance, db: OceanDatabase, config: Config) {
   const suspended = (instanceId: string) => Boolean((db.prepare("SELECT u.suspended_at FROM users u JOIN kryptotron_instances i ON i.user_id = u.id WHERE i.id = ?").get(instanceId) as { suspended_at: string | null } | undefined)?.suspended_at);
@@ -23,6 +24,17 @@ export function registerInternalWorkerRoutes(app: FastifyInstance, db: OceanData
       return validWorkerAccessToken(authorization.slice(7), key, instanceId) ? instanceId : null;
     } catch { return null; }
   }
+
+  app.post("/internal/kryptotron/account-reset", async (request, reply) => {
+    const instanceId = internalWorker(request);
+    if (!instanceId) return reply.code(401).send({ error: "Unauthorized" });
+    const parsed = resetReportSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid reset report" });
+    if (!config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return reply.code(503).send({ error: "Unavailable" });
+    try {
+      return { state: await completeAccountReset(db, config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, instanceId, parsed.data) };
+    } catch { return reply.code(409).send({ error: "Reset must be verified again" }); }
+  });
 
   app.get("/internal/kryptotron/state", { config: { rateLimit: { max: 180, timeWindow: "1 minute" } } }, async (request, reply) => {
     const instanceId = internalWorker(request);

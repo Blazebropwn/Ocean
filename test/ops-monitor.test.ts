@@ -51,6 +51,7 @@ test("evaluateOpsAlert notifies once immediately, then reminds hourly, then conf
 
   const afterCooldown = evaluateOpsAlert(state, ["problem A"], t0 + 61 * 60_000);
   assert.match(afterCooldown.message ?? "", /problem A/);
+  assert.match(afterCooldown.message ?? "", /připomínka, stejný problém/);
   state = afterCooldown.nextState;
 
   const resolved = evaluateOpsAlert(state, [], t0 + 62 * 60_000);

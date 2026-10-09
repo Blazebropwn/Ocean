@@ -74,6 +74,12 @@ def save_state(state):
     return False
 
 
+def complete_account_reset(report):
+    response = requests.post(f"{_broker_url}/account-reset", headers=_broker_headers, json=report, timeout=8)
+    response.raise_for_status()
+    return response.json().get("state")
+
+
 def log_trade(symbol, entry_price, exit_price, qty, pnl, result, reason=None, entry_time=None, exit_time=None):
     payload = {
         "symbol": symbol,

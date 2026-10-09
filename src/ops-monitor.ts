@@ -4,6 +4,7 @@ import type { OceanDatabase } from "./db.js";
 import { readinessIssues } from "./readiness.js";
 import { sendOwnerTelegramAlert } from "./telegram.js";
 import { loadKryptotronState } from "./kryptotron.js";
+import { readKryptotronTransparency } from "./kryptotron-transparency.js";
 
 type MonitorLogger = Pick<FastifyBaseLogger, "info" | "warn" | "error">;
 const CHECK_INTERVAL_MS = 60_000;
@@ -33,9 +34,11 @@ export function workerStateIssues(state: Record<string, unknown> | null, label: 
   if (state.safe_mode === true) {
     const check = state.reconciliation as { issues?: Array<{ code?: string }> } | undefined;
     const onlyProtection = Array.isArray(check?.issues) && check.issues.length > 0 && check.issues.every(i => i?.code === "PROTECTION_ERROR");
+    const details = readKryptotronTransparency(state, now).reconciliation.issues.slice(0, 3)
+      .map(issue => `${issue.symbol ? `${issue.symbol}: ` : ""}${issue.message}`).join(" ");
     issues.push(onlyProtection
       ? `${label}: bezpečnostní režim — chybí ochranné objednávky. Vlastník účtu musí v Oceanu potvrdit obnovení ochrany; samotné /resume nestačí.`
-      : `${label}: bezpečnostní režim, ověř stav účtu a ochrany.`);
+      : `${label}: bezpečnostní režim. ${details || "Ověř stav účtu a ochrany."}`);
   }
   if (Array.isArray(state.pending_trade_logs) && state.pending_trade_logs.length) issues.push(`${label}: historie obchodů čeká na uložení.`);
   if (state.runtime_status === "degraded" && state.safe_mode !== true) issues.push(`${label}: worker hlásí provozní chybu.`);
@@ -72,7 +75,7 @@ export function evaluateOpsAlert(state: OpsAlertState, issues: string[], now: nu
     return { message: null, nextState: state };
   }
   return {
-    message: ["🚨 Ocean: provozní kontrola narazila na problém.", ...issues].join("\n"),
+    message: [key === state.activeIssuesKey ? "🚨 Ocean: připomínka, stejný problém stále trvá." : "🚨 Ocean: provozní kontrola narazila na problém.", ...issues].join("\n"),
     nextState: { activeIssuesKey: key, lastAlertAt: now },
   };
 }
