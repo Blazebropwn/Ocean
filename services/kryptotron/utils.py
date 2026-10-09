@@ -102,7 +102,8 @@ def read_portfolio_snapshot(client, quote_asset="USDC"):
 def portfolio_snapshot_due(state, now=None, max_age_seconds=600):
     """Return True when the persisted portfolio view should be refreshed."""
     current = now or datetime.now(timezone.utc)
-    captured_at = state.get("portfolio_snapshot", {}).get("captured_at")
+    snapshot = state.get("portfolio_snapshot")
+    captured_at = snapshot.get("captured_at") if isinstance(snapshot, dict) else None
     if not isinstance(captured_at, str):
         return True
     try:

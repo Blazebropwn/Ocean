@@ -68,7 +68,7 @@ export function completeAccountReset(db: OceanDatabase, url: string, key: string
       streak: { ...record(state.streak), enabled: false, session: {} },
       safe_mode: true, reconciliation: { status: "UNRESOLVED", checked_at: null, issues: [{ code: "RECONCILIATION_REQUIRED" }] },
       quote_asset: "USDC", account_balance: Number(report.balances.USDC), account_balance_at: report.checkedAt, account_balance_error: null,
-      portfolio_snapshot: null, last_error: null,
+      portfolio_snapshot: {}, last_error: null,
     };
     await write(url, key, instance, next);
     return next;

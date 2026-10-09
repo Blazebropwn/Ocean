@@ -46,6 +46,7 @@ test("reset archives before replacement, preserves risk and rejects stale worker
   assert.equal(next.state_epoch, resetId); assert.equal(next.entries_paused, true); assert.equal(next.safe_mode, true);
   assert.equal(next.weekly_loss, 4); assert.equal(next.daily_loss, 3); assert.equal(next.trades_today, 2);
   assert.deepEqual(next.unmanaged_inventory, { BTC: "0.000008" });
+  assert.deepEqual(next.portfolio_snapshot, {});
   assert.deepEqual((next.dca as any).purchases, []); assert.deepEqual(next.strategy_residuals, {});
   const archive = db.prepare("SELECT state_json FROM account_reset_archives").get() as { state_json: string };
   assert.equal(JSON.parse(archive.state_json).strategy_residuals.BTCUSDC.quantity, "0.000078");
