@@ -13,6 +13,7 @@ import { registerInternalWorkerRoutes } from "./routes/internal-worker.js";
 import { registerInvitationRoutes } from "./routes/invitations.js";
 import { registerKryptotronRoutes } from "./routes/kryptotron.js";
 import { registerMemberRoutes } from "./routes/members.js";
+import { registerAccountResetRoutes } from "./routes/account-reset.js";
 import { registerTelegramRoutes } from "./routes/telegram.js";
 import { registerAgentRoutes } from "./routes/agents.js";
 import { registerEconomyRoutes } from "./routes/economy.js";
@@ -77,6 +78,7 @@ export function buildApp(config: Config, database?: OceanDatabase, dependencies:
   registerAuthRoutes(app, db, config);
   registerInvitationRoutes(app, db, config);
   registerMemberRoutes(app, db, config);
+  registerAccountResetRoutes(app, db, config);
   registerTelegramRoutes(app, db, config);
   registerKryptotronRoutes(app, db, config);
   registerAgentRoutes(app, db, config, dependencies.portfolioProvider);
