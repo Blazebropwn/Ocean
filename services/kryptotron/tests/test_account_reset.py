@@ -5,6 +5,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from account_reset import reset_report, process_account_reset
+from utils import portfolio_snapshot_due
+from reconciliation import inspect_account
+from datetime import datetime, timezone
 
 
 class Exchange:
@@ -35,6 +38,21 @@ def test_reset_keeps_dust_separate_and_does_not_trade():
     assert result["balances"] == {"USDC": "100", "BTC": "0.000008"}
     assert result["epoch"] is None
     assert "errorCode" not in result
+
+
+@pytest.mark.parametrize("snapshot", [None, {}, "invalid"])
+def test_post_reset_portfolio_refresh_and_reconciliation(snapshot):
+    exchange = Exchange()
+    report = reset_report(exchange, state(), filters)
+    new_state = {"positions": {}, "dca": {"enabled": False, "purchases": []},
+                 "unmanaged_inventory": {a: q for a, q in report["balances"].items() if a != "USDC"},
+                 "portfolio_snapshot": snapshot}
+    assert portfolio_snapshot_due(new_state)
+    checked = inspect_account(exchange, new_state,
+                              [{"symbol": "BTCUSDC", "base": "BTC", "step_size": "0.00001"}],
+                              now=datetime.now(timezone.utc))
+    assert checked["status"] == "OK"
+    assert checked["issues"] == []
 
 
 @pytest.mark.parametrize("mutation,code", [
