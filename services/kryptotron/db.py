@@ -80,7 +80,7 @@ def complete_account_reset(report):
     return response.json().get("state")
 
 
-def log_trade(symbol, entry_price, exit_price, qty, pnl, result, reason=None, entry_time=None, exit_time=None):
+def log_trade(symbol, entry_price, exit_price, qty, pnl, result, reason=None, entry_time=None, exit_time=None, execution=None):
     payload = {
         "symbol": symbol,
         "entry_price": float(entry_price),
@@ -93,6 +93,8 @@ def log_trade(symbol, entry_price, exit_price, qty, pnl, result, reason=None, en
     }
     if exit_time:
         payload["exit_time"] = exit_time
+    if execution is not None:
+        payload["execution"] = execution
     if _broker_url:
         try:
             response = requests.post(f"{_broker_url}/trades", headers=_broker_headers, json=payload, timeout=8)

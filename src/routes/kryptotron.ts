@@ -2,14 +2,16 @@ import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import type { Config } from "../config.js";
 import { type KryptotronInstanceRecord, type OceanDatabase } from "../db.js";
-import { binanceConnectionSchema, dcaAmountSchema, dcaControlSchema, kryptotronControlSchema, streakControlSchema } from "../schemas.js";
+import { binanceConnectionSchema, dcaAmountSchema, dcaSettingsSchema, dcaControlSchema, kryptotronControlSchema, streakControlSchema } from "../schemas.js";
 import { verifyBinanceCredentials } from "../binance.js";
 import { credentialsKey, encryptCredential } from "../credentials.js";
-import { initializeKryptotronInstance, loadKryptotronSnapshot, requestManualClose, requestProtectionRestore, requestTestDca, setDcaAmount, setDcaEnabled, setKryptotronEntriesPaused, setStreakEnabled } from "../kryptotron.js";
+import { initializeKryptotronInstance, loadKryptotronSnapshot, requestManualClose, requestProtectionRestore, requestTestDca, setDcaAmount, setDcaSettings, setDcaEnabled, setKryptotronEntriesPaused, setStreakEnabled } from "../kryptotron.js";
 import { currentUser, hasApprovedAccess, requestMeta } from "./shared.js";
 import { isMainnetEnabled } from "../supervisor.js";
+import { TradeCostService } from "../trade-cost-service.js";
 
 export function registerKryptotronRoutes(app: FastifyInstance, db: OceanDatabase, config: Config) {
+  const tradeCosts = new TradeCostService(db, config);
   function kryptotronInstance(userId: string) {
     return db.prepare("SELECT * FROM kryptotron_instances WHERE user_id = ?").get(userId) as KryptotronInstanceRecord | undefined;
   }
@@ -122,7 +124,9 @@ export function registerKryptotronRoutes(app: FastifyInstance, db: OceanDatabase
     if (!instance) return reply.code(404).send({ error: "Kryptotron není k tomuto účtu připojen." });
     if (!config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return reply.code(503).send({ error: "Kryptotron není dostupný." });
     try {
-      return { kryptotron: await loadKryptotronSnapshot(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, instance.remote_state_key!) };
+      const snapshot = await loadKryptotronSnapshot(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, instance.remote_state_key!);
+      try { return { kryptotron: await tradeCosts.enrich(instance.id, snapshot) }; }
+      catch { return { kryptotron: snapshot }; }
     } catch {
       return reply.code(502).send({ error: "Stav Kryptotronu se nepodařilo načíst." });
     }
@@ -177,10 +181,11 @@ export function registerKryptotronRoutes(app: FastifyInstance, db: OceanDatabase
         config.kryptotronSupabaseKey,
         parsed.data.entriesPaused,
         instance.remote_state_key!,
+        parsed.data.scope,
       );
       const meta = requestMeta(request);
       db.prepare("INSERT INTO security_events (user_id, event_type, ip_address, user_agent) VALUES (?, ?, ?, ?)")
-        .run(user.id, parsed.data.entriesPaused ? "KRYPTOTRON_PAUSED" : "KRYPTOTRON_RESUMED", meta.ip, meta.agent);
+        .run(user.id, parsed.data.scope === "trading" ? (parsed.data.entriesPaused ? "TRADING_PAUSED" : "TRADING_RESUMED") : parsed.data.entriesPaused ? "KRYPTOTRON_PAUSED" : "KRYPTOTRON_RESUMED", meta.ip, meta.agent);
       return { entriesPaused: parsed.data.entriesPaused };
     } catch {
       return reply.code(502).send({ error: "Ovládání Kryptotronu se nepodařilo uložit." });
@@ -204,6 +209,23 @@ export function registerKryptotronRoutes(app: FastifyInstance, db: OceanDatabase
     } catch {
       return reply.code(502).send({ error: "Nastavení DCA se nepodařilo uložit." });
     }
+  });
+
+  app.post("/api/kryptotron/dca/settings", { config: { rateLimit: { max: 20, timeWindow: "15 minutes" } } }, async (request, reply) => {
+    const user = currentUser(db, request);
+    if (!user) return reply.code(401).send({ error: "Nejste přihlášeni." });
+    const instance = connectedKryptotronInstance(user.id);
+    if (!instance) return reply.code(404).send({ error: "Kryptotron není připojen." });
+    const parsed = dcaSettingsSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "Zvolte aktivum, částku 5/10/20/50/100 USDC a interval." });
+    if (!config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return reply.code(503).send({ error: "Úložiště není dostupné." });
+    try {
+      const plans = await setDcaSettings(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, instance.remote_state_key!, parsed.data);
+      const meta = requestMeta(request);
+      db.prepare("INSERT INTO security_events (user_id,event_type,ip_address,user_agent) VALUES (?,?,?,?)")
+        .run(user.id, `DCA_SETTINGS_${parsed.data.frequency}`, meta.ip, meta.agent);
+      return { plans };
+    } catch { return reply.code(502).send({ error: "Plán DCA se nepodařilo uložit. Obnovte přehled a zkuste to znovu." }); }
   });
 
   app.post("/api/kryptotron/dca/amount", { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } }, async (request, reply) => {

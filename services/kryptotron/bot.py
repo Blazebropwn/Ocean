@@ -47,7 +47,7 @@ from risk import entry_permission, position_budget, decision_snapshot
 from manual_close import active_request, position_id
 from protection_restore import active_restore, process_restore
 from events import add_event
-from dca import run_weekly_dca, settle_pending_dca
+from dca import run_scheduled_dca, asset_plan, settle_pending_dca
 from streak import can_trade as streak_can_trade, close_trade as streak_close_trade, ensure_session as ensure_streak_session, open_trade as streak_open_trade
 from streak_strategy import paper_close_result, size_paper_setup, trend_pullback_signal
 from binance_safety import require_safe_api_permissions
@@ -314,6 +314,7 @@ def refresh_entries_control(state):
         elif remote_restore.get("id") != local_restore.get("id"):
             state["protection_restore"] = copy.deepcopy(remote_restore)
         state["entries_paused"] = remote_state.get("entries_paused", True)
+        state["trading_paused"] = remote_state.get("trading_paused", False) is True
         remote_close = remote_state.get("manual_close")
         if remote_close and remote_close.get("id") != (state.get("manual_close") or {}).get("id"):
             state["manual_close"] = copy.deepcopy(remote_close)
@@ -324,6 +325,9 @@ def refresh_entries_control(state):
             state.setdefault("dca", {})["amount"] = remote_dca["amount"]
         if isinstance(remote_dca, dict) and isinstance(remote_dca.get("test_request"), dict):
             state.setdefault("dca", {})["test_request"] = remote_dca["test_request"]
+        if isinstance(remote_dca, dict):
+            state.setdefault("dca", {})["plans"] = copy.deepcopy(remote_dca.get("plans", {}))
+            state["dca"]["frequency"] = remote_dca.get("frequency")
         remote_streak = remote_state.get("streak", {})
         if isinstance(remote_streak, dict) and "enabled" in remote_streak:
             state.setdefault("streak", {})["enabled"] = remote_streak["enabled"] is True
@@ -435,7 +439,13 @@ def close_from_protection(state, symbol, outcome):
     if not math.isclose(outcome["quantity"], ps["position_qty"], rel_tol=1e-8, abs_tol=1e-12):
         raise RuntimeError("Vyplněná ochrana nepokrývá evidované množství; nutná kontrola")
     before = copy.deepcopy(state)
-    state = record_close(state, symbol, outcome["exit_price"], outcome["reason"])
+    order = outcome.get("order", {})
+    executed_at = now_utc()
+    exchange_time = order.get("updateTime", order.get("transactTime"))
+    if isinstance(exchange_time, (int, float)) and 0 < exchange_time <= (executed_at.timestamp() + 30) * 1000:
+        executed_at = datetime.fromtimestamp(exchange_time / 1000, timezone.utc)
+    state = record_close(state, symbol, outcome["exit_price"], outcome["reason"],
+                         executed_at=executed_at, exit_order=order)
     if not save_state(state):
         state.clear()
         state.update(before)
@@ -579,7 +589,7 @@ def finalize_market_exit(state, intent, order):
     if isinstance(exchange_time, (int, float)) and 0 < exchange_time <= (executed_at.timestamp() + 30) * 1000:
         executed_at = datetime.fromtimestamp(exchange_time / 1000, timezone.utc)
     record_close(state, intent["symbol"], quote / quantity, intent["reason"],
-                 quantity=quantity, executed_at=executed_at)
+                 quantity=quantity, executed_at=executed_at, exit_order=order)
     state["trade_explanations"][-1].update(exitOrderId=order.get("orderId"),
         exitClientOrderId=intent["client_order_id"], residualQuantity=float(residual))
     state["pending_order"] = None
@@ -628,7 +638,7 @@ def execute_market_exit(client, state, symbol, step_size, reason):
     return finalize_market_exit(state, intent, order)
 
 
-def record_close(state, symbol, exit_price, reason, *, quantity=None, executed_at=None):
+def record_close(state, symbol, exit_price, reason, *, quantity=None, executed_at=None, exit_order=None):
     ps      = state["positions"][symbol]
     if not ps.get("in_position"):
         return state
@@ -642,6 +652,7 @@ def record_close(state, symbol, exit_price, reason, *, quantity=None, executed_a
                 "grossPnl": pnl, "reasonCode": reason,
                 "entryOrderId": ps.get("entry_order_id"), "entryFees": ps.get("entry_fees", {}),
                 "pnlBasis": "gross_before_fees", "entryDecision": ps.get("entry_decision")}
+    evidence["exitOrderId"] = (exit_order or {}).get("orderId")
     state.setdefault("trade_explanations", []).append(evidence)
     state["trade_explanations"] = state["trade_explanations"][-100:]
 
@@ -660,7 +671,7 @@ def record_close(state, symbol, exit_price, reason, *, quantity=None, executed_a
             f"{DIVIDER}\n"
             f"📋 Důvod: <b>{reason}</b>\n"
             f"📈 Entry: {ps['entry_price']:.2f} → Exit: {exit_price:.2f}\n"
-            f"💰 Zisk: <b>+{pnl:.2f} {QUOTE_ASSET}</b> ({pnl_pct:+.2f}%)"
+            f"💰 Výsledek před poplatky: <b>+{pnl:.2f} {QUOTE_ASSET}</b> ({pnl_pct:+.2f}%)"
             f"{duration_str}"
         )
         state["last_trade_result"]  = "WIN"
@@ -672,7 +683,7 @@ def record_close(state, symbol, exit_price, reason, *, quantity=None, executed_a
             f"{DIVIDER}\n"
             f"📋 Důvod: <b>{reason}</b>\n"
             f"📉 Entry: {ps['entry_price']:.2f} → Exit: {exit_price:.2f}\n"
-            f"💸 Ztráta: <b>{pnl:.2f} {QUOTE_ASSET}</b> ({pnl_pct:+.2f}%)"
+            f"💸 Výsledek před poplatky: <b>{pnl:.2f} {QUOTE_ASSET}</b> ({pnl_pct:+.2f}%)"
             f"{duration_str}"
         )
         state["last_trade_result"]  = "LOSS"
@@ -684,6 +695,7 @@ def record_close(state, symbol, exit_price, reason, *, quantity=None, executed_a
         "symbol": symbol, "entry_price": ps["entry_price"], "exit_price": exit_price,
         "qty": quantity, "pnl": pnl, "result": result,
         "reason": reason, "entry_time": ps.get("entry_time"), "exit_time": evidence["at"],
+        "execution": {"entryOrderId": ps.get("entry_order_id"), "exitOrderId": evidence["exitOrderId"]},
     })
 
     ps.update(
@@ -693,7 +705,7 @@ def record_close(state, symbol, exit_price, reason, *, quantity=None, executed_a
     clear_protection(ps)
     state["last_trade_time"] = now_utc().isoformat()
     state["last_trade_reason"] = reason
-    add_event(state, "TRADE", f"{symbol} · pozice uzavřena · {pnl:+.2f} {QUOTE_ASSET}")
+    add_event(state, "TRADE", f"{symbol} · pozice uzavřena · {pnl:+.2f} {QUOTE_ASSET} před poplatky")
     return state
 
 
@@ -846,9 +858,7 @@ def send_weekly_summary(state):
     save_state(state)
 
 
-def maybe_run_weekly_dca(client, state, pair_filters):
-    if not weekly_summary_due(state):
-        return
+def maybe_run_scheduled_dca(client, state, pair_filters):
     refresh_entries_control(state)
     if entry_permission(state, now_utc())[0] != "ENTRY_ALLOWED":
         return
@@ -857,13 +867,12 @@ def maybe_run_weekly_dca(client, state, pair_filters):
     if not enforce_safe_api_permissions(client, state):
         return
     min_notionals = {symbol: pair_filters[symbol][2] for symbol in DCA_SYMBOLS}
-    dca_amount = float(state.get("dca", {}).get("amount", DCA_AMOUNT_USDC))
-    results = run_weekly_dca(
-        client, state, DCA_SYMBOLS, dca_amount, min_notionals,
+    results = run_scheduled_dca(
+        client, state, DCA_SYMBOLS, min_notionals,
         save_state, lambda binance: get_balance(binance, QUOTE_ASSET, raise_on_error=True),
-        before_order=lambda: entry_ready(client, state, pair_filters)
+        before_order=lambda symbol, plan: entry_ready(client, state, pair_filters)
             and state.get("dca", {}).get("enabled") is True
-            and state.get("dca", {}).get("amount", DCA_AMOUNT_USDC) == dca_amount,
+            and asset_plan(state.get("dca", {}), symbol) == plan,
     )
     filled = [item for item in results if item["status"] == "filled"]
     skipped = [item for item in results if item["status"] != "filled"]
@@ -872,7 +881,7 @@ def maybe_run_weekly_dca(client, state, pair_filters):
     lines = [f"✅ {item['symbol']}: {item['amount']:.2f} {QUOTE_ASSET}" for item in filled]
     lines += [f"⚠️ {item['symbol']}: {item['reason']}" for item in skipped]
     if lines:
-        tg(f"🌱 <b>Týdenní DCA</b>\n{DIVIDER}\n" + "\n".join(lines))
+        tg(f"🌱 <b>Pravidelné DCA</b>\n{DIVIDER}\n" + "\n".join(lines))
     save_state(state)
 
 
@@ -897,13 +906,13 @@ def maybe_run_test_dca(client, state, pair_filters):
     if not save_state(state):
         return
     try:
-        amount = float(state.get("dca", {}).get("amount", DCA_AMOUNT_USDC))
         min_notionals = {symbol: pair_filters[symbol][2] for symbol in DCA_SYMBOLS}
-        results = run_weekly_dca(
-            client, state, DCA_SYMBOLS, amount, min_notionals,
+        results = run_scheduled_dca(
+            client, state, DCA_SYMBOLS, min_notionals,
             save_state, lambda binance: get_balance(binance, QUOTE_ASSET, raise_on_error=True),
             run_key=request_id,
-            before_order=lambda: entry_ready(client, state, pair_filters),
+            before_order=lambda symbol, plan: entry_ready(client, state, pair_filters)
+                and asset_plan(state.get("dca", {}), symbol) == plan,
         )
         request = state.get("dca", {}).get("test_request", request)
         request.update(status="completed", completed_at=now_utc().isoformat(), results=results)
@@ -958,7 +967,7 @@ def maybe_send_scheduled_summaries(client, state, pair_filters, market_client=No
     maybe_run_test_dca(client, state, pair_filters)
     maybe_run_streak_paper(market_client, state, pair_filters)
     maybe_send_daily_summary(state)
-    maybe_run_weekly_dca(client, state, pair_filters)
+    maybe_run_scheduled_dca(client, state, pair_filters)
     maybe_send_weekly_summary(state)
     refresh_account_balance(client, state, QUOTE_ASSET)
 

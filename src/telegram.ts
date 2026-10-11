@@ -103,8 +103,8 @@ export async function processTelegramMessage(db: OceanDatabase, config: Config, 
     if (!connection.remote_state_key || connection.status !== "connected" || !config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return send(chatId, "Kryptotron zatím není připojený.");
     const snapshot = await loadKryptotronSnapshot(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, connection.remote_state_key);
     return send(chatId, ["🌊 Ocean · přehled",
-      `Trading: ${snapshot.entriesPaused ? "pozastaven" : snapshot.status}`,
-      `DCA: ${snapshot.dca.enabled ? "zapnuto" : "vypnuto"} · ${snapshot.dca.amount} USDC / asset`,
+      `Trading: ${snapshot.entriesPaused || snapshot.tradingPaused ? "pozastaven" : snapshot.status}`,
+      `DCA: ${snapshot.dca.enabled ? "zapnuto" : "vypnuto"} · ${snapshot.dca.plans?.map(p => `${p.symbol.replace("USDC", "")} ${p.amount} USDC ${({ daily: "denně", weekly: "týdně", monthly: "měsíčně" })[p.frequency]}`).join(" · ") || `${snapshot.dca.amount} USDC / aktivum`}`,
       `Streak: ${snapshot.streak.enabled ? "zapnuto" : "vypnuto"} · PAPER`,
       `Týdenní ztráta: ${snapshot.limits.weeklyLoss.toFixed(2)} ${snapshot.balance.asset}`,
     ].join("\n"));
@@ -115,7 +115,7 @@ export async function processTelegramMessage(db: OceanDatabase, config: Config, 
     const balance = snapshot.balance.amount === null ? "—" : `${snapshot.balance.amount.toFixed(2)} ${snapshot.balance.asset}`;
     const positions = snapshot.positions.filter((item) => item.inPosition);
     const position = positions.map((item) => `${item.symbol} (${item.protectionActive ? "ochrana ověřena" : "ověř ochranu"})`).join(", ") || "bez pozice";
-    const status = snapshot.transparency?.safeMode ? "bezpečnostní režim · nové nákupy blokované" : snapshot.entriesPaused ? "pozastaven" : snapshot.status;
+    const status = snapshot.transparency?.safeMode ? "bezpečnostní režim · nové nákupy blokované" : snapshot.entriesPaused || snapshot.tradingPaused ? "pozastaven" : snapshot.status;
     const issues = snapshot.transparency?.safeMode
       ? snapshot.transparency.reconciliation.issues.slice(0, 5).map(issue => `${issue.symbol ? `${issue.symbol}: ` : ""}${issue.message}`)
       : [];

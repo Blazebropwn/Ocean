@@ -1,4 +1,6 @@
+import { readDcaPlans, type DcaFrequency, type DcaPlan } from "./dca-plans.js";
 import { readHoldings } from "./holdings.js";
+import { unknownTradeCosts, type TradeCosts } from "./trade-accounting.js";
 import { assertNoReset, resetPending } from "./account-reset.js";
 import { pausedAutomation } from "./account-pause.js";
 import { mergeProtectionRestore, protectionRestoreView, queueProtectionRestore, restoreWouldRewind } from "./protection-restore.js";
@@ -30,10 +32,11 @@ export type KryptotronSnapshot = {
   lastError: string | null;
   updatedAt: string | null;
   entriesPaused: boolean;
+  tradingPaused?: boolean;
   events: Array<{ type: string; message: string; at: string }>;
   balance: { amount: number | null; asset: string; updatedAt: string | null; error: string | null };
   holdings: ReturnType<typeof readHoldings>;
-  dca: { enabled: boolean; amount: number; symbols: string[]; completedWeek: string | null; statusText: string; totalInvested: number; purchaseCount: number; purchases: Array<{ symbol: string; at: string | null; amount: number; quantity: number }>; testStatus: string | null; progress: Array<{ symbol: string; asset: string; quantity: number; target: number; percentage: number }>; lastRun: Array<{ symbol: string; status: string; amount: number | null; reason: string | null }> };
+  dca: { plans?: DcaPlan[]; enabled: boolean; amount: number; symbols: string[]; completedWeek: string | null; statusText: string; totalInvested: number; purchaseCount: number; purchases: Array<{ symbol: string; at: string | null; amount: number; quantity: number }>; testStatus: string | null; progress: Array<{ symbol: string; asset: string; quantity: number; target: number; percentage: number }>; lastRun: Array<{ symbol: string; status: string; amount: number | null; reason: string | null }> };
   streak: { enabled: boolean; paperMode: boolean; rUsdc: number; status: string; streak: number; trades: number; wins: number; losses: number; netPnl: number; sessionDate: string | null; lockReason: string | null };
   positions: Array<{
     symbol: string;
@@ -49,14 +52,15 @@ export type KryptotronSnapshot = {
     protectionTrailingBips: number;
   }>;
   limits: { dailyLoss: number; weeklyLoss: number; tradesToday: number; tradesWeek: number };
-  lastTrade: { symbol: string; entryPrice: number; exitPrice: number; quantity: number; pnl: number; result: string; reason: string | null; enteredAt: string | null; exitedAt: string } | null;
+  lastTrade: { symbol: string; entryPrice: number; exitPrice: number; quantity: number; pnl: number; result: string; reason: string | null; enteredAt: string | null; exitedAt: string; entryOrderId?: string | null; exitOrderId?: string | null; costs?: TradeCosts } | null;
   octo: KryptotronOctoPresentation;
 };
 
-type OctoSource = Pick<KryptotronSnapshot, "status" | "lastError" | "entriesPaused" | "positions" | "lastTrade" | "nextCheckAt" | "lastMarketCheckAt" | "balance">;
+type OctoSource = Pick<KryptotronSnapshot, "status" | "lastError" | "entriesPaused" | "tradingPaused" | "positions" | "lastTrade" | "nextCheckAt" | "lastMarketCheckAt" | "balance">;
 
 export function dcaStatusText(dca: Record<string, unknown>, now = new Date()): string {
   if (dca.enabled !== true) return "Pozastaveno";
+  if (dca.plans && typeof dca.plans === "object" && Object.keys(dca.plans).length) return "Samostatné plány aktiv · nákupy v 8:00 (Praha)";
   const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Prague", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
   const part = (type: string) => Number(parts.find((item) => item.type === type)?.value);
   const thursday = new Date(Date.UTC(part("year"), part("month") - 1, part("day")));
@@ -104,18 +108,25 @@ export function deriveKryptotronOcto(source: OctoSource, now = Date.now()): Kryp
   const tradeTime = source.lastTrade ? Date.parse(source.lastTrade.exitedAt) : Number.NaN;
   const recentTrade = source.lastTrade && Number.isFinite(tradeTime) && now - tradeTime >= -60_000 && now - tradeTime <= 15 * 60_000;
   if (recentTrade && source.lastTrade) {
-    const won = source.lastTrade.result === "WIN" || (source.lastTrade.result !== "LOSS" && source.lastTrade.pnl >= 0);
-    const formattedPnl = `${source.lastTrade.pnl >= 0 ? "+" : ""}${source.lastTrade.pnl.toFixed(2)} ${source.balance.asset}`;
+    const costs = source.lastTrade.costs;
+    const net = costs?.status === "verified" ? costs.netPnl : null;
+    if (net === null || net === undefined) return {
+      state: "idle", message: "Obchod je uzavřený. Čistý výsledek ještě není ověřený.",
+      meta: `${source.lastTrade.symbol} · čekám na ověření nákladů`,
+      eventKey: `trade:${source.lastTrade.exitedAt}:unverified`, autoOpen: true, critical: false,
+    };
+    const won = net > 0;
+    const formattedPnl = `${net >= 0 ? "+" : ""}${net.toFixed(2)} ${source.balance.asset}`;
     return {
-      state: won ? "profit" : "loss",
-      message: won ? "Obchod je uzavřený v zisku." : "Obchod je uzavřený ve ztrátě.",
-      meta: `${source.lastTrade.symbol} · ${formattedPnl}`,
-      eventKey: `trade:${source.lastTrade.exitedAt}:${source.lastTrade.result}`,
+      state: net === 0 ? "idle" : won ? "profit" : "loss",
+      message: net === 0 ? "Obchod je po poplatcích na nule." : won ? "Obchod je po poplatcích v zisku." : "Obchod je po poplatcích ve ztrátě.",
+      meta: `${source.lastTrade.symbol} · ${formattedPnl} po poplatcích`,
+      eventKey: `trade:${source.lastTrade.exitedAt}:net:${net}`,
       autoOpen: true,
       critical: false,
     };
   }
-  if (source.entriesPaused) {
+  if (source.entriesPaused || source.tradingPaused) {
     return {
       state: "sleep",
       message: "Nové obchody jsou pozastavené.",
@@ -193,10 +204,10 @@ async function saveKryptotronStateUnlocked(url: string, key: string, stateKey: s
     .sort((a, b) => String(object(b).at).localeCompare(String(object(a).at))).slice(0, 20);
   data = { ...data, state_epoch: latest.state_epoch, history_started_at: latest.history_started_at,
     account_reset: latest.account_reset, environment: latest.environment, entries_paused: latest.entries_paused !== false,
-    events,
+    events, trading_paused: latest.trading_paused === true,
     manual_close: mergeManualClose(data.manual_close, latest.manual_close),
     protection_restore: mergeProtectionRestore(data.protection_restore, latest.protection_restore),
-    dca: { ...dca, enabled: savedDca.enabled === true, amount: savedDca.amount,
+    dca: { ...dca, enabled: savedDca.enabled === true, amount: savedDca.amount, plans: savedDca.plans, frequency: savedDca.frequency,
       test_request: savedRequest.id && savedRequest.id !== request.id ? savedRequest : dca.test_request },
     streak: { ...object(data.streak), enabled: object(latest.streak).enabled === true } };
   if (mustPause?.() || resetPending(latest)) data = pausedAutomation(data);
@@ -260,7 +271,7 @@ export async function initializeKryptotronInstance(url: string, key: string, sta
   return stateKey;
 }
 
-async function setKryptotronEntriesPausedUnlocked(url: string, key: string, entriesPaused: boolean, stateKey = "main") {
+async function setKryptotronEntriesPausedUnlocked(url: string, key: string, entriesPaused: boolean, stateKey = "main", scope: "all" | "trading" = "all") {
   const states = await supabaseRows(url, key, statePath(stateKey));
   const state = states[0];
   if (!state?.data || typeof state.data !== "object") throw new Error("Stav Kryptotronu neexistuje");
@@ -268,11 +279,11 @@ async function setKryptotronEntriesPausedUnlocked(url: string, key: string, entr
   if (!entriesPaused && (state.data as Record<string, unknown>).safe_mode === true) {
     throw new Error("Obnovení blokuje bezpečnostní režim. Nejdřív ověř stav účtu a objednávek.");
   }
-  const data: Record<string, unknown> = { ...(state.data as Record<string, unknown>), entries_paused: entriesPaused };
+  const data: Record<string, unknown> = { ...(state.data as Record<string, unknown>), [scope === "trading" ? "trading_paused" : "entries_paused"]: entriesPaused };
   const events = Array.isArray(data.events) ? data.events : [];
   data.events = [{
     type: "CONTROL",
-    message: entriesPaused ? "Nové obchody pozastaveny" : "Automatizace obnovena",
+    message: scope === "trading" ? (entriesPaused ? "Nové vstupy Tradingu pozastaveny" : "Nové vstupy Tradingu povoleny") : entriesPaused ? "Všechny nové nákupy pozastaveny" : "Společná pauza nákupů zrušena",
     at: new Date().toISOString(),
   }, ...events].slice(0, 20);
   const response = await fetch(`${url}/rest/v1/bot_state?key=eq.${encodeURIComponent(stateKey)}`, {
@@ -299,7 +310,7 @@ async function setDcaEnabledUnlocked(url: string, key: string, enabled: boolean,
   const dca = data.dca && typeof data.dca === "object" ? data.dca as Record<string, unknown> : {};
   data.dca = { ...dca, enabled };
   const events = Array.isArray(data.events) ? data.events : [];
-  data.events = [{ type: "CONTROL", message: enabled ? "Týdenní DCA zapnuto" : "Týdenní DCA vypnuto", at: new Date().toISOString() }, ...events].slice(0, 20);
+  data.events = [{ type: "CONTROL", message: enabled ? "Pravidelné DCA zapnuto" : "Pravidelné DCA vypnuto", at: new Date().toISOString() }, ...events].slice(0, 20);
   const response = await fetch(`${url}/rest/v1/bot_state?key=eq.${encodeURIComponent(stateKey)}`, {
     method: "PATCH",
     headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=minimal" },
@@ -316,6 +327,7 @@ async function setDcaAmountUnlocked(url: string, key: string, amount: number, st
   if (!state?.data || typeof state.data !== "object") throw new Error("Stav Kryptotronu neexistuje");
   const data: Record<string, unknown> = { ...(state.data as Record<string, unknown>) };
   const dca = data.dca && typeof data.dca === "object" ? data.dca as Record<string, unknown> : {};
+  if (dca.plans && Object.keys(dca.plans as object).length) throw new Error("Použijte samostatné plány aktiv.");
   data.dca = { ...dca, amount };
   const events = Array.isArray(data.events) ? data.events : [];
   data.events = [{ type: "CONTROL", message: `DCA preset změněn na ${amount} USDC`, at: new Date().toISOString() }, ...events].slice(0, 20);
@@ -392,6 +404,8 @@ export async function loadKryptotronSnapshot(url: string, key: string, stateKey 
     protectionTrailingBips: Number(position.protection_trailing_bips ?? 0),
   }));
   const trade = trades.find(item => !data.history_started_at || Date.parse(String(item.exit_time)) >= Date.parse(String(data.history_started_at)));
+  const tradeEvidence = transparency.trades.find(item => item.action === "CLOSED" && item.symbol === trade?.symbol
+    && Date.parse(item.at) === Date.parse(String(trade?.exit_time)));
   const rawDca = data.dca && typeof data.dca === "object" ? data.dca as Record<string, unknown> : {};
   const rawStreak = data.streak && typeof data.streak === "object" ? data.streak as Record<string, unknown> : {};
   const rawStreakSession = rawStreak.session && typeof rawStreak.session === "object" ? rawStreak.session as Record<string, unknown> : {};
@@ -413,6 +427,7 @@ export async function loadKryptotronSnapshot(url: string, key: string, stateKey 
       : null,
     updatedAt: typeof state?.updated_at === "string" ? state.updated_at : null,
     entriesPaused: data.entries_paused === true || data.safe_mode === true,
+    tradingPaused: data.trading_paused === true,
     events: Array.isArray(data.events) ? data.events.flatMap((event) => {
       if (!event || typeof event !== "object") return [];
       const item = event as Record<string, unknown>;
@@ -427,6 +442,7 @@ export async function loadKryptotronSnapshot(url: string, key: string, stateKey 
     },
     holdings: readHoldings(data.portfolio_snapshot),
     dca: {
+      plans: readDcaPlans(rawDca),
       enabled: rawDca.enabled === true,
       amount: Number(rawDca.amount ?? 5),
       symbols: dcaSymbols,
@@ -482,6 +498,9 @@ export async function loadKryptotronSnapshot(url: string, key: string, stateKey 
       reason: typeof trade.reason === "string" ? trade.reason : null,
       enteredAt: typeof trade.entry_time === "string" ? trade.entry_time : null,
       exitedAt: String(trade.exit_time ?? ""),
+      entryOrderId: tradeEvidence?.entryOrderId ?? null,
+      exitOrderId: tradeEvidence?.exitOrderId ?? null,
+      costs: unknownTradeCosts(),
     } : null,
   };
   return { ...snapshot, octo: deriveKryptotronOcto(snapshot) };
@@ -575,5 +594,31 @@ export function pauseKryptotronAutomation(url: string, key: string, stateKey: st
       body: JSON.stringify({ data: pausedAutomation(data), updated_at: new Date().toISOString() }), signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) throw new Error("Pozastavení automatizace se nepodařilo uložit.");
+  });
+}
+
+export function setDcaSettings(url: string, key: string, stateKey: string, settings: { amounts: Record<"BTCUSDC" | "ETHUSDC" | "SOLUSDC", number>; frequency: DcaFrequency }) {
+  return withStateLock(url, stateKey, async () => {
+    const data = await loadKryptotronState(url, key, stateKey);
+    if (!data) throw new Error("Stav instance není dostupný.");
+    assertNoReset(data);
+    const dca = data.dca && typeof data.dca === "object" ? data.dca as Record<string, unknown> : {};
+    const previous = readDcaPlans(dca);
+    if (previous.every(p => p.amount === settings.amounts[p.symbol as keyof typeof settings.amounts] && p.frequency === settings.frequency)) return previous;
+    const configuredAt = new Date().toISOString();
+    const plans = Object.fromEntries(previous.map(p => {
+      const amount = settings.amounts[p.symbol as keyof typeof settings.amounts];
+      const changed = p.amount !== amount || p.frequency !== settings.frequency;
+      return [p.symbol, { amount, frequency: settings.frequency, configured_at: changed ? configuredAt : p.configuredAt }];
+    }));
+    data.dca = { ...dca, frequency: settings.frequency, plans };
+    const frequencies = { daily: "denně", weekly: "týdně", monthly: "měsíčně" };
+    data.events = [{ type: "CONTROL", at: configuredAt, message: `DCA ${frequencies[settings.frequency]} · ${previous.map(p => `${p.symbol} ${settings.amounts[p.symbol as keyof typeof settings.amounts]} USDC`).join(" · ")}` }, ...(Array.isArray(data.events) ? data.events : [])].slice(0, 20);
+    const response = await fetch(`${url}/rest/v1/bot_state?key=eq.${encodeURIComponent(stateKey)}`, {
+      method: "PATCH", headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify({ data, updated_at: configuredAt }), signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) throw new Error("Nastavení se nepodařilo uložit.");
+    return readDcaPlans(data.dca as Record<string, unknown>);
   });
 }

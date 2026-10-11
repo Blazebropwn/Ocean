@@ -7,6 +7,8 @@ import { loadKryptotronState, logKryptotronTrade, saveKryptotronState } from "..
 import { isMainnetEnabled } from "../supervisor.js";
 import { pausedAutomation } from "../account-pause.js";
 import { completeAccountReset, resetReportSchema } from "../account-reset-service.js";
+import { rememberTradeReference, tradeReference } from "../trade-cost-service.js";
+import { object } from "../trade-accounting.js";
 
 export function registerInternalWorkerRoutes(app: FastifyInstance, db: OceanDatabase, config: Config) {
   const suspended = (instanceId: string) => Boolean((db.prepare("SELECT u.suspended_at FROM users u JOIN kryptotron_instances i ON i.user_id = u.id WHERE i.id = ?").get(instanceId) as { suspended_at: string | null } | undefined)?.suspended_at);
@@ -60,7 +62,17 @@ export function registerInternalWorkerRoutes(app: FastifyInstance, db: OceanData
     const body = request.body;
     if (!body || typeof body !== "object" || Array.isArray(body)) return reply.code(400).send({ error: "Invalid trade" });
     if (!config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return reply.code(503).send({ error: "Unavailable" });
-    await logKryptotronTrade(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, instanceId, body as Record<string, unknown>);
+    const { execution, ...trade } = body as Record<string, unknown>;
+    if (execution !== undefined) {
+      const reference = tradeReference({ symbol: trade.symbol, exitedAt: trade.exit_time, quantity: trade.qty,
+        entryPrice: trade.entry_price, exitPrice: trade.exit_price,
+        entryOrderId: object(execution).entryOrderId, exitOrderId: object(execution).exitOrderId });
+      if (!reference) return reply.code(400).send({ error: "Invalid trade reference" });
+      // Persist identity before acknowledging the durable worker outbox. Keep the
+      // remote historical schema compatible with old workers and deployments.
+      rememberTradeReference(db, instanceId, reference);
+    }
+    await logKryptotronTrade(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, instanceId, trade);
     return reply.code(204).send();
   });
 

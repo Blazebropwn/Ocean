@@ -128,6 +128,16 @@ class AccountInvariants(unittest.TestCase):
 
 
 class RiskInvariants(unittest.TestCase):
+    def test_trading_pause_leaves_dca_gate_independent_but_never_bypasses_global_guards(self):
+        state = {**self.state(), "trading_paused": True}
+        self.assertEqual(entry_permission(state, NOW, symbol="BTCUSDC")[0], "TRADING_PAUSED")
+        self.assertEqual(entry_permission(state, NOW)[0], "ENTRY_ALLOWED")
+        for update, code in [({"entries_paused": True}, "ENTRIES_PAUSED"),
+                             ({"safe_mode": True}, "RECONCILIATION_REQUIRED"),
+                             ({"pending_trade_logs": [{}]}, "PERSISTENCE_REQUIRED")]:
+            self.assertEqual(entry_permission({**state, **update}, NOW)[0], code)
+            self.assertEqual(entry_permission({**state, **update}, NOW, symbol="BTCUSDC")[0], code)
+
     def state(self):
         return {"entries_paused": False, "reconciliation": {"status": "OK", "checked_at": NOW.isoformat()},
                 "daily_loss": 0, "weekly_loss": 0, "trades_today": 0, "trades_week": 0}

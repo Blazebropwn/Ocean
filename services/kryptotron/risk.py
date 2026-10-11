@@ -18,6 +18,8 @@ def entry_permission(state, now, *, require_reconciliation=True, symbol=None):
         return "RECONCILIATION_REQUIRED", "Stav účtu vyžaduje ověření. Nové nákupy jsou zablokované."
     if state.get("entries_paused", True):
         return "ENTRIES_PAUSED", "Nové obchody jsou pozastavené uživatelem."
+    if symbol and state.get("trading_paused") is True:
+        return "TRADING_PAUSED", "Nové vstupy Tradingu jsou pozastavené. DCA má vlastní nastavení."
     if active_request(state):
         return "MANUAL_CLOSE_PENDING", "Ruční uzavření čeká na potvrzení burzou."
     if symbol and state.get("pair_cooldowns", {}).get(symbol):

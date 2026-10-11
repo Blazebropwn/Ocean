@@ -1,5 +1,10 @@
 # Ocean Strategy Lab
 
+Srovnání náhrady BTC/USDC za SOL/USDC při stejných signálech, rizikových
+limitech a modelovaných nákladech: [report z 11. 10. 2026](../../../docs/pair-comparison-2026-10-11.md).
+Samostatný `compare_pairs.py` používá pouze společnou historii před
+zamčeným holdoutem a nepřepisuje jeho zdroje ani původní cache.
+
 Výsledky `validate.py` jsou explorace na známé historii. Výběr režimového
 vstupu podle těchto výsledků už je výběrem strategie na datech, i když se
 číselné parametry nemění. Percentil mezi 40 náhodnými běhy není důkaz OOS

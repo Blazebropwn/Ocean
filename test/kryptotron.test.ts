@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { unknownTradeCosts } from "../src/trade-accounting.js";
 import { dcaStatusText, deriveKryptotronOcto, initializeKryptotronInstance, loadKryptotronSnapshot, requestTestDca, setDcaAmount, setDcaEnabled, setKryptotronEntriesPaused } from "../src/kryptotron.js";
 
 test("DCA does not label insufficient-funds skips as completed purchases", () => {
@@ -58,11 +59,12 @@ test("Octo distinguishes protected positions and recent results", () => {
 
   const exitedAt = "2026-09-06T09:55:00.000Z";
   const loss = deriveKryptotronOcto(octoSource({
-    lastTrade: { symbol: "BTCUSDC", entryPrice: 60_000, exitPrice: 59_500, quantity: 0.01, pnl: -5, result: "LOSS", reason: null, enteredAt: null, exitedAt },
+    lastTrade: { symbol: "BTCUSDC", entryPrice: 60_000, exitPrice: 59_500, quantity: 0.01, pnl: -5, result: "LOSS", reason: null, enteredAt: null, exitedAt,
+      costs: { ...unknownTradeCosts(), status: "verified", reason: "VERIFIED", netPnl: -5.12 } },
   }), Date.parse("2026-09-06T10:00:00.000Z"));
   assert.equal(loss.state, "loss");
-  assert.equal(loss.meta, "BTCUSDC · -5.00 USDC");
-  assert.equal(loss.eventKey, `trade:${exitedAt}:LOSS`);
+  assert.equal(loss.meta, "BTCUSDC · -5.12 USDC po poplatcích");
+  assert.equal(loss.eventKey, `trade:${exitedAt}:net:-5.12`);
 });
 
 test("Octo calculates on a fresh market check and settles back to scanning", () => {
@@ -206,7 +208,7 @@ test("pause control preserves the worker state and changes only new entries", as
   assert.equal(patch.data.runtime_status, "waiting");
   assert.equal(patch.data.account_balance, 73.93);
   assert.equal(patch.data.events[0].type, "CONTROL");
-  assert.equal(patch.data.events[0].message, "Nové obchody pozastaveny");
+  assert.equal(patch.data.events[0].message, "Všechny nové nákupy pozastaveny");
 });
 
 test("DCA control preserves its configuration and changes only enabled state", async (t) => {
@@ -221,7 +223,7 @@ test("DCA control preserves its configuration and changes only enabled state", a
   assert.equal(await setDcaEnabled("https://example.supabase.co", "key", true), true);
   const patch = JSON.parse(requests[1]?.body ?? "{}");
   assert.deepEqual(patch.data.dca, { enabled: true, amount: 5, symbols: ["BTCUSDC"] });
-  assert.equal(patch.data.events[0].message, "Týdenní DCA zapnuto");
+  assert.equal(patch.data.events[0].message, "Pravidelné DCA zapnuto");
 });
 
 test("test DCA creates a single isolated Testnet request", async (t) => {
@@ -239,4 +241,35 @@ test("test DCA creates a single isolated Testnet request", async (t) => {
   const patch = JSON.parse(requests[1]?.body ?? "{}");
   assert.equal(patch.data.dca.test_request.status, "pending");
   assert.equal(patch.data.events[0].message, "Testovací DCA zařazeno");
+});
+
+test("Trading controls preserve DCA and global pause across worker writes", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let state: Record<string, unknown> = { entries_paused: false, trading_paused: false,
+    dca: { enabled: true, amount: 5, purchases: [{ symbol: "SOLUSDC" }] }, positions: { BTCUSDC: { in_position: true } } };
+  globalThis.fetch = async (_input, init) => {
+    if (!init?.method) return new Response(JSON.stringify([{ data: state }]));
+    state = JSON.parse(String(init.body)).data;
+    return new Response(null, { status: 204 });
+  };
+  const positions = structuredClone(state.positions), dca = structuredClone(state.dca);
+  await setKryptotronEntriesPaused("https://example.supabase.co", "key", true, "instance", "trading");
+  assert.equal(state.trading_paused, true);
+  assert.equal(state.entries_paused, false);
+  assert.deepEqual(state.dca, dca);
+  assert.deepEqual(state.positions, positions);
+  const { saveKryptotronState } = await import("../src/kryptotron.js");
+  await saveKryptotronState("https://example.supabase.co", "key", "instance", { ...state, trading_paused: false });
+  assert.equal(state.trading_paused, true, "stale worker cannot undo the Trading pause");
+  await setDcaEnabled("https://example.supabase.co", "key", false, "instance");
+  assert.equal(state.trading_paused, true);
+  await setKryptotronEntriesPaused("https://example.supabase.co", "key", false, "instance", "trading");
+  assert.equal(state.trading_paused, false);
+  assert.equal((state.dca as { enabled: boolean }).enabled, false);
+  state.entries_paused = true;
+  await setKryptotronEntriesPaused("https://example.supabase.co", "key", false, "instance", "trading");
+  assert.equal(state.entries_paused, true, "Trading enable never removes global pause");
+  state.safe_mode = true;
+  await assert.rejects(setKryptotronEntriesPaused("https://example.supabase.co", "key", false, "instance", "trading"));
 });

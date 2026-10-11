@@ -53,3 +53,34 @@ test("mainnet worker broker access also requires the global mainnet switch", asy
   assert.equal((await app.inject({ method: "GET", url: "/internal/kryptotron/state", headers })).statusCode, 200);
   await app.close();
 });
+
+test("execution identity is durable and instance-scoped while the remote trade schema stays compatible", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const material = randomBytes(32), instance = "kry_11111111111111111111111111111111", other = "kry_22222222222222222222222222222222";
+  const db = openDatabase(":memory:");
+  db.prepare("INSERT INTO users (id,email,username,password_hash,role) VALUES ('user','user@example.com','user','hash','member')").run();
+  db.prepare("INSERT INTO kryptotron_instances (id,user_id,remote_state_key,status,environment) VALUES (?,'user',?,'connected','testnet')").run(instance, instance);
+  const posted: Record<string, unknown>[] = [];
+  globalThis.fetch = async (_input, init) => {
+    if (!init?.method) return new Response(JSON.stringify(posted.length ? [{ symbol: "BTCUSDC" }] : []));
+    posted.push(JSON.parse(String(init.body)));
+    return new Response(null, { status: 204 });
+  };
+  const app = buildApp({ port: 0, host: "127.0.0.1", databasePath: ":memory:", appOrigin: "http://localhost", isProduction: false,
+    credentialsEncryptionKey: material.toString("base64"), kryptotronSupabaseUrl: "https://example.supabase.co", kryptotronSupabaseKey: "server-key" }, db);
+  t.after(() => app.close());
+  const headers = { authorization: `Bearer ${workerAccessToken(material, instance)}`, "x-ocean-instance": instance };
+  const payload = { symbol: "BTCUSDC", entry_price: 10000, exit_price: 10100, qty: .001, pnl: .1,
+    result: "WIN", exit_time: "2026-10-11T00:00:00Z", instance_id: other, execution: { entryOrderId: 10, exitOrderId: 11 } };
+  for (let i = 0; i < 2; i++) assert.equal((await app.inject({ method: "POST", url: "/internal/kryptotron/trades", headers, payload })).statusCode, 204);
+  assert.equal(posted.length, 1);
+  assert.equal(posted[0]!.execution, undefined);
+  assert.equal(posted[0]!.instance_id, instance);
+  const records = db.prepare("SELECT instance_id,reference_json FROM kryptotron_trade_costs").all() as { instance_id: string; reference_json: string }[];
+  assert.equal(records.length, 1);
+  assert.equal(records[0]!.instance_id, instance);
+  assert.equal(JSON.parse(records[0]!.reference_json).exitOrderId, "11");
+  assert.equal((await app.inject({ method: "POST", url: "/internal/kryptotron/trades", headers: { ...headers, "x-ocean-instance": other }, payload })).statusCode, 401);
+  assert.equal((await app.inject({ method: "POST", url: "/internal/kryptotron/trades", headers, payload: { ...payload, qty: -1 } })).statusCode, 400);
+});

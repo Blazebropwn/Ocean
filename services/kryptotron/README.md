@@ -19,7 +19,7 @@ nedostává Telegram ani globální Supabase klíč.
 - Trendový vstup: EMA50 > EMA200 na uzavřených 4h svíčkách.
 - Výstup: death cross nebo burzovní ochranná OCO objednávka.
 - Nouzový stop: 10 %, trailing aktivace: 3 %, vzdálenost: 1,5 %.
-- Týdenní DCA: neděle od 08:00 Europe/Prague; částka je za každý symbol.
+- DCA: vlastní částka pro každé aktivum a jeden společný denní/týdenní/měsíční interval; termíny v 08:00 Europe/Prague (týdně neděle, měsíčně první den). Bez individuálního plánu platí původní nedělní DCA. Viz [samostatné plány](../../docs/dca-per-asset-plans.md).
 - Streak Governor je pouze paper trading.
 
 Nastavení a aktivaci provádí uživatel v Oceanu nebo přes jeho centrálního

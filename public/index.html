@@ -136,15 +136,31 @@
 <p class="message" id="connection-message" role="alert"></p>
 </form>
 </div>
-<div class="portfolio-surface" data-compact-view="portfolio">
-  <div class="compact-tabs" role="group" aria-label="Část přehledu"><button type="button" data-compact="portfolio" aria-pressed="true">Portfolio</button><button type="button" data-compact="positions" aria-pressed="false">Pozice</button><button type="button" data-compact="automation" aria-pressed="false">DCA</button></div>
-  <section class="asset-grid" id="asset-grid" aria-label="Zůstatky"><article class="asset-card"><span>USDC</span><strong>—</strong></article><article class="asset-card"><span>BTC</span><strong>—</strong></article><article class="asset-card"><span>ETH</span><strong>—</strong></article><article class="asset-card"><span>SOL</span><strong>—</strong></article></section>
-  <section class="goals-card dca-card" aria-labelledby="dca-panel-title">
-    <header><div class="panel-heading"><h2 id="dca-panel-title">DCA</h2><p>Pravidelné nákupy</p></div><div class="dca-toggle"><span id="dca-toggle-status">Načítám</span><button aria-label="Pravidelné nákupy" aria-checked="false" id="dca-control" role="switch" type="button" disabled></button></div></header>
-    <button class="dca-amount-control" id="dca-settings-open" type="button" aria-haspopup="dialog" disabled><span>Částka na každé aktivum</span><strong><span id="dca-amount-value">—</span><b aria-hidden="true">›</b></strong></button>
-    <div class="dca-metrics"><div><span>Investováno</span><strong id="dca-invested">—</strong></div><div><span>Hodnota nákupů</span><strong id="dca-current-value">—</strong></div></div>
+<div class="portfolio-surface">
+  <section class="asset-grid" id="asset-grid" aria-label="Zůstatky na Binance Spot"><article class="asset-card"><span>USDC</span><strong>—</strong></article><article class="asset-card"><span>BTC</span><strong>—</strong></article><article class="asset-card"><span>ETH</span><strong>—</strong></article><article class="asset-card"><span>SOL</span><strong>—</strong></article></section>
+  <div class="home-tabs" role="tablist" aria-label="Pracovní prostor">
+    <button type="button" id="trading-tab" role="tab" aria-selected="true" aria-controls="trading-workspace" data-home-tab="trading"><span>Trading</span><small>Kryptotron</small></button>
+    <button type="button" id="dca-tab" role="tab" aria-selected="false" aria-controls="dca-workspace" tabindex="-1" data-home-tab="dca"><span>DCA</span><small>Pravidelné investování</small></button>
+  </div>
+  <section class="home-pane positions-card" id="trading-workspace" role="tabpanel" aria-labelledby="trading-tab" tabindex="0">
+    <header><div class="panel-heading"><h2>Trading</h2></div><div class="workspace-controls"><span class="app-status" id="kryptotron-status"><i></i>Načítám</span><button type="button" id="trading-control" role="switch" aria-checked="false" aria-label="Nové vstupy Tradingu" disabled>Načítám</button></div></header>
+    <p class="home-notice hidden" id="automation-paused">Všechny nové nákupy jsou společně pozastavené. <button type="button" data-dialog="tools-dialog">Otevřít ovládání</button></p>
+
+    <div class="workspace-section-heading"><h3>Otevřené pozice <span id="position-count">0</span></h3><span>Nerealizovaný P/L · před poplatky</span></div>
+    <div id="positions-list"></div>
+    <div class="positions-footer"><span id="next-check-short">—</span><button type="button" data-dialog="strategy-dialog">Pravidla a riziko</button></div>
+    <div class="trading-result-line"><div><span>Poslední čistý výsledek</span><strong id="trading-net-result">—</strong><small id="trading-net-detail">Po poplatcích</small></div><button type="button" data-dialog="trading-history-dialog">Historie a poplatky</button></div>
   </section>
-  <section class="positions-card" aria-labelledby="positions-panel-title"><header><div class="panel-heading"><h2 id="positions-panel-title">Otevřené pozice <span id="position-count">0</span></h2><p>Obchody Kryptotronu</p></div><span class="app-status" id="kryptotron-status"><i></i>Načítám</span></header><div id="positions-list"></div><div class="positions-footer"><span id="next-check-short">—</span><button type="button" id="bot-control">Pozastavit</button></div></section>
+  <section class="home-pane goals-card dca-card" id="dca-workspace" aria-labelledby="dca-panel-title">
+    <header><div class="panel-heading"><h2 id="dca-panel-title">DCA</h2></div><div class="dca-toggle"><span id="dca-toggle-status">Načítám</span><button aria-label="Pravidelné nákupy" aria-checked="false" id="dca-control" role="switch" type="button" disabled></button></div></header>
+    <form id="dca-settings-form">
+      <fieldset class="dca-frequency" id="dca-frequency"><legend class="sr-only">Společný interval pro BTC, ETH a SOL</legend><label><input type="radio" name="dca-frequency" value="daily"><span>Denně</span></label><label><input type="radio" name="dca-frequency" value="weekly"><span>Týdně</span></label><label><input type="radio" name="dca-frequency" value="monthly"><span>Měsíčně</span></label></fieldset>
+      <div class="dca-assets" id="dca-assets" aria-label="Částka za jeden nákup každého aktiva"></div>
+      <div class="dca-totals" aria-label="Celkem v evidované historii DCA"><strong>Celkem</strong><div><span>Investováno</span><strong id="dca-invested">—</strong></div><div><span>Aktuální hodnota</span><strong id="dca-current-value">—</strong></div></div>
+      <div class="dca-plan-actions"><button type="button" data-dialog="dca-detail-dialog">Historie DCA</button><div><button type="button" id="dca-cancel">Zrušit změny</button><button type="submit" id="dca-save" class="dca-plan-save" disabled>Uložit nastavení</button></div></div>
+      <p id="dca-settings-feedback" class="dca-plan-feedback" role="status"></p>
+    </form>
+  </section>
   <footer class="overview-footer"><span class="mode-badge" id="bot-environment">—</span><span id="bot-balance-updated" role="status">—</span><div><button type="button" data-dialog="strategy-dialog" aria-haspopup="dialog" aria-controls="strategy-dialog">O strategii</button><button type="button" data-dialog="activity-dialog">Aktivita</button><button type="button" data-dialog="tools-dialog">Nástroje</button></div></footer>
   <div class="kryptotron-degraded hidden" id="kryptotron-degraded" role="status">Stav není dostupný. Zkouším spojení obnovit.</div>
   <div class="bot-error hidden" id="bot-error-wrap">
@@ -205,29 +221,29 @@
       <div class="agent-report" id="agent-report"></div>
       <ol class="agent-ledger" id="agent-ledger"></ol>
     </dialog>
+<dialog class="workspace-dialog" id="dca-detail-dialog" aria-labelledby="dca-detail-title">
+  <header class="dialog-heading"><h2 id="dca-detail-title">Historie DCA</h2><button type="button" data-close-dialog aria-label="Zavřít">×</button></header>
+  <p class="workspace-note" id="dca-schedule">Čekám na plán</p>
+  <p class="workspace-note">Denně v 8:00, týdně v neděli v 8:00, měsíčně prvního v 8:00 — Praha. Změny platí od nejbližšího budoucího termínu.</p>
+  <p class="workspace-note">Posledních nejvýše 156 evidovaných DCA nákupů. Ocenění nezohledňuje poplatky, pozdější prodeje ani převody. Nákupy jsou již součástí zůstatků nahoře.</p>
+  <h3>Poslední nákupy</h3><div id="dca-purchases" class="purchase-list"></div>
+  <button class="dca-test hidden" id="dca-test" type="button">Otestovat nákup</button>
+</dialog>
+<dialog class="workspace-dialog" id="trading-history-dialog" aria-labelledby="trading-history-title">
+  <header class="dialog-heading"><h2 id="trading-history-title">Historie a poplatky</h2><button type="button" data-close-dialog aria-label="Zavřít">×</button></header>
+  <div id="trade-explanations"><p>Zatím nejsou dostupné záznamy.</p></div>
+</dialog>
 <dialog class="workspace-dialog" id="strategy-dialog" aria-labelledby="strategy-title">
   <header class="dialog-heading"><h2 id="strategy-title">Rozhodování strategie</h2><button type="button" data-close-dialog aria-label="Zavřít">×</button></header>
   <section class="strategy-card" aria-label="Stav a pravidla strategie">
+    <div class="workspace-metrics"><div><span>Obchodní páry</span><strong id="trading-pairs">—</strong></div><div><span>Ochrana pozic</span><strong id="trading-protection">—</strong><small id="trading-risk">Čekám na ověření účtu</small></div></div>
     <header><div class="panel-heading"><p>EMA50 / EMA200 · uzavřené 4h svíčky</p></div><span id="strategy-status" role="status">Čekám na ověření</span></header>
     <p class="reconciliation-note" id="reconciliation-note">Stav účtu zatím není ověřený proti burze.</p>
     <div id="reconciliation-issues" role="status"></div>
     <div class="strategy-risk" id="strategy-risk"></div>
     <details class="trade-explanations hidden" id="strategy-residuals-detail"><summary>Drobné zůstatky po zaokrouhlení</summary><div id="strategy-residuals"></div></details>
     <div class="decision-grid" id="decision-grid"><p>Čekám na první kontrolu trhu.</p></div>
-    <details class="trade-explanations"><summary>Proč proběhly poslední obchody</summary><div id="trade-explanations"><p>Zatím nejsou dostupné záznamy.</p></div></details>
   </section>
-</dialog>
-<dialog class="workspace-dialog" id="dca-dialog" aria-labelledby="dca-dialog-title">
-  <header class="dialog-heading"><h2 id="dca-dialog-title">Částka DCA</h2><button type="button" data-close-dialog aria-label="Zavřít">×</button></header>
-  <form id="dca-settings-form">
-    <p class="dca-settings-label" id="dca-preset-label">Částka na každé aktivum · USDC</p>
-    <div aria-labelledby="dca-preset-label" role="group" class="dca-presets" id="dca-presets">
-      <button data-amount="5" type="button">5</button><button data-amount="10" type="button">10</button><button data-amount="20" type="button">20</button><button data-amount="50" type="button">50</button><button data-amount="100" type="button">100</button><button data-amount="200" type="button">200</button><button data-amount="500" type="button">500</button><button data-amount="1000" type="button">1 000</button>
-    </div>
-    <p class="message" id="dca-settings-error" role="alert"></p>
-    <div class="dca-dialog-actions"><button type="button" data-close-dialog>Zrušit</button><button class="primary" id="dca-save" type="submit">Uložit</button></div>
-  </form>
-  <button class="dca-test hidden" id="dca-test" type="button">Otestovat nákup</button>
 </dialog>
 <dialog class="workspace-dialog" id="close-position-dialog" aria-labelledby="close-position-title">
   <header class="dialog-heading"><h2 id="close-position-title">Uzavřít pozici</h2><button type="button" data-close-dialog aria-label="Zavřít">×</button></header>
@@ -276,12 +292,12 @@
 <small>Další kontrola</small><strong id="bot-next-check">—</strong>
 </div>
 
-<div><small>Ochrana</small><strong id="bot-protection">—</strong></div><div><small>Poslední uzavřený výsledek</small><strong id="bot-result">—</strong></div></div></dialog><dialog class="workspace-dialog" id="activity-dialog"><header class="dialog-heading"><h2>Aktivita</h2><button type="button" data-close-dialog aria-label="Zavřít">×</button></header><section class="logbook">
+<div><small>Ochrana</small><strong id="bot-protection">—</strong></div><div><small>Čistý výsledek po poplatcích</small><strong id="bot-result">—</strong></div></div></dialog><dialog class="workspace-dialog" id="activity-dialog"><header class="dialog-heading"><h2>Aktivita</h2><button type="button" data-close-dialog aria-label="Zavřít">×</button></header><section class="logbook">
 <div class="logbook-title">Poslední události</div>
 <ol id="bot-events">
 <li><time>—</time><span>Načítám události</span></li>
 </ol>
-</section></dialog><dialog class="workspace-dialog" id="tools-dialog"><header class="dialog-heading"><h2>Nástroje</h2><button type="button" data-close-dialog aria-label="Zavřít">×</button></header><section class="streak-module">
+</section></dialog><dialog class="workspace-dialog" id="tools-dialog"><header class="dialog-heading"><h2>Nástroje</h2><button type="button" data-close-dialog aria-label="Zavřít">×</button></header><section class="automation-control"><h3>Společná pauza nákupů</h3><p>Zastaví nové nákupy Tradingu i DCA. Existující pozice a ochranné příkazy se spravují dál.</p><button type="button" id="bot-control" disabled>Načítám</button></section><section class="streak-module">
 <div class="dca-head">
 <div>
 <small>Simulace · 1R</small>

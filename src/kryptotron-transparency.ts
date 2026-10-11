@@ -1,3 +1,5 @@
+import { orderId, unknownTradeCosts, type TradeCosts } from "./trade-accounting.js";
+
 const reasons: Record<string, string> = {
   MANUAL_CLOSE: "Uživatel ručně uzavřel pozici. Pro tento pár následuje hodinová pauza.",
   AWAITING_STRATEGY_CHECK: "Pauza skončila. Čekám na další pravidelnou kontrolu strategie.",
@@ -7,6 +9,7 @@ const reasons: Record<string, string> = {
   BEAR_REGIME: "EMA50 není nad EMA200. Strategie čeká na býčí režim.",
   POSITION_ALREADY_OPEN: "Pozice je otevřená a má potvrzenou burzovní ochranu.",
   ENTRIES_PAUSED: "Nové obchody jsou pozastavené uživatelem.",
+  TRADING_PAUSED: "Nové vstupy Tradingu jsou pozastavené. DCA má vlastní nastavení.",
   DAILY_LOSS_LIMIT: "Byl dosažen denní limit ztráty.",
   WEEKLY_LOSS_LIMIT: "Byl dosažen týdenní limit ztráty.",
   DAILY_TRADE_LIMIT: "Byl dosažen denní limit vstupů.",
@@ -73,6 +76,8 @@ export function readKryptotronTransparency(data: Record<string, unknown>, now = 
     return [{ symbol: item.symbol, at, action: item.decision === "POSITION_OPENED" ? "OPENED" : "CLOSED",
       reasonCode: code, reason: reasons[code] ?? "Obchod vyžaduje kontrolu původního záznamu.",
       entryPrice: number(item.entryPrice), exitPrice: number(item.exitPrice), quantity: number(item.quantity),
+      entryOrderId: orderId(item.entryOrderId), exitOrderId: orderId(item.exitOrderId),
+      costs: unknownTradeCosts() as TradeCosts,
       grossPnl: number(item.grossPnl), nominalStopRiskQuote: number(item.nominalStopRiskQuote),
       stopPrice: number(item.stopPrice), trailingActivationPrice: number(item.trailingActivationPrice),
       trailingBips: number(item.trailingBips), protectionStatus: item.protectionStatus === "ACTIVE" ? "ACTIVE" : null,
@@ -80,7 +85,7 @@ export function readKryptotronTransparency(data: Record<string, unknown>, now = 
   }) : [];
   return { safeMode, reconciliation: { status: reconciliationStatus, checkedAt, issues }, decisions,
     trades,
-    strategyStatus: safeMode ? "SAFE_MODE" : data.entries_paused !== false ? "PAUSED" : reconciliationStatus !== "OK" ? "UNVERIFIED"
+    strategyStatus: safeMode ? "SAFE_MODE" : data.entries_paused !== false || data.trading_paused === true ? "PAUSED" : reconciliationStatus !== "OK" ? "UNVERIFIED"
       : Array.isArray(data.pending_trade_logs) && data.pending_trade_logs.length ? "PERSISTENCE_REQUIRED" : "ACTIVE",
     historyPending: Array.isArray(data.pending_trade_logs) ? data.pending_trade_logs.length : 0,
   };

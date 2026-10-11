@@ -64,7 +64,7 @@ export function completeAccountReset(db: OceanDatabase, url: string, key: string
       positions: {}, strategy_residuals: {}, unmanaged_inventory: Object.fromEntries(Object.entries(report.balances).filter(([asset]) => asset !== "USDC")),
       pending_order: null, pending_protection: null, manual_close: null, protection_restore: null,
       decisions: {}, trade_explanations: [], events: [{ type: "CONTROL", at, message: "Nové období účtu. Automatizace zůstává pozastavená." }],
-      dca: { enabled: false, amount: record(state.dca).amount ?? 5, symbols: record(state.dca).symbols ?? [], purchases: [], recorded_totals: {} },
+      dca: { enabled: false, plans: record(state.dca).plans ?? {}, frequency: record(state.dca).frequency ?? null, amount: record(state.dca).amount ?? 5, symbols: record(state.dca).symbols ?? [], purchases: [], recorded_totals: {} },
       streak: { ...record(state.streak), enabled: false, session: {} },
       safe_mode: true, reconciliation: { status: "UNRESOLVED", checked_at: null, issues: [{ code: "RECONCILIATION_REQUIRED" }] },
       quote_asset: "USDC", account_balance: Number(report.balances.USDC), account_balance_at: report.checkedAt, account_balance_error: null,

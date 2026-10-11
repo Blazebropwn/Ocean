@@ -36,6 +36,7 @@ export const changePasswordSchema = z.object({
 
 export const kryptotronControlSchema = z.object({
   entriesPaused: z.boolean(),
+  scope: z.enum(["all", "trading"]).default("all"),
 });
 
 export const dcaControlSchema = z.object({
@@ -45,6 +46,12 @@ export const dcaControlSchema = z.object({
 export const dcaAmountSchema = z.object({
   amount: z.union([z.literal(5), z.literal(10), z.literal(20), z.literal(50), z.literal(100), z.literal(200), z.literal(500), z.literal(1000)]),
 });
+
+const dcaAssetAmount = z.union([z.literal(5), z.literal(10), z.literal(20), z.literal(50), z.literal(100)]);
+export const dcaSettingsSchema = z.object({
+  amounts: z.object({ BTCUSDC: dcaAssetAmount, ETHUSDC: dcaAssetAmount, SOLUSDC: dcaAssetAmount }).strict(),
+  frequency: z.enum(["daily", "weekly", "monthly"]),
+}).strict();
 
 export const streakControlSchema = z.object({
   enabled: z.boolean(),

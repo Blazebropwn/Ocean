@@ -6,7 +6,9 @@ let kryptotronRefresh;
 let approvalRefresh;
 let entriesPaused = false;
 let dcaEnabled = false;
-let dcaDraftAmount = null;
+let dcaDraft = null;
+const dcaAmounts = [5, 10, 20, 50, 100];
+const dcaFrequencies = { daily: "Denně", weekly: "Týdně", monthly: "Měsíčně" };
 let dcaSaving = false;
 let streakEnabled = false;
 let arcadeState = null;
@@ -562,7 +564,7 @@ function renderVault(snapshot) {
   const dca = snapshot.dca;
   $("#vault-invested").textContent = formatPrice(dca.totalInvested, snapshot.balance.asset);
   $("#vault-count").textContent = String(dca.purchaseCount);
-  $("#vault-amount").textContent = `${formatPrice(dca.amount, snapshot.balance.asset)} / aktivum`;
+  $("#vault-amount").textContent = dcaPlans(snapshot).map(p => `${p.symbol.replace(/USDC$/, "")} ${p.amount} USDC · ${dcaFrequencies[p.frequency].toLowerCase()}`).join(" / ");
   $("#vault-schedule").textContent = dca.enabled ? dca.statusText : "Pravidelné nákupy jsou pozastavené";
   $("#vault-notice").textContent = `Historie načtena ${formatDate(snapshot.updatedAt)} · ${snapshot.environment === "mainnet" ? "ostrý provoz" : snapshot.environment === "testnet" ? "zkušební provoz" : "režim neověřen"}`;
   $("#vault-notice").classList.remove("warning");
@@ -642,11 +644,12 @@ function renderPortfolio(snapshot) {
     grid.append(card);
   }
   renderDcaPortfolio(snapshot);
+  renderTradingOverview(snapshot);
   const list = $("#positions-list"); list.replaceChildren();
   const positions = snapshot.positions.filter((position) => position.inPosition);
   $("#position-count").textContent = String(positions.length);
   list.classList.toggle("compact", positions.length >= 3);
-  if (!positions.length) list.append(node("p", "positions-empty", snapshot.transparency?.safeMode ? "Nové nákupy blokuje kontrola účtu." : snapshot.entriesPaused ? "Nové obchody jsou pozastavené." : "Žádná otevřená pozice. Čekám na signál."));
+  if (!positions.length) list.append(node("p", "positions-empty", snapshot.transparency?.safeMode ? "Nové nákupy blokuje kontrola účtu." : snapshot.entriesPaused || snapshot.tradingPaused ? "Nové obchody jsou pozastavené." : "Žádná otevřená pozice. Čekám na signál."));
   for (const position of positions) {
     const asset = position.symbol.replace(snapshot.balance.asset, "");
     const holding = assets.find((item) => item.asset === asset);
@@ -665,7 +668,7 @@ function renderPortfolio(snapshot) {
     close.setAttribute("aria-label", `Uzavřít pozici ${asset}`);
     const pending = snapshot.manualClose?.request;
     close.disabled = !snapshot.manualClose?.available || !position.positionId || !["BTCUSDC", "ETHUSDC"].includes(position.symbol) || !position.protectionActive || closePositionSubmitting;
-    if (pending?.positionId === position.positionId && ["queued", "cancelling", "ready", "selling"].includes(pending.status)) close.textContent = "Uzavírání…";
+    if (pending && pending.positionId === position.positionId && ["queued", "cancelling", "ready", "selling"].includes(pending.status)) close.textContent = "Uzavírání…";
     close.title = close.disabled ? "Uzavření čeká na ověřený stav nebo dokončení předchozího požadavku." : "Prodat tuto pozici a pozastavit pár na 60 minut";
     close.addEventListener("click", () => openClosePosition(position, snapshot));
     if (position.protectionStatus === "CANCELLED") {
@@ -770,13 +773,47 @@ function renderStrategy(snapshot) {
   const trades = $("#trade-explanations"); trades.replaceChildren();
   if (!transparency?.trades?.length) trades.append(node("p", "", "Worker zatím neposkytl vysvětlení obchodu."));
   for (const trade of (transparency?.trades || []).slice(0, 5)) {
-    const item = node("article", "decision-card");
-    item.append(node("h3", "", `${trade.symbol.replace(/USDC$/, "")} · ${trade.action === "OPENED" ? "Pozice otevřena" : "Pozice uzavřena"}`), node("p", "", trade.reason));
+    const item = node("details", "decision-card trade-history-item");
+    const summary = node("summary");
+    const identity = node("span");
+    identity.append(node("strong", "", `${trade.symbol.replace(/USDC$/, "")} · ${trade.action === "OPENED" ? "Otevření" : "Uzavření"}`), node("small", "", formatDate(trade.at)));
+    const net = trade.costs?.status === "verified" && Number.isFinite(trade.costs.netPnl) ? trade.costs.netPnl : null;
+    summary.append(identity, node("span", net === null ? "" : net > 0 ? "positive" : net < 0 ? "negative" : "",
+      trade.action === "OPENED" ? "Detail vstupu" : net === null ? "Čistý výsledek neověřen" : `${new Intl.NumberFormat("cs-CZ", {minimumFractionDigits:4,maximumFractionDigits:4}).format(net)} USDC po poplatcích`));
+    item.append(summary, node("p", "", trade.reason));
     const values = node("dl");
     for (const [label, value] of [["Vstup", trade.entryPrice], ["Výstup", trade.exitPrice], ["PnL před poplatky", trade.grossPnl], ["Nominální riziko ke stopu", trade.nominalStopRiskQuote], ["Stop loss", trade.stopPrice], ["Aktivace trailingu", trade.trailingActivationPrice]]) {
       if (value != null) values.append(node("dt", "", label), node("dd", "", formatPrice(value, snapshot.balance.asset)));
     }
     if (trade.quantity != null) values.append(node("dt", "", "Množství"), node("dd", "", formatQuantity(trade.quantity)));
+    if (trade.action === "CLOSED") {
+      const costs = trade.costs;
+      const verified = costs?.status === "verified" && Number.isFinite(costs.netPnl);
+      values.append(node("dt", "", "Čistý výsledek po poplatcích"),
+        node("dd", verified ? (costs.netPnl > 0 ? "positive" : costs.netPnl < 0 ? "negative" : "") : "",
+          verified ? formatPrice(costs.netPnl, snapshot.balance.asset) : "Neověřeno"));
+      for (const [label, fees] of [["Poplatky nákupu (celá objednávka)", costs?.entryFees], ["Poplatky prodeje", costs?.exitFees]]) {
+        if (fees?.length) values.append(node("dt", "", label), node("dd", "", fees.map(f => `${formatQuantity(f.amount)} ${f.asset}`).join(" + ")));
+      }
+      if (verified) {
+        for (const [label, value] of [["Přiřazený pořizovací náklad", costs.allocatedEntryCost], ["Příjem po prodejním poplatku", costs.netProceeds]]) {
+          values.append(node("dt", "", label), node("dd", "", formatPrice(value, snapshot.balance.asset)));
+        }
+        if (costs.residualQuantity > 0) {
+          values.append(node("dt", "", "Zbytek z nákupu při uzavření"), node("dd", "", `${formatQuantity(costs.residualQuantity)} ${trade.symbol.replace(/USDC$/, "")}`),
+            node("dt", "", "Pořizovací náklad zbytku"), node("dd", "", formatPrice(costs.residualCost, snapshot.balance.asset)));
+          item.append(node("p", "", "Zbytek zůstává majetkem. Jeho pořizovací náklad není započtený do výsledku prodané části."));
+        }
+      } else {
+        const explanations = {
+          MISSING_ORDER_IDS: "Chybí identifikátory plnění tohoto staršího obchodu. Čistý výsledek nelze doložit.",
+          UNAVAILABLE: "Čekám na ověření plnění a poplatků z Binance.",
+          INCOMPLETE_FILLS: "Plnění nebo poplatky nejsou kompletní, případně nesouhlasí s evidencí obchodu.",
+          UNVALUED_FEE_ASSET: "Poplatek v jiné měně nemá doloženou hodnotu v USDC. Čistý výsledek zůstává neověřený.",
+        };
+        item.append(node("p", "", explanations[costs?.reason] || "Čistý výsledek ještě není ověřený."));
+      }
+    }
     item.append(values, node("small", "", `${formatDate(trade.at)}${trade.nominalStopRiskQuote != null ? " · Nominální riziko nezahrnuje poplatky ani skluz při plnění." : ""}`));
     trades.append(item);
   }
@@ -862,9 +899,44 @@ function updatePositionDetail() {
 for (const button of document.querySelectorAll("[data-dialog]")) button.addEventListener("click", () => $("#" + button.dataset.dialog).showModal());
 for (const button of document.querySelectorAll("[data-close-dialog]")) button.addEventListener("click", () => button.closest("dialog").close());
 for (const dialog of document.querySelectorAll(".workspace-dialog")) dialog.addEventListener("click", (event) => { if (event.target === dialog) { const bounds = dialog.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) dialog.close(); } });
-for (const button of document.querySelectorAll("[data-compact]")) button.addEventListener("click", () => {
-  $(".portfolio-surface").dataset.compactView = button.dataset.compact;
-  for (const item of document.querySelectorAll("[data-compact]")) item.setAttribute("aria-pressed", String(item === button));
+let selectedHomeWorkspace = "trading";
+const compactHome = window.matchMedia("(max-width: 900px)");
+function selectHomeWorkspace(name, focus = false) {
+  selectedHomeWorkspace = name;
+  for (const tab of document.querySelectorAll("[data-home-tab]")) {
+    const selected = tab.dataset.homeTab === name;
+    tab.setAttribute("aria-selected", String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+    const pane = $("#" + tab.getAttribute("aria-controls"));
+    pane.hidden = compactHome.matches && !selected;
+    pane.setAttribute("role", compactHome.matches ? "tabpanel" : "region");
+    pane.setAttribute("aria-label", tab.textContent.trim());
+    if (selected && focus && compactHome.matches) tab.focus();
+  }
+}
+compactHome.addEventListener("change", () => selectHomeWorkspace(selectedHomeWorkspace));
+selectHomeWorkspace(selectedHomeWorkspace);
+for (const tab of document.querySelectorAll("[data-home-tab]")) {
+  tab.addEventListener("click", () => selectHomeWorkspace(tab.dataset.homeTab));
+  tab.addEventListener("keydown", event => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const name = event.key === "Home" ? "trading" : event.key === "End" ? "dca" : tab.dataset.homeTab === "trading" ? "dca" : "trading";
+    selectHomeWorkspace(name, true);
+  });
+}
+
+$("#trading-control").addEventListener("click", async () => {
+  const button = $("#trading-control");
+  if (!vaultSnapshot || vaultSnapshot.entriesPaused) return;
+  button.disabled = true;
+  try {
+    await request("/api/kryptotron/control", { method: "POST", body: JSON.stringify({ scope: "trading", entriesPaused: !vaultSnapshot.tradingPaused }) });
+    await loadKryptotron();
+  } catch (error) {
+    $("#bot-error-wrap").classList.remove("hidden");
+    $("#bot-error").textContent = error.message;
+  } finally { button.disabled = !vaultSnapshot || vaultSnapshot.entriesPaused; }
 });
 
 async function loadKryptotron() {
@@ -879,7 +951,7 @@ async function loadKryptotron() {
     const needsAttention = Boolean(kryptotron.lastError) || ["degraded", "offline", "unknown"].includes(kryptotron.status);
     setSystemState(needsAttention ? "Vyžaduje pozornost" : "Spojení aktivní", needsAttention);
     renderVault(kryptotron);
-    const status = kryptotron.transparency?.safeMode ? "Nákupy blokované" : entriesPaused ? "Pozastaveno" : open ? "V pozici" : (statuses[kryptotron.status] || "Propojeno");
+    const status = kryptotron.transparency?.safeMode ? "Nákupy blokované" : entriesPaused || kryptotron.tradingPaused ? "Pozastaveno" : open ? "V pozici" : (statuses[kryptotron.status] || "Propojeno");
     $("#kryptotron-status").lastChild.textContent = ` ${status}`;
     $("#kryptotron-status").classList.toggle("warning", Boolean(kryptotron.transparency?.safeMode) || kryptotron.status === "degraded" || kryptotron.status === "offline");
     const balanceAt = Date.parse(kryptotron.balance.updatedAt);
@@ -899,12 +971,9 @@ async function loadKryptotron() {
     dcaTest.disabled = dcaTestPending;
     dcaTest.textContent = dcaTestPending ? "Zpracovávám…" : kryptotron.dca.testStatus === "completed" ? "Otestovat znovu" : "Otestovat nákup";
     $("#dca-control").disabled = false;
-    $("#dca-settings-open").disabled = false;
     $("#dca-toggle-status").textContent = dcaEnabled ? (kryptotron.entriesPaused ? "Čeká na obnovení" : "Zapnuto") : "Vypnuto";
-    $("#dca-amount-value").textContent = `${formatQuantity(kryptotron.dca.amount)} ${kryptotron.balance.asset}`;
     $("#dca-control").classList.toggle("enabled", dcaEnabled);
     $("#dca-control").setAttribute("aria-checked", String(dcaEnabled));
-    if (!$("#dca-dialog").open) dcaDraftAmount = kryptotron.dca.amount;
     streakEnabled = kryptotron.streak.enabled;
     $("#streak-control").textContent = streakEnabled ? "Vypnout" : "Zapnout";
     $("#streak-control").classList.toggle("enabled", streakEnabled);
@@ -922,15 +991,17 @@ async function loadKryptotron() {
     $("#bot-trail-activation").textContent = open?.protectionActivationPrice
       ? `${formatPrice(open.protectionActivationPrice, kryptotron.balance.asset)} · ${formatBips(open.protectionTrailingBips)}`
       : "—";
-    $("#bot-result").textContent = kryptotron.lastTrade ? `${kryptotron.lastTrade.pnl >= 0 ? "+" : ""}${kryptotron.lastTrade.pnl.toFixed(2)} ${kryptotron.balance.asset}` : "—";
-    $("#bot-result").classList.toggle("positive", Boolean(kryptotron.lastTrade && kryptotron.lastTrade.pnl >= 0));
-    $("#bot-result").classList.toggle("negative", Boolean(kryptotron.lastTrade && kryptotron.lastTrade.pnl < 0));
-    $("#bot-last-trade").textContent = kryptotron.lastTrade ? `${kryptotron.lastTrade.symbol} · ${kryptotron.lastTrade.result === "WIN" ? "zisk" : "ztráta"}` : "Zatím žádný";
+    const netPnl = kryptotron.lastTrade?.costs?.status === "verified" && Number.isFinite(kryptotron.lastTrade.costs.netPnl)
+      ? kryptotron.lastTrade.costs.netPnl : null;
+    $("#bot-result").textContent = netPnl !== null ? `${netPnl >= 0 ? "+" : ""}${netPnl.toFixed(4)} ${kryptotron.balance.asset}` : kryptotron.lastTrade ? "Neověřeno" : "—";
+    $("#bot-result").classList.toggle("positive", netPnl !== null && netPnl > 0);
+    $("#bot-result").classList.toggle("negative", netPnl !== null && netPnl < 0);
+    $("#bot-last-trade").textContent = kryptotron.lastTrade ? `${kryptotron.lastTrade.symbol} · ${netPnl === null ? "čistý výsledek neověřen" : netPnl > 0 ? "čistý zisk" : netPnl < 0 ? "čistá ztráta" : "po poplatcích na nule"}` : "Zatím žádný";
     $("#bot-updated").textContent = formatDate(kryptotron.lastMarketCheckAt || kryptotron.updatedAt);
     $("#bot-next-check").textContent = formatDate(kryptotron.nextCheckAt);
     $("#bot-error-wrap").classList.toggle("hidden", !kryptotron.lastError);
     $("#bot-error").textContent = kryptotron.lastError || "";
-    $("#bot-control").textContent = entriesPaused ? (kryptotron.transparency?.safeMode ? "Důvod blokace" : "Obnovit") : "Pozastavit";
+    $("#bot-control").textContent = entriesPaused ? (kryptotron.transparency?.safeMode ? "Důvod blokace" : "Zrušit společnou pauzu") : "Pozastavit všechny nákupy";
     $("#bot-control").classList.toggle("resume", entriesPaused);
     $("#bot-control").disabled = false;
     if (kryptotron.transparency?.historyPending) setSystemState("Čekám na uložení historie", true);
@@ -940,6 +1011,10 @@ async function loadKryptotron() {
     renderEvents(kryptotron.events);
   } catch (error) {
     setSystemState("Data nejsou dostupná", true);
+    $("#trading-control").disabled = true;
+    $("#dca-control").disabled = true;
+    document.querySelectorAll("#dca-settings-form input, #dca-settings-form button").forEach(el => { el.disabled = true; });
+    $("#bot-control").disabled = true;
     setVaultUnavailable("Historii se nepodařilo obnovit. Zobrazené údaje mohou být neaktuální.");
     if (error.status === 502 || error.status === 503) {
       $("#kryptotron-degraded").classList.remove("hidden");
@@ -1036,6 +1111,29 @@ $("#disconnect-binance").addEventListener("click", async (event) => {
   }
 });
 
+function renderTradingOverview(snapshot) {
+  const pairs = [...new Set(snapshot.positions.map(p => p.symbol))];
+  $("#trading-pairs").textContent = pairs.length ? pairs.map(s => s.replace(/USDC$/, "/USDC")).join(" · ") : "—";
+  const last = snapshot.lastTrade;
+  const net = last?.costs?.status === "verified" && Number.isFinite(last.costs.netPnl) ? last.costs.netPnl : null;
+  const result = $("#trading-net-result");
+  result.textContent = net === null ? (last ? "Neověřeno" : "—") : `${net > 0 ? "+" : ""}${new Intl.NumberFormat("cs-CZ", {minimumFractionDigits:4, maximumFractionDigits:4}).format(net)} USDC`;
+  result.classList.toggle("positive", net !== null && net > 0);
+  result.classList.toggle("negative", net !== null && net < 0);
+  $("#trading-net-detail").textContent = last ? `${last.symbol.replace(/USDC$/, "/USDC")} · ${formatDate(last.exitedAt)} · po poplatcích` : "Zatím žádný uzavřený obchod";
+  const open = snapshot.positions.filter(p => p.inPosition);
+  const verified = snapshot.transparency?.reconciliation?.status === "OK";
+  $("#trading-protection").textContent = !verified ? "Neověřeno" : open.length ? `${open.filter(p => p.protectionActive).length} / ${open.length} chráněno` : "Bez otevřené pozice";
+  const stop = snapshot.transparency?.decisions?.[0]?.risk?.stopLossPct;
+  $("#trading-risk").textContent = !verified ? "Čekám na ověření účtu" : Number.isFinite(stop) ? `Nouzový stop ${formatQuantity(stop)} % · detaily v pravidlech` : "Stav podle poslední kontroly účtu";
+  $("#automation-paused").classList.toggle("hidden", !snapshot.entriesPaused);
+  const control = $("#trading-control");
+  control.setAttribute("aria-checked", String(!snapshot.tradingPaused));
+  control.textContent = snapshot.tradingPaused ? "Povolit vstupy" : "Pozastavit vstupy";
+  control.disabled = snapshot.entriesPaused;
+  control.title = snapshot.entriesPaused ? "Nejprve vyřešte společnou pauzu nebo blokaci nákupů v Nástrojích." : "Ovládá pouze nové vstupy Tradingu. Správa otevřených pozic pokračuje.";
+}
+
 function renderDcaPortfolio(snapshot) {
   // Cost and valuation use the same bounded DCA purchase ledger.
   const purchases = snapshot.dca.purchases || [];
@@ -1061,6 +1159,34 @@ function renderDcaPortfolio(snapshot) {
   valuation.title = value === null ? "Čekám na aktuální ceny všech nakoupených aktiv." : `${scope} Nakoupené množství oceněné posledními dostupnými cenami (${formatDate(snapshot.holdings?.capturedAt)}). Nezohledňuje pozdější prodeje, převody ani poplatky.`;
   valuation.classList.toggle("positive", value !== null && value > invested);
   valuation.classList.toggle("negative", value !== null && value < invested);
+  $("#dca-schedule").textContent = snapshot.entriesPaused && snapshot.dca.enabled ? "Plán čeká na zrušení společné pauzy nákupů v Nástrojích." : snapshot.dca.statusText || "Termín není dostupný";
+  renderDcaSettings(snapshot);
+  for (const row of document.querySelectorAll('.dca-amount-row')) {
+    const symbol = row.dataset.symbol;
+    const asset = symbol.replace(/USDC$/, "");
+    const history = purchases.filter(p => p.symbol === symbol);
+    const quantity = quantities.get(asset) || 0;
+    const cost = history.reduce((sum, p) => sum + p.amount, 0);
+    const price = snapshot.holdings?.stale ? null : snapshot.holdings?.assets.find(h => h.asset === asset)?.price;
+    const current = quantity === 0 ? 0 : Number.isFinite(price) && price > 0 ? price * quantity : null;
+    const investedValue = row.querySelector('.dca-asset-invested');
+    investedValue.textContent = formatPrice(cost, snapshot.balance.asset);
+    investedValue.title = scope;
+    const currentValue = row.querySelector('.dca-asset-current');
+    currentValue.textContent = current === null ? "—" : `${current > 0 ? "≈ " : ""}${formatPrice(current, snapshot.balance.asset)}`;
+    currentValue.title = current === null ? "Čekám na aktuální cenu aktiva." : `${formatQuantity(quantity)} ${asset} z evidované historie DCA. Ocenění nezohledňuje pozdější prodeje, převody ani poplatky.`;
+    currentValue.classList.toggle('positive', current !== null && current > cost);
+    currentValue.classList.toggle('negative', current !== null && current < cost);
+  }
+  const list = $("#dca-purchases"); list.replaceChildren();
+  if (!purchases.length) list.append(node("p", "", "Zatím žádné evidované DCA nákupy."));
+  for (const purchase of purchases.slice(0, 5)) {
+    const row = node("div", "purchase-row"), identity = node("div");
+    const asset = purchase.symbol.replace(/USDC$/, "");
+    identity.append(node("strong", "", asset), node("small", "", formatDate(purchase.at)));
+    row.append(identity, node("span", "", `${formatQuantity(purchase.quantity)} ${asset}`), node("span", "", formatPrice(purchase.amount, snapshot.balance.asset)));
+    list.append(row);
+  }
 }
 
 function renderEvents(events) {
@@ -1133,53 +1259,84 @@ $("#dca-test").addEventListener("click", async () => {
   }
 });
 
-function renderDcaDraft() {
-  const snapshot = vaultSnapshot;
-  if (!snapshot) return;
-  document.querySelectorAll("#dca-presets button").forEach((button) => {
-    const selected = Number(button.dataset.amount) === dcaDraftAmount;
-    button.classList.toggle("active", selected);
-    button.setAttribute("aria-pressed", String(selected));
-  });
-  $("#dca-save").disabled = dcaSaving || dcaDraftAmount === snapshot.dca.amount;
+function dcaPlans(snapshot) {
+  return snapshot.dca.plans || ["BTCUSDC", "ETHUSDC", "SOLUSDC"].map(symbol => ({ symbol, amount: snapshot.dca.amount, frequency: "weekly" }));
 }
 
-$("#dca-settings-open").addEventListener("click", () => {
-  if (!vaultSnapshot || dcaSaving) return;
-  dcaDraftAmount = vaultSnapshot.dca.amount;
-  $("#dca-settings-error").textContent = "";
-  renderDcaDraft();
-  $("#dca-dialog").showModal();
-});
-
-document.querySelectorAll("#dca-presets button").forEach((button) => button.addEventListener("click", () => {
-  dcaDraftAmount = Number(button.dataset.amount);
-  $("#dca-settings-error").textContent = "";
-  renderDcaDraft();
-}));
-
-$("#dca-settings-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  if (!vaultSnapshot || dcaSaving || dcaDraftAmount === vaultSnapshot.dca.amount) return;
-  const amount = dcaDraftAmount;
-  if (amount >= 100 && !confirm(`Uložit ${amount} USDC na každé aktivum pro příští DCA nákupy?`)) return;
-  dcaSaving = true;
-  $("#dca-save").disabled = true;
-  $("#dca-save").textContent = "Ukládám…";
-  document.querySelectorAll("#dca-presets button").forEach((button) => { button.disabled = true; });
-  try {
-    await request("/api/kryptotron/dca/amount", { method: "POST", body: JSON.stringify({ amount }) });
-    $("#dca-dialog").close();
-    await loadKryptotron();
-  } catch (error) {
-    $("#dca-settings-error").textContent = error.message;
-    if (!$("#dca-dialog").open) $("#dca-dialog").showModal();
-  } finally {
-    dcaSaving = false;
-    $("#dca-save").textContent = "Uložit";
-    document.querySelectorAll("#dca-presets button").forEach((button) => { button.disabled = false; });
-    renderDcaDraft();
+function savedDcaSettings(snapshot) {
+  const plans = dcaPlans(snapshot);
+  return { amounts: Object.fromEntries(plans.map(p => [p.symbol, p.amount])),
+    frequency: plans.every(p => p.frequency === plans[0].frequency) ? plans[0].frequency : null };
+}
+function dcaSettingsChanged(snapshot) {
+  const saved = savedDcaSettings(snapshot);
+  return !dcaDraft || dcaDraft.frequency !== saved.frequency || Object.keys(saved.amounts).some(symbol => dcaDraft.amounts[symbol] !== saved.amounts[symbol]);
+}
+function updateDcaSettings() {
+  if (!dcaDraft || !vaultSnapshot) return;
+  dcaDraft.dirty = dcaSettingsChanged(vaultSnapshot);
+  for (const radio of document.querySelectorAll('#dca-frequency input')) radio.checked = radio.value === dcaDraft.frequency;
+  for (const row of document.querySelectorAll('.dca-amount-row')) {
+    const amount = dcaDraft.amounts[row.dataset.symbol];
+    row.querySelector('output').textContent = `${amount} USDC`;
+    const slider = row.querySelector('input');
+    slider.value = String(Math.max(0, dcaAmounts.indexOf(amount)));
+    slider.style.setProperty('--dca-fill', `${Number(slider.value) / (dcaAmounts.length - 1) * 100}%`);
+    slider.setAttribute('aria-valuetext', `${amount} USDC`);
+    for (const [index, button] of [...row.querySelectorAll('.dca-slider-ticks button')].entries()) button.setAttribute('aria-pressed', String(dcaAmounts[index] === amount));
   }
+  $('#dca-save').disabled = dcaSaving || !dcaDraft.dirty || !dcaDraft.frequency || !Object.values(dcaDraft.amounts).every(a => dcaAmounts.includes(a));
+  $('#dca-cancel').disabled = dcaSaving || !dcaDraft.dirty;
+}
+function renderDcaSettings(snapshot) {
+  if (!dcaDraft?.dirty) dcaDraft = { ...savedDcaSettings(snapshot), dirty: false };
+  const assets = $('#dca-assets');
+  if (!assets.children.length) for (const plan of dcaPlans(snapshot)) {
+    const row = node('div', 'dca-amount-row'); row.dataset.symbol = plan.symbol;
+    const editor = node('div', 'dca-amount-editor');
+    const label = node('label', 'dca-slider-label', plan.symbol.replace(/USDC$/, ''));
+    const output = node('output'); output.htmlFor = `dca-amount-${plan.symbol}`;
+    label.htmlFor = output.htmlFor;
+    label.append(output);
+    const slider = node('input'); slider.type = 'range'; slider.min = '0'; slider.max = '4'; slider.step = '1'; slider.id = output.htmlFor;
+    slider.addEventListener('input', () => { dcaDraft.amounts[plan.symbol] = dcaAmounts[Number(slider.value)]; updateDcaSettings(); });
+    const ticks = node('div', 'dca-slider-ticks');
+    for (const amount of dcaAmounts) {
+      const button = node('button', '', String(amount)); button.type = 'button';
+      button.style.setProperty('--tick-position', `${dcaAmounts.indexOf(amount) / (dcaAmounts.length - 1) * 100}%`);
+      button.setAttribute('aria-label', `${plan.symbol.replace(/USDC$/, '')} ${amount} USDC za nákup`);
+      button.addEventListener('click', () => { dcaDraft.amounts[plan.symbol] = amount; updateDcaSettings(); }); ticks.append(button);
+    }
+    editor.append(label, slider, ticks);
+    const values = node('dl', 'dca-row-values');
+    for (const [caption, className] of [['Investováno', 'dca-asset-invested'], ['Aktuální hodnota', 'dca-asset-current']]) {
+      const metric = node('div');
+      metric.append(node('dt', '', caption), node('dd', className, '—'));
+      values.append(metric);
+    }
+    row.append(editor, values); assets.append(row);
+  }
+  document.querySelectorAll('#dca-settings-form input, #dca-settings-form button').forEach(el => { el.disabled = dcaSaving; });
+  updateDcaSettings();
+}
+for (const radio of document.querySelectorAll('#dca-frequency input')) radio.addEventListener('change', () => {
+  if (radio.checked && dcaDraft) { dcaDraft.frequency = radio.value; updateDcaSettings(); }
+});
+$('#dca-cancel').addEventListener('click', () => { dcaDraft = null; $('#dca-settings-feedback').textContent = ''; renderDcaSettings(vaultSnapshot); });
+$('#dca-settings-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  if (dcaSaving || $('#dca-save').disabled) return;
+  dcaSaving = true;
+  const body = { amounts: { ...dcaDraft.amounts }, frequency: dcaDraft.frequency };
+  $('#dca-settings-feedback').textContent = 'Ukládám…';
+  renderDcaSettings(vaultSnapshot);
+  try {
+    const { plans } = await request('/api/kryptotron/dca/settings', { method: 'POST', body: JSON.stringify(body) });
+    vaultSnapshot.dca.plans = plans;
+    dcaDraft = null;
+    $('#dca-settings-feedback').textContent = 'Uloženo';
+  } catch (error) { $('#dca-settings-feedback').textContent = error.message; }
+  finally { dcaSaving = false; renderDcaSettings(vaultSnapshot); renderVault(vaultSnapshot); }
 });
 
 $("#streak-control").addEventListener("click", async () => {
