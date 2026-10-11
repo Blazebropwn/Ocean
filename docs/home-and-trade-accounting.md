@@ -4,7 +4,8 @@ Home ponechává čtyři skutečné zůstatky z Binance Spot. USDC je dostupná 
 BTC, ETH a SOL zahrnují i množství zamčené v objednávkách. Trading a DCA jsou
 na desktopu dvě stejně široké poloviny pod těmito kartami: DCA vlevo,
 Trading vpravo, bez posouvání stránky při běžné výšce okna. Na mobilu se
-přepínají uvnitř Home. Při vysokém přiblížení nebo velmi nízkém okně
+přepínají uvnitř Home třemi záložkami Home / Trading / DCA. Zůstatky jsou
+jen v první záložce, obchodování a DCA mají vlastní obsah bez zůstatků nad panelem. Při vysokém přiblížení nebo velmi nízkém okně
 je posouvání dostupné, aby ovládací prvky zůstaly dosažitelné.
 Jejich evidenci nepřičítáme k celkovým zůstatkům.
 

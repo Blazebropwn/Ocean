@@ -85,4 +85,5 @@ ověřena i v lokálním Firefoxu se simulovaným API a skutečnými událostmi 
 
 Závěrečné ověření: build úspěšný, **245 Node testů a 188 Python testů prošlo**.
 Chromium kontroluje desktop 1920×1080, 1440×900, 1366×768, 1280×720
-a 1024×768 bez posouvání a mobilní přepínání při šířkách 320, 390 a 768 px.
+a 1024×768 bez posouvání a tři mobilní záložky Home / Trading / DCA
+při šířkách 320, 390 a 768 px.

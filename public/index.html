@@ -137,11 +137,12 @@
 </form>
 </div>
 <div class="portfolio-surface">
-  <section class="asset-grid" id="asset-grid" aria-label="Zůstatky na Binance Spot"><article class="asset-card"><span>USDC</span><strong>—</strong></article><article class="asset-card"><span>BTC</span><strong>—</strong></article><article class="asset-card"><span>ETH</span><strong>—</strong></article><article class="asset-card"><span>SOL</span><strong>—</strong></article></section>
   <div class="home-tabs" role="tablist" aria-label="Pracovní prostor">
-    <button type="button" id="trading-tab" role="tab" aria-selected="true" aria-controls="trading-workspace" data-home-tab="trading"><span>Trading</span><small>Kryptotron</small></button>
-    <button type="button" id="dca-tab" role="tab" aria-selected="false" aria-controls="dca-workspace" tabindex="-1" data-home-tab="dca"><span>DCA</span><small>Pravidelné investování</small></button>
+    <button type="button" id="home-tab" role="tab" aria-selected="true" aria-controls="asset-grid" data-home-tab="home">Home</button>
+    <button type="button" id="trading-tab" role="tab" aria-selected="false" aria-controls="trading-workspace" tabindex="-1" data-home-tab="trading">Trading</button>
+    <button type="button" id="dca-tab" role="tab" aria-selected="false" aria-controls="dca-workspace" tabindex="-1" data-home-tab="dca">DCA</button>
   </div>
+  <section class="asset-grid" id="asset-grid" aria-label="Zůstatky na Binance Spot"><article class="asset-card"><span>USDC</span><strong>—</strong></article><article class="asset-card"><span>BTC</span><strong>—</strong></article><article class="asset-card"><span>ETH</span><strong>—</strong></article><article class="asset-card"><span>SOL</span><strong>—</strong></article></section>
   <section class="home-pane positions-card" id="trading-workspace" role="tabpanel" aria-labelledby="trading-tab" tabindex="0">
     <header><div class="panel-heading"><h2>Trading</h2></div><div class="workspace-controls"><span class="app-status" id="kryptotron-status"><i></i>Načítám</span><button type="button" id="trading-control" role="switch" aria-checked="false" aria-label="Nové vstupy Tradingu" disabled>Načítám</button></div></header>
     <p class="home-notice hidden" id="automation-paused">Všechny nové nákupy jsou společně pozastavené. <button type="button" data-dialog="tools-dialog">Otevřít ovládání</button></p>

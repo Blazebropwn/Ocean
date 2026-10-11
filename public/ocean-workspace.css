@@ -353,7 +353,7 @@
 .home-pane { min-width:0; min-height:0; padding:20px; gap:14px; }
 #dca-workspace { grid-area:dca; }
 #trading-workspace { grid-area:trading; }
-.home-pane[hidden] { display:none; }
+.home-pane[hidden],#asset-grid[hidden] { display:none; }
 .home-pane h2 { font-size:18px; }
 .home-pane .panel-heading p { display:none; }
 .workspace-controls { display:flex; align-items:center; gap:10px; }
@@ -452,11 +452,10 @@
  .dca-amount-row { padding-block:3px; }
 }
 @media (max-width:900px) {
- .portfolio-surface { height:auto; grid-template-columns:minmax(0,1fr); grid-template-rows:auto auto auto auto; grid-template-areas:"assets" "tabs" "pane" "footer"; }
- #dca-workspace,#trading-workspace { grid-area:pane; }
+ .portfolio-surface { height:auto; grid-template-columns:minmax(0,1fr); grid-template-rows:auto auto auto; grid-template-areas:"tabs" "pane" "footer"; }
+ #asset-grid,#dca-workspace,#trading-workspace { grid-area:pane; }
  .home-tabs { grid-area:tabs; display:flex; gap:4px; padding:4px; border:1px solid var(--line); border-radius:9px; background:var(--deep); }
- .home-tabs button { flex:1; min-width:0; padding:10px; border:0; border-radius:6px; background:transparent; color:var(--muted); text-align:left; font:inherit; font-size:14px; cursor:pointer; }
- .home-tabs small { display:block; margin-top:4px; font-size:11px; }
+ .home-tabs button { flex:1; min-width:0; min-height:44px; padding:10px; border:0; border-radius:6px; background:transparent; color:var(--muted); text-align:center; font:inherit; font-size:14px; cursor:pointer; }
  .home-tabs [aria-selected=true] { background:#20352f; color:var(--cyan); }
  .asset-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
  .asset-card { min-height:100px; padding:14px; }

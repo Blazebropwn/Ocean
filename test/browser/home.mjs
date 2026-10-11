@@ -146,17 +146,30 @@ fixture.lastTrade.costs=costs;fixture.holdings.stale=false;fixture.tradingPaused
 await page.evaluate(()=>loadKryptotron());
 for(const width of [390,320,768]){
  await page.setViewportSize({width,height:844});
- for(const name of ['trading','dca']){
+ for(const name of ['home','trading','dca']){
   await page.locator('#'+name+'-tab').click();
-  assert.equal(await page.locator('#'+name+'-workspace').isVisible(),true);
-  assert.equal(await page.locator('#'+(name==='dca'?'trading':'dca')+'-workspace').isVisible(),false);
-  assert.equal(await page.locator('#asset-grid').isVisible(),true);
+  for(const [panel,id] of [['home','asset-grid'],['trading','trading-workspace'],['dca','dca-workspace']]) {
+   assert.equal(await page.locator('#'+id).isVisible(),panel===name);
+  }
+  const tabs=await page.locator('.home-tabs').boundingBox();
+  const panel=await page.locator(name==='home'?'#asset-grid':'#'+name+'-workspace').boundingBox();
+  assert.ok(tabs.y+tabs.height<=panel.y,'mobile navigation sits above the selected panel');
+  await page.evaluate(()=>loadKryptotron());
+  assert.equal(await page.locator('#asset-grid').isVisible(),name==='home','polling preserves the mobile tab');
   const overflow=await page.evaluate(()=>[document.documentElement.scrollWidth>innerWidth,...[...document.querySelectorAll('.workspace,.portfolio-surface,.home-pane:not([hidden])')].map(e=>e.scrollWidth>e.clientWidth+1)].some(Boolean));
   assert.equal(overflow,false,`overflow at ${width} / ${name}`);
   if(width===390)await page.screenshot({path:`/tmp/ocean-home-split-${name}-mobile.png`});
  }
  await page.locator('#dca-tab').press('ArrowLeft');
  assert.equal(await page.locator('#trading-tab').evaluate(el=>el===document.activeElement),true);
+ await page.locator('#trading-tab').press('ArrowLeft');
+ assert.equal(await page.locator('#home-tab').getAttribute('aria-selected'),'true');
+ await page.locator('#home-tab').press('ArrowLeft');
+ assert.equal(await page.locator('#dca-tab').getAttribute('aria-selected'),'true');
+ await page.locator('#dca-tab').press('Home');
+ assert.equal(await page.locator('#home-tab').getAttribute('aria-selected'),'true');
+ await page.locator('#home-tab').press('End');
+ assert.equal(await page.locator('#dca-tab').getAttribute('aria-selected'),'true');
 }
 await page.setViewportSize({width:1366,height:768});
 await page.locator('#trading-workspace').waitFor({state:'visible'});
@@ -171,5 +184,5 @@ assert.equal(await page.locator('#dca-current-value').textContent(),'0,00 USDC')
 assert.equal(await btc.locator('.dca-asset-invested').textContent(),'0,00 USDC');
 assert.equal(await page.locator('#trading-net-result').textContent(),'—');
 assert.deepEqual(errors,[]);
-console.log('PASS: equal desktop halves without scroll at 5 sizes; mobile tabs; shared interval and independent amounts; atomic saves, failed-save recovery, draft focus, pointer clicks/drag, aligned slider stops, per-asset values and totals, dialogs, controls, stale/empty data.');
+console.log('PASS: equal desktop halves without scroll at 5 sizes; three mobile tabs; shared interval and independent amounts; atomic saves, failed-save recovery, draft focus, pointer clicks/drag, aligned slider stops, per-asset values and totals, dialogs, controls, stale/empty data.');
 await browser.close();
