@@ -163,34 +163,6 @@ připsání až po posledním válci i souběžné načítání, prohru, reduced
 zamítnutí, ztracenou odpověď/reload a nesouladnou účtenku. Chromium ověřilo
 sekvenci 1000 → 990 → 1090 a směr všech tří válců.
 
-## Ruční STOP (12. 10. 2026)
-
-Pod válci jsou tři tlačítka STOP. Po ověření účtenky a nejméně 180 ms
-animace lze zastavit libovolný válec tlačítkem, klepnutím na válec nebo
-klávesou 1/2/3. Klávesy nereagují mimo Gamble, v otevřeném dialogu ani při
-psaní do formuláře. STOP pouze zkrátí animaci na 260 ms dobrzdění ke
-stejnému serverovému symbolu. Neodesílá HTTP požadavek, nelosuje znovu a
-nemění sázku, pravděpodobnosti, výplatu ani idempotenci. Bez zásahu se
-použijí původní automatické časy. Při omezeném pohybu se výsledek zobrazí
-rovnou. Výhra se v UI připíše až po dokončení všech válců, i při změně pořadí.
-
-### Okamžitý návrat
-
-- Hráč odškrtne **Ruční STOP** pod válci. Tlačítka se schovají a obnoví se
-  původní animace. Volba se ukládá pouze v tomto prohlížeči do
-  `localStorage['ocean-slot-manual-stop']`; během spinu je zamčená.
-- Pro globální vypnutí nastavte v `public/index.html` na `#slot-machine`
-  atribut `data-manual-stop-enabled="false"` a nasaďte změnu. Schová se
-  i volba režimu; uložená preference ji nepřebije.
-- Celá změna je v samostatném commitu; `git revert <commit>` a nasazení
-  obnoví i původní vzhled. Žádná migrace ani obnova databáze není potřeba.
-
-Regresní testy jsou v `test/slot-presentation.test.ts`. Browser kontrola
-`node test/browser/slot.mjs` po buildu používá pouze mockované API; podporuje
-stejné proměnné Playwright/Chromium jako Home test. Ověřuje ovládání,
-výsledek a výplatu, automatické dokončení, vypnutí, retry po výpadku,
-omezený pohyb a rozměry na desktopu i mobilu včetně 320 × 568 px.
-
 ## Admin prostor
 
 - `/invites.html`: pozvánky a členové, včetně původních účtových akcí.

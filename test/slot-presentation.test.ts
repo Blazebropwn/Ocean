@@ -6,11 +6,11 @@ import { randomUUID } from 'node:crypto';
 import { BET, GAME_VERSION, PAYOUTS, REELS, evaluateStops } from '../src/slot/math.js';
 
 class Element {
-  hidden = false; checked = false; textContent = ''; disabled = false; value = ''; style: Record<string,string> = {}; dataset: Record<string,string> = {};
+  textContent = ''; disabled = false; value = ''; style: Record<string,string> = {}; dataset: Record<string,string> = {};
   children: Element[] = []; attrs: Record<string,string> = {}; listeners: Record<string, (...args: any[]) => any> = {};
   parentElement?: Element; className = '';
   classes = new Set<string>();
-  classList = { contains: (name:string)=>this.classes.has(name), add: (...names:string[])=>names.forEach(n=>this.classes.add(n)), remove: (...names:string[])=>names.forEach(n=>this.classes.delete(n)),
+  classList = { add: (...names:string[])=>names.forEach(n=>this.classes.add(n)), remove: (...names:string[])=>names.forEach(n=>this.classes.delete(n)),
     toggle: (name:string, on:boolean)=>on?this.classes.add(name):this.classes.delete(name) };
   addEventListener(name:string, callback:(...args:any[])=>any) { this.listeners[name]=callback; }
   setAttribute(name:string,value:string) { this.attrs[name]=value; }
@@ -21,18 +21,15 @@ class Element {
   querySelector() { return this.children[0]; }
 }
 const tick = () => new Promise<void>(resolve=>setImmediate(resolve));
-async function fixture(options:{storage?:Map<string,string>; balance?:number; reduced?:boolean; manual?:boolean}={}) {
+async function fixture(options:{storage?:Map<string,string>; balance?:number; reduced?:boolean}={}) {
   const elements=new Map<string,Element>(), tracks=Array.from({length:3},()=>{const e=new Element();e.parentElement=new Element();return e;});
   const el=(id:string)=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id)!;};
   const storage=options.storage??new Map<string,string>();
   const state={balance:options.balance??1000, posts:[] as string[], respond:async(_key:string):Promise<{status:number;body:unknown}>=>{throw Error('No response configured');}};
   let time=0, frames:Array<(n:number)=>void>=[];
-  el('slot-machine').dataset.manualStopEnabled=String(options.manual??false);
-  for(let i=0;i<3;i++)el(`slot-stop-${i}`).disabled=true;
-  const listeners:Record<string,(event:any)=>void>={};
-  const window:any={addEventListener:(name:string,fn:(event:any)=>void)=>{listeners[name]=fn;}};
+  const window:any={addEventListener:()=>{}};
   runInNewContext(readFileSync('public/economy.js','utf8'),{
-    window, document:{body:{classList:{contains:()=>true}},getElementById:el, createElement:()=>new Element(),
+    window, document:{getElementById:el, createElement:()=>new Element(),
       querySelectorAll:(s:string)=>s==='.slot-track'?tracks:el('slot-paytable').children,
       querySelector:(s:string)=>el('slot-paytable').children.find(row=>s.includes(`"${row.dataset.symbol}"`))},
     sessionStorage:{getItem:(k:string)=>storage.get(k)??null,setItem:(k:string,v:string)=>storage.set(k,v),removeItem:(k:string)=>storage.delete(k)},
@@ -48,7 +45,6 @@ async function fixture(options:{storage?:Map<string,string>; balance?:number; re
   });
   window.OceanEconomy.setUser({id:'player',accessApproved:true});await window.OceanEconomy.open('slot');
   return {state,storage,tracks,el,window,balance:()=>el('header-tide').textContent.replace(/\s/g,''),
-    key:(key:string)=>listeners.keydown!({key,target:{closest:()=>null},preventDefault:()=>{}}),
     click:()=>el('slot-spin').listeners.click!(),step:async(ms:number)=>{time+=ms;const next=frames;frames=[];next.forEach(f=>f(time));await tick();}};
 }
 function receipt(key:string, win=true, replayed=false, current?:number) {
@@ -90,48 +86,4 @@ test('rejected stake restores authoritative wallet; unconfirmed stake survives r
 test('inconsistent receipt is not presented as credited winnings',async()=>{
  const f=await fixture();f.state.respond=async key=>{const r=receipt(key);r.body.spin.balanceAfter=999999;return r;};
  await f.click();assert.equal(f.balance(),'—');assert.equal(f.storage.size,1);assert.equal(f.el('slot-machine').classes.has('won'),false);
-});
-
-
-test('manual stops accept buttons, reel taps and keys in any order without changing settlement',async()=>{
- const f=await fixture({manual:true});let release!:()=>void;
- f.state.respond=async key=>{await new Promise<void>(r=>release=r);f.state.balance=1090;return receipt(key);};
- const spinning=f.click();
- for(let i=0;i<3;i++)assert.equal(f.el(`slot-stop-${i}`).disabled,true,'no manual input before server confirmation');
- release();await tick();await f.step(200);
- assert.equal(f.el('slot-stop-2').disabled,false);
- f.el('slot-stop-2').listeners.click!();
- f.el('slot-stop-2').listeners.click!();
- await f.step(270);
- assert.equal(f.tracks[2]!.style.transform,`translateY(${-(25+REELS[2]!.indexOf('fish'))*100}px)`);
- assert.equal(f.balance(),'990','one stopped reel cannot reveal the payout');
- f.tracks[0]!.parentElement!.listeners.click!();
- f.key('2');
- await f.step(270);await spinning;
- assert.equal(f.balance(),'1090');assert.equal(f.state.posts.length,1);assert.equal(f.storage.size,0);
- f.tracks.forEach((t,i)=>assert.equal(t.style.transform,`translateY(${-(25+REELS[i]!.indexOf('fish'))*100}px)`));
- for(let i=0;i<3;i++)assert.equal(f.el(`slot-stop-${i}`).disabled,true);
- assert.equal(f.el('slot-machine').classes.has('anticipating'),false);
-});
-
-test('manual mode automatically finishes and can be disabled to restore the original animation',async()=>{
- const f=await fixture({manual:true});f.state.respond=async key=>{f.state.balance=1090;return receipt(key);};
- let spinning=f.click();await tick();await f.step(2600);await spinning;
- assert.equal(f.balance(),'1090');
- f.el('slot-manual-mode').checked=false;f.el('slot-manual-mode').listeners.change!();
- assert.equal(f.el('slot-stops').hidden,true);
- spinning=f.click();await tick();await f.step(200);
- assert.equal(f.el('slot-stop-0').disabled,true);
- f.key('1');await f.step(1400);assert.equal(f.el('slot-spin').disabled,true);
- await f.step(1000);await spinning;
- assert.equal(f.state.posts.length,2);
-});
-
-test('manual mode respects reduced motion and cannot stop an unconfirmed or invalid spin',async()=>{
- const f=await fixture({manual:true,reduced:true});f.state.respond=async key=>{f.state.balance=1090;return receipt(key);};
- await f.click();assert.equal(f.balance(),'1090');
- for(let i=0;i<3;i++)assert.equal(f.el(`slot-stop-${i}`).disabled,true);
- const invalid=await fixture({manual:true});invalid.state.respond=async key=>{const r=receipt(key);r.body.spin.payout=999;return r;};
- await invalid.click();invalid.key('1');
- assert.equal(invalid.el('slot-stop-0').disabled,true);assert.equal(invalid.storage.size,1);assert.equal(invalid.state.posts.length,1);
 });

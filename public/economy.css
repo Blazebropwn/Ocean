@@ -46,31 +46,6 @@
 #slot-spin:focus-visible { outline:2px solid #cdf9de; outline-offset:6px; }
 .slot-machine.anticipating .slot-reels { box-shadow:0 0 28px #93e4bb25; }
 .slot-machine.won .slot-monitor { box-shadow:0 0 30px #80f3cd22; }
-.slot-manual-controls[hidden],.slot-stops[hidden] { display:none; }
-.slot-machine.manual-stop { --reel:clamp(100px,29cqh,220px); --cell:clamp(64px,17cqh,126px); }
-.slot-stops { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; padding:12px 7px 4px; }
-.slot-stops button { display:flex; align-items:center; justify-content:center; gap:8px; min-height:44px; padding:8px 4px; border:1px solid #8cbbac; border-radius:9px; background:linear-gradient(#5f9181,#365f54); color:#e0f3e8; box-shadow:0 3px 0 #16382f,inset 0 1px #bfdccb44; font:600 12px system-ui,sans-serif; letter-spacing:.08em; cursor:pointer; touch-action:manipulation; }
-.slot-stops small { opacity:.65; font-size:10px; }
-.slot-stops button:disabled { background:linear-gradient(#29433f,#213732); border-color:#405b52; color:#81978e; box-shadow:0 1px 0 #10251f; cursor:default; }
-.slot-stops button:active:not(:disabled) { transform:translateY(2px); box-shadow:0 1px 0 #16382f; }
-.slot-stops button:focus-visible,.slot-stop-options summary:focus-visible { outline:2px solid #cdf9de; outline-offset:3px; }
-.slot-reel[data-stoppable=true] { cursor:pointer; }
-.slot-reel[data-braking=true] { box-shadow:inset 0 0 18px #8fd5b522; }
-.slot-stop-options { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:32px; color:#a9c1b8; font-size:11px; }
-.slot-stop-options label { display:flex; align-items:center; gap:7px; min-height:32px; margin:0; cursor:pointer; }
-.slot-stop-options input { accent-color:#a6dfcf; margin:0; padding:0; width:14px; height:14px; min-height:14px; }
-.slot-stop-options details { position:static; }
-.slot-stop-options summary { list-style:none; cursor:pointer; padding:6px 10px; font-size:16px; }
-.slot-stop-options summary::-webkit-details-marker { display:none; }
-.slot-stop-options details p { position:absolute; z-index:2; left:16px; right:16px; margin:0; padding:12px; border:1px solid #526d69; border-radius:8px; background:#10262e; color:#d1e3de; font-size:12px; line-height:1.6; box-shadow:0 8px 24px #0006; }
-@container (max-height:500px) {
- .slot-machine.manual-stop { --reel:84px; --cell:64px; padding-block:12px; }
- .slot-machine[data-manual-stop-enabled=true]:not(.manual-stop) { --reel:120px; --cell:64px; padding-block:12px; }
- .manual-stop .slot-payrow { min-height:24px; }
- .manual-stop .slot-payrow img { height:20px; width:20px; }
- .manual-stop .slot-paytable { margin-block:6px; }
- .slot-stops { padding-block:6px 2px; }
-}
 @media (max-width:600px) {
  .slot-machine { border-radius:20px; --cell:clamp(68px,20cqh,104px); --reel:clamp(100px,38cqh,210px); }
  .slot-payrow { padding-inline:6px; }.slot-payrow > span { gap:6px; }.slot-payrow > strong { font-size:14px; }.slot-payrow .slot-payout-coin { width:20px; height:20px; }
