@@ -204,8 +204,11 @@ def safety_failure(state, code, diagnostic):
     state["last_error"] = "Stav účtu nebo objednávek není ověřený. Nové nákupy jsou zablokované."
     log.error("%s: %s", code, diagnostic)
     save_state(state)
-    tg_alert(state, "reconciliation", "🚨 <b>Kryptotron: bezpečnostní režim</b>\n"
-             "Stav účtu nebo objednávek vyžaduje kontrolu. Nové nákupy jsou zablokované.")
+    message = ("STATE_SAVE_FAILED: Výsledek kontroly účtu se nepodařilo uložit do Oceanu. "
+               "Nové nákupy jsou zablokované; uložení a kontrola se zopakují."
+               if code == "STATE_SAVE_FAILED" else
+               "Stav účtu nebo objednávek vyžaduje kontrolu. Nové nákupy jsou zablokované.")
+    tg_alert(state, "reconciliation", "🚨 <b>Kryptotron: bezpečnostní režim</b>\n" + message)
 
 
 def reconcile_account(client, state, pair_filters):
@@ -241,7 +244,8 @@ def reconcile_account(client, state, pair_filters):
             if state.get("runtime_status") == "degraded":
                 state["runtime_status"] = "waiting"
         if not save_state(state):
-            raise RuntimeError("Výsledek rekonciliace se nepodařilo uložit")
+            safety_failure(state, "STATE_SAVE_FAILED", "Výsledek rekonciliace se nepodařilo uložit")
+            return False
         if state["safe_mode"]:
             only_protection = bool(result["issues"]) and all(i["code"] == "PROTECTION_ERROR" for i in result["issues"])
             tg_alert(state, "reconciliation", "🚨 <b>Kryptotron: kontrola účtu vyžaduje pozornost</b>\n" + (

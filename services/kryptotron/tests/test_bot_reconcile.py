@@ -2,6 +2,7 @@ import json
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -75,6 +76,35 @@ class BotStateTestCase(unittest.TestCase):
                 "last_trade_time": None, "trades_today": 0, "trades_week": 0,
                 "last_trade_result": None, "consecutive_losses": 0,
                 "daily_loss": 0.0, "weekly_loss": 0.0, "telegram": {}}
+
+
+class ReconcilePersistenceTests(BotStateTestCase):
+    def test_failed_save_is_distinguished_from_exchange_reconciliation_and_recovers(self):
+        state = self.state()
+        healthy = {"status": "OK", "issues": [], "available_quote": 26.98,
+                   "checked_at": "2026-10-11T19:22:53+00:00"}
+        with patch.object(bot, "inspect_account", return_value=healthy), \
+                patch.object(bot, "save_state", side_effect=[False, True, True]), \
+                patch.object(bot, "tg_alert") as alert:
+            self.assertFalse(bot.reconcile_account(object(), state, {}))
+            self.assertTrue(state["safe_mode"])
+            self.assertEqual(state["runtime_status"], "degraded")
+            self.assertEqual(state["reconciliation"]["issues"], [{"code": "STATE_SAVE_FAILED", "symbol": None}])
+            self.assertIn("STATE_SAVE_FAILED", alert.call_args.args[2])
+            self.assertIn("Nové nákupy jsou zablokované", alert.call_args.args[2])
+            self.assertTrue(bot.reconcile_account(object(), state, {}))
+            self.assertFalse(state["safe_mode"])
+            self.assertEqual(state["reconciliation"]["issues"], [])
+            self.assertIsNone(state["last_error"])
+
+    def test_exchange_failure_keeps_generic_reconciliation_code_and_hides_raw_exception(self):
+        state = self.state()
+        with patch.object(bot, "inspect_account", side_effect=RuntimeError("PRIVATE_TRANSPORT_DETAIL")), \
+                patch.object(bot, "tg_alert") as alert:
+            self.assertFalse(bot.reconcile_account(object(), state, {}))
+            self.assertTrue(state["safe_mode"])
+            self.assertEqual(state["reconciliation"]["issues"][0]["code"], "RECONCILIATION_REQUIRED")
+            self.assertNotIn("PRIVATE_TRANSPORT_DETAIL", alert.call_args.args[2])
 
 
 class ReconcilePendingOrderTests(BotStateTestCase):

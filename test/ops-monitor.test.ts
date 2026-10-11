@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { openDatabase } from "../src/db.js";
-import { evaluateOpsAlert, initialOpsAlertState, opsIssues, stuckInstanceIssues } from "../src/ops-monitor.js";
+import { evaluateOpsAlert, initialOpsAlertState, opsIssues, stuckInstanceIssues, workerIssues, workerStateIssues } from "../src/ops-monitor.js";
 import type { Config } from "../src/config.js";
 
 const CONFIG: Config = { port: 3000, host: "127.0.0.1", databasePath: ":memory:", appOrigin: "http://localhost:3000", isProduction: false };
@@ -74,4 +74,51 @@ test('missing protection alerts name the required owner action without hiding mi
   assert.match(workerStateIssues(state,'Client')[0]!, /potvrdit obnovení ochrany/);
   state.reconciliation.issues.push({code:'UNATTRIBUTED_BALANCE'});
   assert.doesNotMatch(workerStateIssues(state,'Client')[0]!, /samotné \/resume/);
+});
+
+test('admin worker alerts use the account username and environment from the database', async t => {
+  const db = setup(); t.after(() => db.close());
+  db.prepare("INSERT INTO users (id,email,username,password_hash) VALUES ('usr_second','second@example.com','second-user','hash')").run();
+  for (const [id, user, environment] of [['kry_one','usr_owner','mainnet'],['kry_two','usr_second','testnet']]) {
+    db.prepare("INSERT INTO kryptotron_instances (id,user_id,status,environment,remote_state_key) VALUES (?,?,'connected',?,?)").run(id,user,environment,id);
+  }
+  const original = globalThis.fetch; t.after(() => { globalThis.fetch = original; });
+  globalThis.fetch = async input => {
+    const key = new URL(String(input)).searchParams.get('key');
+    if (key === 'eq.kry_two') throw new Error('PRIVATE_TRANSPORT_DETAIL');
+    assert.equal(key,'eq.kry_one');
+    return new Response(JSON.stringify([{data:{last_heartbeat_at:new Date().toISOString(),safe_mode:true,
+      reconciliation:{issues:[{code:'STATE_SAVE_FAILED',message:'PRIVATE_TRANSPORT_DETAIL'}]}}}]));
+  };
+  const issues = await workerIssues({...CONFIG,kryptotronSupabaseUrl:'https://example.supabase.co',kryptotronSupabaseKey:'test-key'},db);
+  assert.match(issues[0]!,/Účet owner · mainnet/);
+  assert.match(issues[0]!,/STATE_SAVE_FAILED.*nepodařilo uložit/);
+  assert.match(issues[1]!,/Účet second-user · testnet.*vzdálený stav není dostupný/);
+  assert.doesNotMatch(issues.join('\n'),/PRIVATE_TRANSPORT_DETAIL|kry_one|kry_two/);
+});
+
+test('recovery identifies the resolved account while preserving another account alert', () => {
+  const a = 'Účet Alice · mainnet: STATE_SAVE_FAILED';
+  const b = 'Účet Bob · testnet: heartbeat není aktuální.';
+  const first = evaluateOpsAlert(initialOpsAlertState,[a,b],1_000_000);
+  assert.equal(evaluateOpsAlert(first.nextState,[b,a],1_000_001).message,null,'ordering is not a new incident');
+  const partial = evaluateOpsAlert(first.nextState,[b],1_000_002);
+  assert.match(partial.message!,/Vyřešená upozornění:\n• Účet Alice/);
+  assert.match(partial.message!,/Účet Bob/);
+  assert.doesNotMatch(partial.message!,/je opět v pořádku/);
+  const cleared = evaluateOpsAlert(partial.nextState,[],1_000_003);
+  assert.match(cleared.message!,/je opět v pořádku/);
+  assert.match(cleared.message!,/Účet Bob/);
+  assert.doesNotMatch(cleared.message!,/Alice/);
+  assert.equal(evaluateOpsAlert(cleared.nextState,[],1_000_004).message,null);
+});
+
+test('admin reasons retain safe codes and symbols, never raw diagnostics', () => {
+  const issues = workerStateIssues({last_heartbeat_at:new Date().toISOString(),safe_mode:true,
+    reconciliation:{issues:[{code:'INVENTORY_MISMATCH',symbol:'BTCUSDC',message:'secret diagnostics'},
+      {code:'STATE_SAVE_FAILED',symbol:'<invalid>'}]}},'Účet Alice · mainnet');
+  assert.match(issues[0]!,/INVENTORY_MISMATCH \(BTCUSDC\)/);
+  assert.match(issues[0]!,/STATE_SAVE_FAILED/);
+  assert.match(issues[0]!,/Nové nákupy jsou zablokované/);
+  assert.doesNotMatch(issues[0]!,/secret diagnostics|<invalid>/);
 });

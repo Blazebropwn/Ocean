@@ -35,23 +35,25 @@ export function workerStateIssues(state: Record<string, unknown> | null, label: 
     const check = state.reconciliation as { issues?: Array<{ code?: string }> } | undefined;
     const onlyProtection = Array.isArray(check?.issues) && check.issues.length > 0 && check.issues.every(i => i?.code === "PROTECTION_ERROR");
     const details = readKryptotronTransparency(state, now).reconciliation.issues.slice(0, 3)
-      .map(issue => `${issue.symbol ? `${issue.symbol}: ` : ""}${issue.message}`).join(" ");
+      .map(issue => `${issue.code}${issue.symbol ? ` (${issue.symbol})` : ""}: ${issue.message}`).join("\n");
     issues.push(onlyProtection
-      ? `${label}: bezpečnostní režim — chybí ochranné objednávky. Vlastník účtu musí v Oceanu potvrdit obnovení ochrany; samotné /resume nestačí.`
-      : `${label}: bezpečnostní režim. ${details || "Ověř stav účtu a ochrany."}`);
+      ? `${label}: bezpečnostní režim — PROTECTION_ERROR. Vlastník účtu musí v Oceanu potvrdit obnovení ochrany; samotné /resume nestačí.`
+      : `${label}: bezpečnostní režim.\n${details || "Ověř stav účtu a ochrany."}\nNové nákupy jsou zablokované.`);
   }
   if (Array.isArray(state.pending_trade_logs) && state.pending_trade_logs.length) issues.push(`${label}: historie obchodů čeká na uložení.`);
   if (state.runtime_status === "degraded" && state.safe_mode !== true) issues.push(`${label}: worker hlásí provozní chybu.`);
   return issues;
 }
 
-async function workerIssues(config: Config, db: OceanDatabase) {
+export async function workerIssues(config: Config, db: OceanDatabase) {
   if (!config.kryptotronSupabaseUrl || !config.kryptotronSupabaseKey) return [];
-  const instances = db.prepare("SELECT id, remote_state_key FROM kryptotron_instances WHERE status = 'connected' AND remote_state_key IS NOT NULL ORDER BY id")
-    .all() as Array<{ id: string; remote_state_key: string }>;
+  const instances = db.prepare(`SELECT i.id, i.remote_state_key, i.environment, u.username
+    FROM kryptotron_instances i JOIN users u ON u.id = i.user_id
+    WHERE i.status = 'connected' AND i.remote_state_key IS NOT NULL ORDER BY i.id`)
+    .all() as Array<{ id: string; remote_state_key: string; environment: string; username: string }>;
   const issues: string[] = [];
   for (const instance of instances) {
-    const label = `Kryptotron ${instance.id}`;
+    const label = `Účet ${instance.username} · ${instance.environment}`;
     try {
       const state = await loadKryptotronState(config.kryptotronSupabaseUrl, config.kryptotronSupabaseKey, instance.remote_state_key);
       issues.push(...workerStateIssues(state, label));
@@ -60,23 +62,26 @@ async function workerIssues(config: Config, db: OceanDatabase) {
   return issues;
 }
 
-export type OpsAlertState = { activeIssuesKey: string; lastAlertAt: number };
-export const initialOpsAlertState: OpsAlertState = { activeIssuesKey: "", lastAlertAt: 0 };
+export type OpsAlertState = { activeIssuesKey: string; lastAlertAt: number; activeIssues?: string[] };
+export const initialOpsAlertState: OpsAlertState = { activeIssuesKey: "", lastAlertAt: 0, activeIssues: [] };
 
 /** Decides whether this check should notify the owner: immediately on a new/changed problem,
  * at most once per hour as a reminder while it persists, and once when it clears. Pure — no I/O. */
 export function evaluateOpsAlert(state: OpsAlertState, issues: string[], now: number): { message: string | null; nextState: OpsAlertState } {
+  const current = [...new Set(issues)].sort();
+  const resolved = (state.activeIssues ?? []).filter(issue => !current.includes(issue));
+  const recovery = resolved.length ? ["Vyřešená upozornění:", ...resolved.map(issue => `• ${issue}`)].join("\n") : "";
   if (issues.length === 0) {
     if (!state.activeIssuesKey) return { message: null, nextState: state };
-    return { message: "✅ Ocean: provozní kontrola je opět v pořádku.", nextState: { activeIssuesKey: "", lastAlertAt: state.lastAlertAt } };
+    return { message: ["✅ Ocean: provozní kontrola je opět v pořádku.", recovery].filter(Boolean).join("\n"), nextState: { activeIssuesKey: "", lastAlertAt: state.lastAlertAt, activeIssues: [] } };
   }
-  const key = issues.join("|");
+  const key = current.join("|");
   if (key === state.activeIssuesKey && now - state.lastAlertAt <= ALERT_REMINDER_MS) {
     return { message: null, nextState: state };
   }
   return {
-    message: [key === state.activeIssuesKey ? "🚨 Ocean: připomínka, stejný problém stále trvá." : "🚨 Ocean: provozní kontrola narazila na problém.", ...issues].join("\n"),
-    nextState: { activeIssuesKey: key, lastAlertAt: now },
+    message: [key === state.activeIssuesKey ? "🚨 Ocean: připomínka, stejný problém stále trvá." : "🚨 Ocean: provozní kontrola narazila na problém.", ...current, recovery].filter(Boolean).join("\n"),
+    nextState: { activeIssuesKey: key, lastAlertAt: now, activeIssues: current },
   };
 }
 

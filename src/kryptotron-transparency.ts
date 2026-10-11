@@ -29,6 +29,8 @@ const record = (value: unknown): Record<string, unknown> =>
 const number = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? value : null;
 const date = (value: unknown) => typeof value === "string" && Number.isFinite(Date.parse(value)) ? value : null;
 const reconciliationReasons: Record<string, string> = {
+  STATE_SAVE_FAILED: "Výsledek kontroly účtu se nepodařilo uložit do Oceanu. Uložení a kontrola se zopakují.",
+  RECONCILIATION_REQUIRED: "Kontrolu účtu nebo objednávek se nepodařilo dokončit. Konkrétní příčina je v provozním logu workeru.",
   INVENTORY_MISMATCH: "Na burze je méně prostředků než v evidenci Ocean. Je nutné porovnat historii obchodů a převodů, včetně změn mimo Ocean.",
   UNATTRIBUTED_BALANCE: "Na burze jsou prostředky bez přiřazení v evidenci Ocean. Je nutné ověřit jejich původ.",
   POSITION_BALANCE_MISMATCH: "Zůstatek na burze neodpovídá evidované otevřené pozici. Je nutné ověřit její množství.",
