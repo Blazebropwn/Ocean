@@ -4,15 +4,22 @@ Home ponechává čtyři skutečné zůstatky z Binance Spot. USDC je dostupná 
 BTC, ETH a SOL zahrnují i množství zamčené v objednávkách. Trading a DCA jsou
 na desktopu dvě stejně široké poloviny pod těmito kartami: DCA vlevo,
 Trading vpravo, bez posouvání stránky při běžné výšce okna. Na mobilu se
-přepínají uvnitř Home třemi záložkami Home / Trading / DCA. Zůstatky jsou
-jen v první záložce, obchodování a DCA mají vlastní obsah bez zůstatků nad panelem. Při vysokém přiblížení nebo velmi nízkém okně
+přepínají uvnitř Home třemi záložkami Přehled / Trading / DCA. Zůstatky jsou
+jen v první záložce spolu s odkazy na Trading (stav a počet pozic) a DCA
+(stav, uložený interval a součet částek za termín). Rozpracovaný plán souhrn
+nepřepisuje. Obchodování a DCA mají vlastní obsah bez zůstatků nad panelem. Při vysokém přiblížení nebo velmi nízkém okně
 je posouvání dostupné, aby ovládací prvky zůstaly dosažitelné.
 Jejich evidenci nepřičítáme k celkovým zůstatkům.
 
-Trading ukazuje otevřené pozice, poslední čistý výsledek a stav ochrany;
-historie s poplatky a pravidla/riziko jsou dostupné přes tlačítka v dialogu. Nerealizovaný P/L otevřených
-pozic je výslovně před poplatky. DCA v hlavním panelu obsahuje společný
-interval, tři samostatné posuvníky částek a společné uložení. Každý řádek
+Trading ukazuje otevřené pozice a stav ochrany; historii s poplatky a
+pravidla/riziko otevírají tlačítka. Detail patří pouze vybrané pozici:
+množství, vstupní cena, aktuální hodnota a průběžný výsledek. Vysvětlení
+výpočtu před poplatky je pod rozbalovacím ovládáním Výpočet, parametry
+stopu a trailingu pod Ochranou pozice. Výsledky uzavřených obchodů zůstávají
+v historii. Zastaralé ceny se nezobrazují jako aktuální a nepotvrzená
+rekonciliace neoznačuje ochranu v detailu za ověřenou. DCA v hlavním panelu obsahuje společný
+interval, tři samostatné posuvníky částek a společné uložení. Tlačítka
+uložení/zrušení se zobrazí při změně plánu; neúspěšné uložení zachová návrh. Každý řádek
 má vlevo kratší posuvník a vpravo investovanou částku a aktuální ocenění
 evidovaných nákupů daného aktiva. Pod řádky jsou oba součty za celé DCA.
 Změna částky budoucího nákupu nepřepočítává historické hodnoty. Na nejužších
@@ -22,7 +29,13 @@ posledních nejvýše 156 nákupů je uveden v historii i v popisku hodnot. Ocen
 nezohledňuje poplatky, pozdější prodeje ani převody. Při chybějících nebo
 zastaralých cenách je ocenění neznámé, nikoli nula.
 
+Na mobilu jsou odkazy O strategii, Aktivita a Nástroje pod tlačítkem Více.
+Zdravé spojení označuje kompaktní indikátor; upozornění zůstávají textová.
+
 ## Ovládání
+
+Trading má přepínač Zapnuto/Vypnuto. Ovládá nové vstupy, nikoli
+uzavření pozic; jeho přístupný popis tento rozsah vysvětluje.
 
 - `POST /api/kryptotron/control` s `scope: "trading"` mění jen `trading_paused`.
   Worker jej kontroluje před novými trendovými vstupy pro konkrétní pár.
@@ -88,8 +101,7 @@ starší historii ani budoucí obchodní chování. Nebyla odeslána nová objed
 ## Testování a nasazení
 
 `PATH="$PWD/.venv/bin:$PATH" npm run verify` provádí build, Node testy a Python testy.
-Závěrečný běh: build úspěšný, 245 Node testů a 188 Python testů prošlo;
-kontrola Chromium prošla bez chyb JavaScriptu a vodorovného přetékání.
+Kontrola Chromium ověřuje rozhraní bez chyb JavaScriptu a vodorovného přetékání.
 Testy pokrývají poplatky v základním i kotovacím aktivu, zbytky, neúplná
 plnění, izolaci účtů, opakované doručení, obnovení z cache, ochranné výstupy,
 nezávislé přepínače a zachování společných bezpečnostních pravidel.

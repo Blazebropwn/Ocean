@@ -255,13 +255,13 @@
 .dca-amount-control strong { display:flex; gap:12px; align-items:center; justify-content:space-between; }
 .dca-amount-control b { color:var(--muted); font-size:20px; font-weight:400; }
 .dca-toggle { display:flex; gap:12px; align-items:center; }
-#dca-toggle-status { font-size:12px; color:var(--ink-soft); max-width:90px; }
-.ocean-workspace #dca-control { position:relative; flex:none; width:48px; height:44px; padding:0; min-width:0; min-height:0; border:0; border-radius:8px; background:transparent; cursor:pointer; }
-.ocean-workspace #dca-control::after { content:""; position:absolute; inset:8px 0; border:1px solid #465158; border-radius:20px; background:#303b43; }
-.ocean-workspace #dca-control::before { content:""; display:block; position:absolute; z-index:1; top:12px; left:4px; width:20px; height:20px; border-radius:50%; background:#d2dadd; transition:transform 150ms ease; }
-.ocean-workspace #dca-control[aria-checked=true]::after { background:var(--cyan); border-color:var(--cyan); }
-.ocean-workspace #dca-control[aria-checked=true]::before { transform:translateX(20px); background:#16372e; }
-.ocean-workspace #dca-control:disabled,.dca-amount-control:disabled { opacity:.5; cursor:wait; }
+#dca-toggle-status,#trading-toggle-status { font-size:12px; color:var(--ink-soft); max-width:90px; }
+.ocean-workspace :is(#dca-control,#trading-control) { position:relative; flex:none; width:48px; height:44px; padding:0; min-width:0; min-height:0; border:0; border-radius:8px; background:transparent; cursor:pointer; }
+.ocean-workspace :is(#dca-control,#trading-control)::after { content:""; position:absolute; inset:8px 0; border:1px solid #465158; border-radius:20px; background:#303b43; }
+.ocean-workspace :is(#dca-control,#trading-control)::before { content:""; display:block; position:absolute; z-index:1; top:12px; left:4px; width:20px; height:20px; border-radius:50%; background:#d2dadd; transition:transform 150ms ease; }
+.ocean-workspace :is(#dca-control,#trading-control)[aria-checked=true]::after { background:var(--cyan); border-color:var(--cyan); }
+.ocean-workspace :is(#dca-control,#trading-control)[aria-checked=true]::before { transform:translateX(20px); background:#16372e; }
+.ocean-workspace :is(#dca-control,#trading-control):disabled,.dca-amount-control:disabled { opacity:.5; cursor:wait; }
 #dca-dialog { width:min(480px,calc(100vw - 32px)); }
 .ocean-workspace #dca-dialog .dca-presets { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; padding:0; }
 .ocean-workspace #dca-dialog .dca-presets button { min-height:42px; border-radius:8px; font-size:13px; }
@@ -273,7 +273,7 @@
 @media (max-width:760px), (max-height:650px) {
  .dca-amount-control { grid-column:1/-1; }
  .dca-toggle { grid-column:1/-1; justify-content:space-between; border-top:1px solid var(--line); padding-top:20px; }
- #dca-toggle-status { max-width:none; }
+ #dca-toggle-status,#trading-toggle-status { max-width:none; }
 }
 
 /* One DCA card: amount, switch, accumulation and purchase valuation. */
@@ -349,15 +349,33 @@
 
 /* Home: two equal panels on desktop, one selected panel on mobile. */
 .portfolio-surface { height:100%; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:clamp(128px,15vh,150px) minmax(0,1fr) 44px; grid-template-areas:"assets assets" "dca trading" "footer footer"; gap:14px; position:relative; }
-.home-tabs { display:none; }
+.home-tabs,.home-summaries,.overview-more { display:none; }
+#home-workspace { display:contents; }
+.trading-toggle { display:flex; align-items:center; gap:10px; }
+.positions-footer > div { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+.position-metrics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px 20px; margin:24px 0 14px; }
+.position-metrics dt { font-size:12px; color:var(--muted); margin-bottom:8px; }
+.position-metrics dd { margin:0; font-size:16px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.position-calculation { color:var(--muted); font-size:12px; }
+.position-calculation summary { cursor:pointer; width:fit-content; padding-block:8px; }
+.position-calculation p { line-height:1.6; }
+.position-protection { margin-top:20px; border-top:1px solid var(--line); padding-top:8px; }
+.position-protection > summary { display:flex; gap:8px; align-items:center; cursor:pointer; padding-block:14px; font-size:13px; }
+.position-protection > summary::after { content:"+"; color:var(--muted); }
+.position-protection[open] > summary::after { content:"−"; }
+.position-protection > summary strong { margin-left:auto; font-weight:500; }
+.position-protection .position-metrics { margin-block:10px; }
+.more-links { display:grid; gap:8px; }
+.more-links button { display:flex; justify-content:space-between; align-items:center; padding:16px; border:1px solid var(--line); border-radius:8px; background:var(--deep); color:var(--ink); font:inherit; cursor:pointer; }
+.more-links button span { color:var(--muted); }
 .home-pane { min-width:0; min-height:0; padding:20px; gap:14px; }
 #dca-workspace { grid-area:dca; }
 #trading-workspace { grid-area:trading; }
-.home-pane[hidden],#asset-grid[hidden] { display:none; }
+.home-pane[hidden],#home-workspace[hidden] { display:none; }
 .home-pane h2 { font-size:18px; }
 .home-pane .panel-heading p { display:none; }
 .workspace-controls { display:flex; align-items:center; gap:10px; }
-.workspace-controls button,.automation-control button,.trading-result-line button { border:1px solid var(--line); border-radius:8px; padding:9px 12px; background:transparent; color:var(--ink-soft); font:inherit; font-size:12px; cursor:pointer; min-height:36px; }
+.workspace-controls button,.automation-control button { border:1px solid var(--line); border-radius:8px; padding:9px 12px; background:transparent; color:var(--ink-soft); font:inherit; font-size:12px; cursor:pointer; min-height:36px; }
 .workspace-controls button[aria-checked=true] { color:var(--cyan); border-color:#34564b; }
 .workspace-section-heading { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; }
 .workspace-section-heading h3 { font-size:14px; margin:0; font-weight:550; }
@@ -367,11 +385,6 @@
 .home-pane .positions-empty { margin:auto; padding:20px 0; }
 .home-pane .positions-footer { padding-top:10px; }
 .home-pane .positions-footer button { min-height:36px; padding:8px 10px; color:var(--ink-soft); border-color:var(--line); }
-.trading-result-line { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-.trading-result-line span,.trading-result-line small { display:block; color:var(--muted); font-size:11px; line-height:1.5; }
-.trading-result-line strong { display:block; margin-top:4px; font-size:19px; font-weight:500; }
-.trading-result-line small { margin-top:3px; }
-.trading-result-line button { flex-shrink:0; }
 .home-notice { padding:8px 10px; border:1px solid #625036; border-radius:8px; color:var(--warn); font-size:12px; line-height:1.4; margin:0; }
 .home-notice button { color:inherit; text-decoration:underline; border:0; background:none; font:inherit; cursor:pointer; padding:4px; }
 #dca-settings-form { display:flex; flex:1; flex-direction:column; min-height:0; margin:0; gap:10px; }
@@ -413,6 +426,7 @@
 .dca-totals div strong { display:block; margin-top:4px; font-size:15px; font-weight:500; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
 .dca-plan-actions { display:flex; justify-content:space-between; align-items:center; gap:8px; flex:none; }
 .dca-plan-actions > div { display:flex; gap:6px; }
+.dca-plan-actions > div[hidden] { display:none; }
 .dca-plan-actions button { min-height:34px; padding:8px 12px; border:1px solid var(--line); border-radius:8px; background:transparent; color:var(--ink-soft); font:inherit; font-size:12px; cursor:pointer; margin:0; }
 .dca-plan-actions .dca-plan-save { color:var(--cyan); border-color:#34564b; }
 #dca-settings-form button:disabled { opacity:.45; cursor:default; }
@@ -453,7 +467,28 @@
 }
 @media (max-width:900px) {
  .portfolio-surface { height:auto; grid-template-columns:minmax(0,1fr); grid-template-rows:auto auto auto; grid-template-areas:"tabs" "pane" "footer"; }
- #asset-grid,#dca-workspace,#trading-workspace { grid-area:pane; }
+ #home-workspace,#dca-workspace,#trading-workspace { grid-area:pane; }
+ #home-workspace { display:grid; gap:14px; min-width:0; }
+ #home-workspace .asset-grid { grid-area:auto; }
+ #home-workspace[hidden] { display:none; }
+ .home-summaries { display:grid; gap:10px; }
+ .home-summaries button { display:flex; justify-content:space-between; align-items:center; gap:14px; padding:16px; text-align:left; background:var(--panel); border:1px solid var(--line); border-radius:12px; color:var(--ink); font:inherit; cursor:pointer; }
+ .home-summaries strong { font-size:14px; font-weight:550; }
+ .home-summaries small { display:block; margin-top:6px; font-size:12px; color:var(--muted); line-height:1.5; }
+ .home-summaries button > span:last-child { font-size:20px; color:var(--cyan); }
+ .overview-footer .overview-links { display:none; }
+ .overview-footer .overview-more { display:block; margin-left:auto; padding:8px 12px; min-height:44px; border:0; background:transparent; color:var(--ink-soft); font:inherit; font-size:12px; cursor:pointer; }
+ .overview-footer #bot-balance-updated { display:none; }
+ .ocean-workspace.home-mode .system-state:not(.warning) { max-width:none; padding:8px; border:0; background:transparent; }
+ .ocean-workspace.home-mode .system-state:not(.warning) #system-state-text { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+ .ocean-workspace.home-mode .system-state.warning { max-width:none; }
+ .home-pane .positions-footer { flex-wrap:wrap; }
+ .home-pane .positions-footer > div { margin-left:auto; }
+ #dca-workspace { gap:10px; }
+ #dca-settings-form { gap:8px; }
+ .dca-assets { gap:0; }
+ .position-metrics { gap:20px 12px; }
+ .position-metrics dd { font-size:14px; }
  .home-tabs { grid-area:tabs; display:flex; gap:4px; padding:4px; border:1px solid var(--line); border-radius:9px; background:var(--deep); }
  .home-tabs button { flex:1; min-width:0; min-height:44px; padding:10px; border:0; border-radius:6px; background:transparent; color:var(--muted); text-align:center; font:inherit; font-size:14px; cursor:pointer; }
  .home-tabs [aria-selected=true] { background:#20352f; color:var(--cyan); }
@@ -461,12 +496,11 @@
  .asset-card { min-height:100px; padding:14px; }
  .asset-card > strong { font-size:clamp(15px,4.3vw,26px); }
  .home-pane { padding:16px; gap:16px; }
- .dca-amount-row { padding-block:10px; }
+ .dca-amount-row { padding-block:7px; }
  .dca-slider-ticks { height:32px; }
  .dca-slider-ticks button { height:32px; width:32px; }
  .dca-frequency span { padding-block:12px; }
  .workspace-controls { flex-wrap:wrap; gap:8px; }
- .trading-result-line { flex-wrap:wrap; }
  .workspace-metrics { grid-template-columns:1fr; }
  .home-pane #positions-list { min-height:90px; }
  .purchase-row { flex-wrap:wrap; }

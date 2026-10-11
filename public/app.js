@@ -552,6 +552,7 @@ window.addEventListener("resize", () => {
 function setSystemState(message, warning) {
   $("#system-state-text").textContent = message;
   $("#system-state").classList.toggle("warning", warning);
+  $("#system-state").title = message;
 }
 
 function setVaultUnavailable(message) {
@@ -645,6 +646,7 @@ function renderPortfolio(snapshot) {
   }
   renderDcaPortfolio(snapshot);
   renderTradingOverview(snapshot);
+  renderHomeSummary(snapshot);
   const list = $("#positions-list"); list.replaceChildren();
   const positions = snapshot.positions.filter((position) => position.inPosition);
   $("#position-count").textContent = String(positions.length);
@@ -888,15 +890,30 @@ function updatePositionDetail() {
   const position = vaultSnapshot.positions.find((item) => item.symbol === selectedPositionSymbol && item.inPosition);
   if (!selectedPositionSymbol) return;
   $("#bot-position").textContent = selectedPositionSymbol.replace(vaultSnapshot.balance.asset, "") + (position ? " · otevřená pozice" : " · pozice uzavřená");
-  $("#position-symbol").textContent = selectedPositionSymbol;
+
   $("#bot-entry-price").textContent = position ? formatPrice(position.entryPrice, vaultSnapshot.balance.asset) : "—";
-  $("#bot-quantity").textContent = position ? formatQuantity(position.quantity) : "—";
+  const asset = selectedPositionSymbol.replace(vaultSnapshot.balance.asset, "");
+  $("#bot-quantity").textContent = position ? `${formatQuantity(position.quantity)} ${asset}` : "—";
+  const quote = vaultSnapshot.holdings?.stale ? null : vaultSnapshot.holdings?.assets?.find(item => item.asset === asset)?.price;
+  const price = Number.isFinite(quote) && quote > 0 ? quote : null;
+  const pnl = position && price !== null ? (price - position.entryPrice) * position.quantity : null;
+  $("#bot-current-value").textContent = position && price !== null ? `≈ ${formatPrice(price * position.quantity, vaultSnapshot.balance.asset)}` : "—";
+  const result = $("#bot-current-pnl");
+  result.textContent = pnl === null ? "—" : `${pnl > 0 ? "+" : ""}${formatPrice(pnl, vaultSnapshot.balance.asset)}`;
+  result.classList.toggle("positive", pnl !== null && pnl > 0);
+  result.classList.toggle("negative", pnl !== null && pnl < 0);
   $("#bot-stop-price").textContent = position?.protectionPrice ? formatPrice(position.protectionPrice, vaultSnapshot.balance.asset) : "—";
   $("#bot-trail-activation").textContent = position?.protectionActivationPrice ? `${formatPrice(position.protectionActivationPrice, vaultSnapshot.balance.asset)} · ${formatBips(position.protectionTrailingBips)}` : "—";
-  $("#bot-protection").textContent = !position ? "—" : position.protectionActive ? "Ochrana aktivní" : "Vyžaduje kontrolu";
+  const verified = vaultSnapshot.transparency?.reconciliation?.status === "OK";
+  $("#bot-protection").textContent = !position ? "—" : !verified ? "Neověřeno" : position.protectionActive ? "Aktivní" : "Vyžaduje kontrolu";
+  $("#bot-protection").classList.toggle("positive", Boolean(position?.protectionActive && verified));
+  $("#bot-protection").classList.toggle("warning", Boolean(position && (!position.protectionActive || !verified)));
 }
 
-for (const button of document.querySelectorAll("[data-dialog]")) button.addEventListener("click", () => $("#" + button.dataset.dialog).showModal());
+for (const button of document.querySelectorAll("[data-dialog]")) button.addEventListener("click", () => {
+  button.closest("dialog")?.close();
+  $("#" + button.dataset.dialog).showModal();
+});
 for (const button of document.querySelectorAll("[data-close-dialog]")) button.addEventListener("click", () => button.closest("dialog").close());
 for (const dialog of document.querySelectorAll(".workspace-dialog")) dialog.addEventListener("click", (event) => { if (event.target === dialog) { const bounds = dialog.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) dialog.close(); } });
 let selectedHomeWorkspace = "home";
@@ -914,6 +931,7 @@ function selectHomeWorkspace(name, focus = false) {
     if (selected && focus && compactHome.matches) tab.focus();
   }
 }
+for (const button of document.querySelectorAll("[data-home-target]")) button.addEventListener("click", () => selectHomeWorkspace(button.dataset.homeTarget, true));
 compactHome.addEventListener("change", () => selectHomeWorkspace(selectedHomeWorkspace));
 selectHomeWorkspace(selectedHomeWorkspace);
 for (const tab of document.querySelectorAll("[data-home-tab]")) {
@@ -949,7 +967,6 @@ async function loadKryptotron() {
     const open = kryptotron.positions.find((position) => position.inPosition);
     entriesPaused = kryptotron.entriesPaused;
     $("#bot-environment").textContent = kryptotron.environment === "mainnet" ? "Ostrý provoz" : kryptotron.environment === "testnet" ? "Zkušební provoz" : "Režim neověřen";
-    $("#position-symbol").textContent = open ? open.symbol.replace(kryptotron.balance.asset, "") : "Bez pozice";
     const needsAttention = Boolean(kryptotron.lastError) || ["degraded", "offline", "unknown"].includes(kryptotron.status);
     setSystemState(needsAttention ? "Vyžaduje pozornost" : "Spojení aktivní", needsAttention);
     renderVault(kryptotron);
@@ -983,24 +1000,6 @@ async function loadKryptotron() {
     $("#streak-status").textContent = streakEnabled ? kryptotron.streak.status.replace("_", " ") : "POZASTAVENO";
     $("#streak-count").textContent = `${kryptotron.streak.streak} výher`;
     $("#streak-pnl").textContent = `${kryptotron.streak.netPnl >= 0 ? "+" : ""}${kryptotron.streak.netPnl.toFixed(2)} ${kryptotron.balance.asset}`;
-    $("#bot-protection").textContent = open
-      ? (open.protectionActive ? "OCO aktivní" : "Vyžaduje kontrolu")
-      : "Čeká na pozici";
-    $("#bot-protection").classList.toggle("protected", Boolean(open?.protectionActive));
-    $("#bot-entry-price").textContent = open ? formatPrice(open.entryPrice, kryptotron.balance.asset) : "—";
-    $("#bot-quantity").textContent = open ? `${formatQuantity(open.quantity)} ${open.symbol.replace(kryptotron.balance.asset, "")}` : "—";
-    $("#bot-stop-price").textContent = open?.protectionPrice ? formatPrice(open.protectionPrice, kryptotron.balance.asset) : "—";
-    $("#bot-trail-activation").textContent = open?.protectionActivationPrice
-      ? `${formatPrice(open.protectionActivationPrice, kryptotron.balance.asset)} · ${formatBips(open.protectionTrailingBips)}`
-      : "—";
-    const netPnl = kryptotron.lastTrade?.costs?.status === "verified" && Number.isFinite(kryptotron.lastTrade.costs.netPnl)
-      ? kryptotron.lastTrade.costs.netPnl : null;
-    $("#bot-result").textContent = netPnl !== null ? `${netPnl >= 0 ? "+" : ""}${netPnl.toFixed(4)} ${kryptotron.balance.asset}` : kryptotron.lastTrade ? "Neověřeno" : "—";
-    $("#bot-result").classList.toggle("positive", netPnl !== null && netPnl > 0);
-    $("#bot-result").classList.toggle("negative", netPnl !== null && netPnl < 0);
-    $("#bot-last-trade").textContent = kryptotron.lastTrade ? `${kryptotron.lastTrade.symbol} · ${netPnl === null ? "čistý výsledek neověřen" : netPnl > 0 ? "čistý zisk" : netPnl < 0 ? "čistá ztráta" : "po poplatcích na nule"}` : "Zatím žádný";
-    $("#bot-updated").textContent = formatDate(kryptotron.lastMarketCheckAt || kryptotron.updatedAt);
-    $("#bot-next-check").textContent = formatDate(kryptotron.nextCheckAt);
     $("#bot-error-wrap").classList.toggle("hidden", !kryptotron.lastError);
     $("#bot-error").textContent = kryptotron.lastError || "";
     $("#bot-control").textContent = entriesPaused ? (kryptotron.transparency?.safeMode ? "Důvod blokace" : "Zrušit společnou pauzu") : "Pozastavit všechny nákupy";
@@ -1116,13 +1115,6 @@ $("#disconnect-binance").addEventListener("click", async (event) => {
 function renderTradingOverview(snapshot) {
   const pairs = [...new Set(snapshot.positions.map(p => p.symbol))];
   $("#trading-pairs").textContent = pairs.length ? pairs.map(s => s.replace(/USDC$/, "/USDC")).join(" · ") : "—";
-  const last = snapshot.lastTrade;
-  const net = last?.costs?.status === "verified" && Number.isFinite(last.costs.netPnl) ? last.costs.netPnl : null;
-  const result = $("#trading-net-result");
-  result.textContent = net === null ? (last ? "Neověřeno" : "—") : `${net > 0 ? "+" : ""}${new Intl.NumberFormat("cs-CZ", {minimumFractionDigits:4, maximumFractionDigits:4}).format(net)} USDC`;
-  result.classList.toggle("positive", net !== null && net > 0);
-  result.classList.toggle("negative", net !== null && net < 0);
-  $("#trading-net-detail").textContent = last ? `${last.symbol.replace(/USDC$/, "/USDC")} · ${formatDate(last.exitedAt)} · po poplatcích` : "Zatím žádný uzavřený obchod";
   const open = snapshot.positions.filter(p => p.inPosition);
   const verified = snapshot.transparency?.reconciliation?.status === "OK";
   $("#trading-protection").textContent = !verified ? "Neověřeno" : open.length ? `${open.filter(p => p.protectionActive).length} / ${open.length} chráněno` : "Bez otevřené pozice";
@@ -1131,9 +1123,22 @@ function renderTradingOverview(snapshot) {
   $("#automation-paused").classList.toggle("hidden", !snapshot.entriesPaused);
   const control = $("#trading-control");
   control.setAttribute("aria-checked", String(!snapshot.tradingPaused));
-  control.textContent = snapshot.tradingPaused ? "Povolit vstupy" : "Pozastavit vstupy";
+  $("#trading-toggle-status").textContent = snapshot.tradingPaused ? "Vypnuto" : "Zapnuto";
   control.disabled = snapshot.entriesPaused;
   control.title = snapshot.entriesPaused ? "Nejprve vyřešte společnou pauzu nebo blokaci nákupů v Nástrojích." : "Ovládá pouze nové vstupy Tradingu. Správa otevřených pozic pokračuje.";
+}
+
+function renderHomeSummary(snapshot) {
+  const count = snapshot.positions.filter(position => position.inPosition).length;
+  const tradingState = snapshot.transparency?.safeMode ? "Nákupy blokované" : snapshot.entriesPaused ? "Společná pauza" : snapshot.tradingPaused ? "Vypnuto" : "Zapnuto";
+  const positionText = count === 1 ? "1 otevřená pozice" : count >= 2 && count <= 4 ? `${count} otevřené pozice` : `${count} otevřených pozic`;
+  $("#home-trading-summary").textContent = `${tradingState} · ${positionText}`;
+  const plans = dcaPlans(snapshot);
+  const frequencies = new Set(plans.map(plan => plan.frequency));
+  const frequency = frequencies.size === 1 ? dcaFrequencies[plans[0]?.frequency] : "Různé intervaly";
+  const total = plans.length && plans.every(plan => Number.isFinite(plan.amount)) ? plans.reduce((sum, plan) => sum + plan.amount, 0) : null;
+  const state = !snapshot.dca.enabled ? "Vypnuto" : snapshot.transparency?.safeMode ? "Nákupy blokované" : snapshot.entriesPaused ? "Společná pauza" : "Zapnuto";
+  $("#home-dca-summary").textContent = `${state} · ${frequency || "Interval neověřen"}${total === null || frequencies.size !== 1 ? "" : ` · ${formatPrice(total, snapshot.balance.asset)} za termín`}`;
 }
 
 function renderDcaPortfolio(snapshot) {
@@ -1289,6 +1294,7 @@ function updateDcaSettings() {
   }
   $('#dca-save').disabled = dcaSaving || !dcaDraft.dirty || !dcaDraft.frequency || !Object.values(dcaDraft.amounts).every(a => dcaAmounts.includes(a));
   $('#dca-cancel').disabled = dcaSaving || !dcaDraft.dirty;
+  $('#dca-edit-actions').hidden = !dcaDraft.dirty && !dcaSaving;
 }
 function renderDcaSettings(snapshot) {
   if (!dcaDraft?.dirty) dcaDraft = { ...savedDcaSettings(snapshot), dirty: false };
