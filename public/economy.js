@@ -8,6 +8,20 @@
   let spinDisplay = null;
   const tracks = [...document.querySelectorAll('.slot-track')];
   const positions = [25, 25, 25];
+  // Presentation-only feature flag. Setting the cabinet attribute to false
+  // restores the original UI and timing without touching saved spins or TIDE.
+  const manualFeature = $('slot-machine').dataset.manualStopEnabled === 'true';
+  let manualMode = manualFeature;
+  try { manualMode = manualFeature && localStorage.getItem('ocean-slot-manual-stop') !== 'off'; } catch { /* optional preference */ }
+  const reelStops = [null, null, null];
+  const stopButtons = tracks.map((_, i) => $(`slot-stop-${i}`));
+  function renderManualMode() {
+    $('slot-manual-controls').hidden = !manualFeature;
+    $('slot-manual-mode').checked = manualMode;
+    $('slot-manual-mode').disabled = busy;
+    $('slot-stops').hidden = !manualMode;
+    $('slot-machine').classList.toggle('manual-stop', manualMode);
+  }
   const pendingName = () => `ocean-slot-pending:${user.id}`;
   function pending() { return sessionStorage.getItem(pendingName()); }
   function image(symbol) {
@@ -24,6 +38,7 @@
     return data;
   }
   function controls() {
+    renderManualMode();
     let retry = false;
     try { retry = Boolean(user && pending()); } catch { /* checked before a request */ }
     const recover = unavailable || !game;
@@ -90,18 +105,41 @@
     }
   }
   function animateReel(i, target, duration) {
-    const start = positions[i] + 50, end = 25 + target;
+    let start = positions[i] + 50, end = 25 + target;
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) { place(i, 25 + target); return Promise.resolve(); }
     // Rebase onto an identical later strip, then decrease the cell index so
     // translateY increases and the visible symbols travel from top to bottom.
     place(i, start);
-    const started = performance.now();
+    let started = performance.now();
+    const enabledAt = started + 180;
+    let braking = false;
+    const setStoppable = value => {
+      stopButtons[i].disabled = !value;
+      tracks[i].parentElement.dataset.stoppable = String(value);
+    };
+    const currentPosition = now => start + (end - start) * (1 - Math.pow(1 - Math.min(1, (now - started) / duration), 3));
+    reelStops[i] = () => {
+      const now = performance.now();
+      if (!manualMode || braking || now < enabledAt || now >= started + duration) return;
+      start = currentPosition(now);
+      // Nearest matching symbol in the same downward direction. The repeated
+      // strip lets the final rebase preserve exactly the server's target.
+      end = Math.floor((start - target - 0.001) / 25) * 25 + target;
+      started = now; duration = 260; braking = true;
+      setStoppable(false);
+      tracks[i].parentElement.dataset.braking = 'true';
+    };
     return new Promise(resolve => {
       function frame(now) {
         const progress = Math.min(1, (now - started) / duration);
-        place(i, start + (end - start) * (1 - Math.pow(1 - progress, 3)));
+        place(i, currentPosition(now));
+        setStoppable(manualMode && !braking && now >= enabledAt && progress < 1);
         if (progress < 1) requestAnimationFrame(frame);
-        else { place(i, 25 + target); resolve(); }
+        else {
+          reelStops[i] = null;
+          tracks[i].parentElement.dataset.braking = 'false';
+          place(i, 25 + target); resolve();
+        }
       }
       requestAnimationFrame(frame);
     });
@@ -112,9 +150,11 @@
     document.querySelectorAll('.slot-payrow').forEach(row => row.classList.remove('winner'));
     $('slot-message').textContent = 'V pohybu…';
     const pair = spin.symbols[0] === spin.symbols[1];
+    const stopped = new Set();
     await Promise.all(spin.stops.map((stop, i) => animateReel(i, stop, [1100, 1500, pair ? 2350 : 1900][i]).then(() => {
+      stopped.add(i);
       tracks[i].parentElement.setAttribute('aria-label', `Válec ${i + 1}: ${names[spin.symbols[i]]}`);
-      if (i === 1 && pair) machine.classList.add('anticipating');
+      machine.classList.toggle('anticipating', pair && stopped.has(0) && stopped.has(1) && !stopped.has(2));
     })));
     machine.classList.remove('anticipating');
     machine.classList.toggle('won', spin.payout > 0);
@@ -174,6 +214,25 @@
     } finally { spinDisplay = null; busy = false; controls(); }
   }
   $('slot-spin').addEventListener('click', spin);
+  stopButtons.forEach((button, i) => {
+    const stop = () => { if (!button.disabled) reelStops[i]?.(); };
+    button.addEventListener('click', stop);
+    tracks[i].parentElement.addEventListener('click', stop);
+  });
+  $('slot-manual-mode').addEventListener('change', () => {
+    if (busy) { renderManualMode(); return; }
+    manualMode = manualFeature && $('slot-manual-mode').checked;
+    try { localStorage.setItem('ocean-slot-manual-stop', manualMode ? 'on' : 'off'); } catch { /* usable without storage */ }
+    renderManualMode();
+  });
+  window.addEventListener('keydown', event => {
+    if (!document.body.classList.contains('slot-mode') || event.repeat || event.altKey || event.ctrlKey || event.metaKey ||
+        document.querySelector('dialog[open]') || event.target.closest('input,textarea,select,[contenteditable="true"]')) return;
+    const i = ['1', '2', '3'].indexOf(event.key);
+    if (i < 0 || stopButtons[i].disabled) return;
+    event.preventDefault(); reelStops[i]?.();
+  });
+  renderManualMode();
   $('genesis-form').addEventListener('submit', async event => {
     event.preventDefault();
     if (redeemBusy || $('genesis-submit').disabled) return;
