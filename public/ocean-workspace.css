@@ -125,14 +125,9 @@
 .ocean-workspace .dca-footer small { display:none; }
 .ocean-workspace .dca-footer strong { margin:0; color:var(--muted); font-size:11px; font-weight:400; }
 .ocean-workspace .dca-test { margin:0; font-size:11px; }
-.overview-footer { grid-area:footer; display:flex; flex-wrap:wrap; align-items:center; gap:12px; color:var(--muted); font-size:12px; }
-.overview-footer > div { margin-left:auto; display:flex; flex-wrap:wrap; gap:6px; }
-.overview-footer button { min-height:44px; border:1px solid transparent; border-radius:8px; background:none; color:var(--ink-soft); font-size:13px; cursor:pointer; padding:8px 10px; }
-.overview-footer button:hover { background:var(--panel); border-color:var(--line); color:var(--ink); }
 .mode-badge { border:1px solid var(--line); padding:6px 9px; border-radius:6px; font-size:11px; }
 .ocean-workspace .kryptotron-degraded,#bot-error-wrap { position:absolute; z-index:3; bottom:28px; left:0; right:0; padding:12px 16px; border:1px solid #7b603a; border-radius:10px; background:#30291f; color:var(--warn); font-size:12px; }
 #bot-error-wrap strong { white-space:normal; }
-.ocean-workspace .kryptotron-card.connection-active .portfolio-surface { display:none; }
 .ocean-workspace .connection-panel { min-height:0; height:100%; overflow:auto; }
 .ocean-workspace .connection-panel::before { content:none; }
 .workspace-dialog { width:min(620px,calc(100vw - 32px)); max-height:calc(100dvh - 40px); overflow:auto; background:var(--panel); border:1px solid #35434b; color:var(--ink); padding:24px; border-radius:18px; box-shadow:0 28px 90px #0008; }
@@ -203,8 +198,6 @@
  .asset-card > small { font-size:12px; }
  .goals-card { padding:16px 18px; }
  .goals-card h2,.positions-card h2 { font-size:18px; }
- .ocean-workspace .overview-footer { gap:8px; font-size:12px; }
- .overview-footer > div { gap:4px; }
  .vault-metrics { gap:10px; }
  .vault-metrics article { padding:12px; }
  .vault-metrics p { display:none; }
@@ -347,10 +340,7 @@
  .close-estimate dd { margin-bottom:8px; }
 }
 
-/* Home: two equal panels on desktop, one selected panel on mobile. */
-.portfolio-surface { height:100%; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:clamp(128px,15vh,150px) minmax(0,1fr) 44px; grid-template-areas:"assets assets" "dca trading" "footer footer"; gap:14px; position:relative; }
-.home-tabs,.home-summaries,.overview-more { display:none; }
-#home-workspace { display:contents; }
+/* Shared Home controls and detail views. */
 .trading-toggle { display:flex; align-items:center; gap:10px; }
 .positions-footer > div { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
 .position-metrics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px 20px; margin:24px 0 14px; }
@@ -365,12 +355,7 @@
 .position-protection[open] > summary::after { content:"−"; }
 .position-protection > summary strong { margin-left:auto; font-weight:500; }
 .position-protection .position-metrics { margin-block:10px; }
-.more-links { display:grid; gap:8px; }
-.more-links button { display:flex; justify-content:space-between; align-items:center; padding:16px; border:1px solid var(--line); border-radius:8px; background:var(--deep); color:var(--ink); font:inherit; cursor:pointer; }
-.more-links button span { color:var(--muted); }
 .home-pane { min-width:0; min-height:0; padding:20px; gap:14px; }
-#dca-workspace { grid-area:dca; }
-#trading-workspace { grid-area:trading; }
 .home-pane[hidden],#home-workspace[hidden] { display:none; }
 .home-pane h2 { font-size:18px; }
 .home-pane .panel-heading p { display:none; }
@@ -455,7 +440,6 @@
 }
 @media (min-width:901px) and (max-height:800px) {
  .ocean-workspace.home-mode .workspace { padding:14px 22px; }
- .portfolio-surface { gap:10px; grid-template-rows:110px minmax(0,1fr) 44px; }
  .asset-card { padding:12px 18px; gap:4px; }
  .asset-icon { width:24px; height:24px; font-size:13px; }
  .asset-card > strong { font-size:clamp(20px,2vw,28px); }
@@ -466,22 +450,7 @@
  .dca-amount-row { padding-block:3px; }
 }
 @media (max-width:900px) {
- .portfolio-surface { height:auto; grid-template-columns:minmax(0,1fr); grid-template-rows:auto auto auto; grid-template-areas:"tabs" "pane" "footer"; }
- #home-workspace,#dca-workspace,#trading-workspace { grid-area:pane; }
- #home-workspace { display:grid; gap:14px; min-width:0; }
- #home-workspace .asset-grid { grid-area:auto; }
  #home-workspace[hidden] { display:none; }
- .home-summaries { display:grid; gap:10px; }
- .home-summaries button { display:flex; justify-content:space-between; align-items:center; gap:14px; padding:16px; text-align:left; background:var(--panel); border:1px solid var(--line); border-radius:12px; color:var(--ink); font:inherit; cursor:pointer; }
- .home-summaries strong { font-size:14px; font-weight:550; }
- .home-summaries small { display:block; margin-top:6px; font-size:12px; color:var(--muted); line-height:1.5; }
- .home-summaries button > span:last-child { font-size:20px; color:var(--cyan); }
- .overview-footer .overview-links { display:none; }
- .overview-footer .overview-more { display:block; margin-left:auto; padding:8px 12px; min-height:44px; border:0; background:transparent; color:var(--ink-soft); font:inherit; font-size:12px; cursor:pointer; }
- .overview-footer #bot-balance-updated { display:none; }
- .ocean-workspace.home-mode .system-state:not(.warning) { max-width:none; padding:8px; border:0; background:transparent; }
- .ocean-workspace.home-mode .system-state:not(.warning) #system-state-text { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
- .ocean-workspace.home-mode .system-state.warning { max-width:none; }
  .home-pane .positions-footer { flex-wrap:wrap; }
  .home-pane .positions-footer > div { margin-left:auto; }
  #dca-workspace { gap:10px; }
@@ -489,9 +458,6 @@
  .dca-assets { gap:0; }
  .position-metrics { gap:20px 12px; }
  .position-metrics dd { font-size:14px; }
- .home-tabs { grid-area:tabs; display:flex; gap:4px; padding:4px; border:1px solid var(--line); border-radius:9px; background:var(--deep); }
- .home-tabs button { flex:1; min-width:0; min-height:44px; padding:10px; border:0; border-radius:6px; background:transparent; color:var(--muted); text-align:center; font:inherit; font-size:14px; cursor:pointer; }
- .home-tabs [aria-selected=true] { background:#20352f; color:var(--cyan); }
  .asset-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
  .asset-card { min-height:100px; padding:14px; }
  .asset-card > strong { font-size:clamp(15px,4.3vw,26px); }
@@ -526,7 +492,50 @@
  .dca-totals > div { text-align:left; }
  .dca-totals > div:last-child { text-align:right; }
 }
-@media (min-width:901px) and (max-height:650px) {
- /* Keep controls reachable at high zoom or unusually short windows. */
- .portfolio-surface { min-height:570px; }
+
+/* Home: one active tab and a flexible 2 × 2 balance grid at every width. */
+.ocean-workspace.home-mode { --home-header:64px; --home-nav:72px; }
+.ocean-workspace.home-mode .nav { height:calc(var(--home-header) + env(safe-area-inset-top)); padding-top:env(safe-area-inset-top); padding-left:max(18px,env(safe-area-inset-left)); padding-right:max(18px,env(safe-area-inset-right)); }
+.ocean-workspace.home-mode main { height:calc(100dvh - var(--home-header) - env(safe-area-inset-top)); }
+.ocean-workspace.home-mode .dashboard { grid-template-columns:minmax(0,1fr); padding-bottom:calc(var(--home-nav) + env(safe-area-inset-bottom)); }
+.ocean-workspace.home-mode .side-nav { position:fixed; inset:auto 0 0; height:calc(var(--home-nav) + env(safe-area-inset-bottom)); display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); padding:6px max(14px,env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left)); border:0; border-top:1px solid var(--line); background:#11171c; z-index:35; }
+.ocean-workspace.home-mode .side-link { display:flex; align-items:center; justify-content:center; flex-direction:column; gap:4px; min-height:0; margin:0; padding:6px; }
+.ocean-workspace.home-mode .side-link b { display:block; font-size:11px; font-weight:500; }
+.ocean-workspace.home-mode .workspace { padding:18px max(20px,env(safe-area-inset-right)) 18px max(20px,env(safe-area-inset-left)); gap:14px; }
+.portfolio-surface { height:100%; min-height:0; display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(min-content,1fr); grid-template-areas:"tabs" "pane"; gap:14px; position:relative; }
+.home-tabs { grid-area:tabs; display:flex; gap:4px; padding:4px; border:1px solid var(--line); border-radius:9px; background:var(--deep); }
+.home-tabs button { flex:1; min-width:0; min-height:44px; padding:10px; border:0; border-radius:6px; background:transparent; color:var(--muted); text-align:center; font:inherit; font-size:14px; cursor:pointer; }
+.home-tabs [aria-selected=true] { background:#20352f; color:var(--cyan); }
+#home-workspace,#trading-workspace,#dca-workspace { grid-area:pane; min-width:0; }
+#home-workspace { display:grid; min-height:0; }
+#home-workspace[hidden],.home-pane[hidden] { display:none; }
+#home-workspace .asset-grid { grid-area:auto; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:repeat(2,minmax(min-content,1fr)); min-width:0; min-height:0; gap:14px; }
+#home-workspace .asset-card { display:grid; grid-template-rows:auto 1fr auto; min-height:0; padding:clamp(16px,3vw,30px); gap:12px; }
+#home-workspace .asset-card > strong { align-self:end; font-size:clamp(20px,3vw,36px); min-width:0; overflow-wrap:anywhere; line-height:1.25; }
+#home-workspace .asset-card > small { line-height:1.5; overflow-wrap:anywhere; }
+.home-pane { align-self:stretch; min-height:min-content; }
+#trading-workspace .bot-error { position:static; margin:0; }
+.settings-links { display:grid; gap:10px; }
+.settings-links :is(a,button) { display:flex; justify-content:space-between; gap:12px; align-items:center; min-height:44px; padding:12px 14px; border:1px solid var(--line); border-radius:8px; background:var(--deep); color:var(--ink); font:inherit; font-size:14px; text-decoration:none; cursor:pointer; }
+.settings-links button:disabled { opacity:.5; cursor:default; }
+.settings-links span { color:var(--muted); font-size:12px; }
+.connection-status { display:grid; gap:16px; margin-bottom:20px; }
+.connection-status dl { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:0; }
+.connection-status dt { color:var(--muted); font-size:12px; }
+.connection-status dd { margin:6px 0 0; font-size:14px; }
+#binance-dialog .connection-panel { height:auto; overflow:visible; display:block; }
+#binance-dialog .connection-panel.hidden { display:none; }
+#binance-dialog .connection-form { width:100%; max-width:none; padding:0; }
+#binance-dialog .kryptotron-degraded { position:static; margin-bottom:16px; }
+#automation-dialog .automation-control { margin-bottom:0; border:0; padding:0; }
+#strategy-dialog .streak-module { margin-top:24px; }
+@media (max-width:560px) {
+ .ocean-workspace.home-mode { --home-header:56px; --home-nav:64px; }
+ .ocean-workspace.home-mode .workspace { padding:14px max(14px,env(safe-area-inset-right)) 14px max(14px,env(safe-area-inset-left)); }
+ #home-workspace .asset-grid { gap:10px; }
+ #home-workspace .asset-card { padding:14px; gap:10px; }
+ #home-workspace .asset-card > strong { font-size:clamp(16px,4.3vw,24px); }
 }
+
+.profile-menu button[data-dialog] { color:var(--ink-soft); }
+.profile-menu button[data-dialog]:hover { color:var(--cyan); }

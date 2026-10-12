@@ -1,15 +1,15 @@
 # Home a ověřené náklady obchodů
 
-Home ponechává čtyři skutečné zůstatky z Binance Spot. USDC je dostupná hotovost;
-BTC, ETH a SOL zahrnují i množství zamčené v objednávkách. Trading a DCA jsou
-na desktopu dvě stejně široké poloviny pod těmito kartami: DCA vlevo,
-Trading vpravo, bez posouvání stránky při běžné výšce okna. Na mobilu se
-přepínají uvnitř Home třemi záložkami Přehled / Trading / DCA. Zůstatky jsou
-jen v první záložce spolu s odkazy na Trading (stav a počet pozic) a DCA
-(stav, uložený interval a součet částek za termín). Rozpracovaný plán souhrn
-nepřepisuje. Obchodování a DCA mají vlastní obsah bez zůstatků nad panelem. Při vysokém přiblížení nebo velmi nízkém okně
-je posouvání dostupné, aby ovládací prvky zůstaly dosažitelné.
-Jejich evidenci nepřičítáme k celkovým zůstatkům.
+Přehled obsahuje jen čtyři skutečné zůstatky z Binance Spot v pružné mřížce
+2 × 2. USDC je dostupná hotovost; BTC, ETH a SOL zahrnují i množství zamčené
+v objednávkách. Stejně velké karty vyplňují dostupnou výšku mezi záložkami a
+spodní navigací. Layout používá dynamický viewport a safe areas; při malé
+výšce nebo velkém textu se obsah přirozeně posouvá.
+
+Na mobilu i desktopu se přepíná mezi Přehledem, Tradingem a DCA. Aktivní
+záložka i rozpracované nastavení přežijí pravidelné načítání dat a změnu
+velikosti okna. Souhrnné panely Trading/DCA ani spodní informační řádek
+v Přehledu nejsou. Evidenci DCA a Tradingu nepřičítáme ke zůstatkům.
 
 Trading ukazuje otevřené pozice a stav ochrany; historii s poplatky a
 pravidla/riziko otevírají tlačítka. Detail patří pouze vybrané pozici:
@@ -29,8 +29,31 @@ posledních nejvýše 156 nákupů je uveden v historii i v popisku hodnot. Ocen
 nezohledňuje poplatky, pozdější prodeje ani převody. Při chybějících nebo
 zastaralých cenách je ocenění neznámé, nikoli nula.
 
-Na mobilu jsou odkazy O strategii, Aktivita a Nástroje pod tlačítkem Více.
-Zdravé spojení označuje kompaktní indikátor; upozornění zůstávají textová.
+## Inventura a umístění funkcí
+
+| Funkce | Nové místo |
+| --- | --- |
+| Připojení Binance, klíče, stav, režim, aktualizace a odpojení | Profil → Nastavení účtu → Propojené účty → Binance |
+| Společná pauza Tradingu a DCA | Profil → Nastavení účtu → Automatizace nákupů |
+| Rozhodování, rizika, evidence ochrany | Trading → Pravidla a riziko |
+| Provozní události | Trading → Pravidla a riziko → Aktivita strategie |
+| Streak Governor (simulace) | Trading → Pravidla a riziko |
+| Kontrola portfolia a její reporty | Vault |
+| Heslo a Telegram | Nastavení účtu; původní samostatné stránky zachovány |
+
+Přesun používá původní formuláře a endpointy. Odpojení dál vyžaduje
+potvrzení, skrývá se pro legacy instanci a respektuje odmítnutí serveru.
+Zamítnutí je viditelné i při skrytém formuláři připojení. Po odpojení se
+zůstatky změní na neznámé a finanční ovládání se zablokuje. Chyba načítání
+označí poslední zůstatky jako neaktuální přímo na kartách.
+
+Zobrazované přezdívky sjednocuje `public/display-name.js` pomocí
+`OceanNames.formatNickname`. První Unicode code point převádí na velké
+písmeno a zbytek zachovává, včetně české diakritiky, kombinovaných znaků
+a znaků mimo BMP. Používá se v profilu, hlavičce, žebříčku, administraci,
+Genesis přehledech i Telegram propojení. Přihlašovací jména, URL, ID,
+porovnání identity a přesné potvrzení resetu účtu zůstávají původní.
+Neprovádí se migrace dat.
 
 ## Ovládání
 
@@ -41,7 +64,7 @@ uzavření pozic; jeho přístupný popis tento rozsah vysvětluje.
   Worker jej kontroluje před novými trendovými vstupy pro konkrétní pár.
   DCA má vlastní `dca.enabled` a [samostatné plány aktiv](dca-per-asset-plans.md). Změna jednoho přepínače nemění druhý.
 - Stejná cesta bez scope zachovává původní společnou pauzu `entries_paused`.
-  Její ovládání je v Nástrojích. Bezpečnostní režim, reset, pozastavení účtu,
+  Její ovládání je v nastavení automatizace. Bezpečnostní režim, reset, pozastavení účtu,
   rekonciliace a dosavadní rizikové limity dále blokují nákupy obou strategií.
 - Povolení Tradingu neruší společnou pauzu. Stará instance bez
   `trading_paused` má stejné chování jako před aktualizací.

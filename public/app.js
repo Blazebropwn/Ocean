@@ -8,6 +8,7 @@ let entriesPaused = false;
 let dcaEnabled = false;
 let dcaDraft = null;
 const dcaAmounts = [5, 10, 20, 50, 100];
+const assetSymbols = { USDC: "$", BTC: "₿", ETH: "Ξ", SOL: "◎" };
 const dcaFrequencies = { daily: "Denně", weekly: "Týdně", monthly: "Měsíčně" };
 let dcaSaving = false;
 let streakEnabled = false;
@@ -76,15 +77,17 @@ function showUser(user) {
   $("#dashboard").classList.remove("hidden");
   $("#nav-account").classList.remove("hidden");
   $("#display-id").textContent = user.displayId;
-  $("#username").textContent = `@${user.username}`;
-  $("#avatar").textContent = user.username[0].toUpperCase();
-  $("#nav-avatar").textContent = user.username[0].toUpperCase();
-  $("#nav-username").textContent = user.username;
-  $("#menu-username").textContent = user.username;
+  const nickname = OceanNames.formatNickname(user.username);
+  $("#username").textContent = `@${nickname}`;
+  $("#avatar").textContent = Array.from(nickname)[0] || "O";
+  $("#nav-avatar").textContent = Array.from(nickname)[0] || "O";
+  $("#nav-username").textContent = nickname;
+  $("#menu-username").textContent = nickname;
   $("#email").textContent = user.email || "";
   $("#email").classList.toggle("hidden", !user.email);
   $("#email-status").textContent = user.emailVerified ? "✓ OVĚŘENO" : "ČEKÁ NA OVĚŘENÍ";
   $("#email-status").className = user.emailVerified ? "hidden verified" : "hidden pending";
+  document.querySelectorAll("[data-approved-account]").forEach(button => { button.disabled = !accessApproved || Boolean(user.suspended); });
   $("#invite-admin-link").classList.toggle("hidden", user.role !== "owner");
   $("#verify-banner").classList.toggle("hidden", accessApproved || Boolean(user.suspended));
   $("#verify-banner-text").textContent = user.approvalMode === "owner" ? "Účet čeká na schválení vlastníkem." : "Ověřte svůj e-mail.";
@@ -230,9 +233,6 @@ function showAppView(view, activeLink = null) {
   const selected = ["overview", "arcade", "vault", "gift", "slot"].includes(view) ? view : "overview";
   document.body.classList.toggle("home-mode", selected === "overview");
   document.body.classList.toggle("arcade-mode", selected === "arcade");
-  const connectionStatus = $("#system-state");
-  if (selected === "overview") $(".overview-footer").insertBefore(connectionStatus, $(".overview-footer > div"));
-  else $(".workspace-head").append(connectionStatus);
   document.body.classList.toggle("slot-mode", selected === "slot");
   document.body.classList.toggle("redeem-mode", selected === "gift");
   if (selected !== "arcade") {
@@ -291,7 +291,7 @@ async function loadSonarLeaders() {
       const leader = data.leaders[index];
       const row = document.createElement("tr");
       if (leader?.username === user?.username) row.classList.add("is-player");
-      for (const value of [index + 1, leader?.username ?? "—", leader ? leader.score.toLocaleString("cs-CZ") : "—"]) {
+      for (const value of [index + 1, leader ? OceanNames.formatNickname(leader.username) : "—", leader ? leader.score.toLocaleString("cs-CZ") : "—"]) {
         const cell = document.createElement("td");
         cell.textContent = value;
         row.append(cell);
@@ -626,9 +626,8 @@ function node(tag, className, text) {
   return element;
 }
 
-function renderPortfolio(snapshot) {
-  renderStrategy(snapshot);
-  const symbols = { USDC: "$", BTC: "₿", ETH: "Ξ", SOL: "◎" };
+function renderAssetCards(snapshot) {
+  const symbols = assetSymbols;
   const assets = snapshot.holdings?.assets || [];
   const grid = $("#asset-grid"); grid.replaceChildren();
   for (const symbol of ["USDC", "BTC", "ETH", "SOL"]) {
@@ -644,9 +643,24 @@ function renderPortfolio(snapshot) {
     card.title = symbol === "USDC" ? "Volné USDC pro obchodování" : "Celkové množství na Spotu, včetně prostředků v otevřených objednávkách";
     grid.append(card);
   }
+}
+
+function markAssetCardsStale() {
+  for (const card of document.querySelectorAll('#asset-grid .asset-card')) {
+    card.classList.add('stale');
+    const caption = card.querySelector('small');
+    if (caption) caption.textContent = 'Aktualizace nedostupná';
+    card.title = 'Poslední známý zůstatek. Aktuální stav se nepodařilo ověřit.';
+  }
+}
+
+function renderPortfolio(snapshot) {
+  const symbols = assetSymbols;
+  const assets = snapshot.holdings?.assets || [];
+  renderStrategy(snapshot);
+  renderAssetCards(snapshot);
   renderDcaPortfolio(snapshot);
   renderTradingOverview(snapshot);
-  renderHomeSummary(snapshot);
   const list = $("#positions-list"); list.replaceChildren();
   const positions = snapshot.positions.filter((position) => position.inPosition);
   $("#position-count").textContent = String(positions.length);
@@ -911,13 +925,13 @@ function updatePositionDetail() {
 }
 
 for (const button of document.querySelectorAll("[data-dialog]")) button.addEventListener("click", () => {
+  setProfileOpen(false);
   button.closest("dialog")?.close();
   $("#" + button.dataset.dialog).showModal();
 });
 for (const button of document.querySelectorAll("[data-close-dialog]")) button.addEventListener("click", () => button.closest("dialog").close());
 for (const dialog of document.querySelectorAll(".workspace-dialog")) dialog.addEventListener("click", (event) => { if (event.target === dialog) { const bounds = dialog.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) dialog.close(); } });
 let selectedHomeWorkspace = "home";
-const compactHome = window.matchMedia("(max-width: 900px)");
 function selectHomeWorkspace(name, focus = false) {
   selectedHomeWorkspace = name;
   for (const tab of document.querySelectorAll("[data-home-tab]")) {
@@ -925,14 +939,12 @@ function selectHomeWorkspace(name, focus = false) {
     tab.setAttribute("aria-selected", String(selected));
     tab.tabIndex = selected ? 0 : -1;
     const pane = $("#" + tab.getAttribute("aria-controls"));
-    pane.hidden = compactHome.matches && !selected;
-    pane.setAttribute("role", compactHome.matches ? "tabpanel" : "region");
+    pane.hidden = !selected;
+    pane.setAttribute("role", "tabpanel");
     pane.setAttribute("aria-label", tab.textContent.trim());
-    if (selected && focus && compactHome.matches) tab.focus();
+    if (selected && focus) tab.focus();
   }
 }
-for (const button of document.querySelectorAll("[data-home-target]")) button.addEventListener("click", () => selectHomeWorkspace(button.dataset.homeTarget, true));
-compactHome.addEventListener("change", () => selectHomeWorkspace(selectedHomeWorkspace));
 selectHomeWorkspace(selectedHomeWorkspace);
 for (const tab of document.querySelectorAll("[data-home-tab]")) {
   tab.addEventListener("click", () => selectHomeWorkspace(tab.dataset.homeTab));
@@ -994,6 +1006,7 @@ async function loadKryptotron() {
     $("#dca-control").classList.toggle("enabled", dcaEnabled);
     $("#dca-control").setAttribute("aria-checked", String(dcaEnabled));
     streakEnabled = kryptotron.streak.enabled;
+    $("#streak-control").disabled = false;
     $("#streak-control").textContent = streakEnabled ? "Vypnout" : "Zapnout";
     $("#streak-control").classList.toggle("enabled", streakEnabled);
     $("#streak-control").setAttribute("aria-checked", String(streakEnabled));
@@ -1012,6 +1025,7 @@ async function loadKryptotron() {
     renderEvents(kryptotron.events);
   } catch (error) {
     setSystemState("Data nejsou dostupná", true);
+    markAssetCardsStale();
     $("#trading-control").disabled = true;
     $("#dca-control").disabled = true;
     document.querySelectorAll("#dca-settings-form input, #dca-settings-form button").forEach(el => { el.disabled = true; });
@@ -1032,6 +1046,7 @@ async function loadKryptotron() {
 async function initializeKryptotron() {
   try {
     const { connection } = await request("/api/kryptotron/connection");
+    $("#binance-connection-status").textContent = ({connected:"Připojeno",provisioning:"Připojuji",error:"Vyžaduje kontrolu",suspended:"Pozastaveno",unconfigured:"Nepřipojeno"})[connection.status] || "Neověřeno";
     const panel = $("#connection-panel");
     const form = $("#connection-form");
     const disconnect = $("#disconnect-binance");
@@ -1044,20 +1059,31 @@ async function initializeKryptotron() {
     if (connection.status === "connected") {
       panel.classList.add("hidden");
       disconnect.classList.toggle("hidden", connection.legacy);
-      $("#kryptotron").classList.remove("connection-active");
       await loadKryptotron();
       return;
     }
     setSystemState(connection.status === "provisioning" ? "Připojuji Binance" : "Binance nepřipojena", false);
     vaultSnapshot = null;
+    dcaDraft = null;
+    renderAssetCards({balance:{amount:null,updatedAt:null,error:true},holdings:{stale:true,assets:[]}});
+    $("#bot-environment").textContent = "Režim neověřen";
+    $("#bot-balance-updated").textContent = "—";
+    $("#bot-balance-updated").removeAttribute("title");
+    $("#positions-list").replaceChildren(node("p", "positions-empty", "Připoj Binance v nastavení profilu."));
+    $("#position-count").textContent = "0";
+    $("#dca-assets").replaceChildren();
+    $("#dca-invested").textContent = "—";
+    $("#dca-current-value").textContent = "—";
+    $("#dca-edit-actions").hidden = true;
+    for (const id of ["dca-toggle-status", "trading-toggle-status"]) $("#" + id).textContent = "Nepřipojeno";
+    document.querySelectorAll('#trading-control,#dca-control,#bot-control,#streak-control,#dca-settings-form input,#dca-settings-form button').forEach(el => { el.disabled = true; });
     $("#vault-purchases").replaceChildren();
     for (const id of ["vault-invested", "vault-count", "vault-amount"]) $("#" + id).textContent = "—";
     $("#vault-empty").classList.remove("hidden");
     $("#vault-schedule").textContent = "Nastavení se načte po připojení";
-    setVaultUnavailable("Připoj Binance na Home a načti historii nákupů.");
+    setVaultUnavailable("Připoj Binance v nastavení profilu a načti historii nákupů.");
     disconnect.classList.add("hidden");
     panel.classList.remove("hidden");
-    $("#kryptotron").classList.add("connection-active");
     const provisioning = connection.status === "provisioning";
     form.classList.toggle("hidden", provisioning);
     $("#provisioning-status").classList.toggle("hidden", !provisioning);
@@ -1070,6 +1096,8 @@ async function initializeKryptotron() {
       $("#connection-message").textContent = "";
     }
   } catch (error) {
+    $("#binance-connection-status").textContent = "Neověřeno";
+    markAssetCardsStale();
     setSystemState("Připojení neověřeno", true);
     setVaultUnavailable("Připojení se nepodařilo ověřit. Zobrazená historie může být neaktuální.");
     $("#kryptotron-status").lastChild.textContent = " Nepřipojeno";
@@ -1100,12 +1128,13 @@ $("#disconnect-binance").addEventListener("click", async (event) => {
   const button = event.currentTarget;
   button.disabled = true;
   button.textContent = "Odpojuji…";
+  $("#disconnect-message").textContent = "";
   try {
     await request("/api/kryptotron/connection", { method: "DELETE" });
     entriesPaused = true;
     await initializeKryptotron();
   } catch (error) {
-    $("#connection-message").textContent = error.message;
+    $("#disconnect-message").textContent = error.message;
   } finally {
     button.disabled = false;
     button.textContent = "Odpojit Binance";
@@ -1125,20 +1154,7 @@ function renderTradingOverview(snapshot) {
   control.setAttribute("aria-checked", String(!snapshot.tradingPaused));
   $("#trading-toggle-status").textContent = snapshot.tradingPaused ? "Vypnuto" : "Zapnuto";
   control.disabled = snapshot.entriesPaused;
-  control.title = snapshot.entriesPaused ? "Nejprve vyřešte společnou pauzu nebo blokaci nákupů v Nástrojích." : "Ovládá pouze nové vstupy Tradingu. Správa otevřených pozic pokračuje.";
-}
-
-function renderHomeSummary(snapshot) {
-  const count = snapshot.positions.filter(position => position.inPosition).length;
-  const tradingState = snapshot.transparency?.safeMode ? "Nákupy blokované" : snapshot.entriesPaused ? "Společná pauza" : snapshot.tradingPaused ? "Vypnuto" : "Zapnuto";
-  const positionText = count === 1 ? "1 otevřená pozice" : count >= 2 && count <= 4 ? `${count} otevřené pozice` : `${count} otevřených pozic`;
-  $("#home-trading-summary").textContent = `${tradingState} · ${positionText}`;
-  const plans = dcaPlans(snapshot);
-  const frequencies = new Set(plans.map(plan => plan.frequency));
-  const frequency = frequencies.size === 1 ? dcaFrequencies[plans[0]?.frequency] : "Různé intervaly";
-  const total = plans.length && plans.every(plan => Number.isFinite(plan.amount)) ? plans.reduce((sum, plan) => sum + plan.amount, 0) : null;
-  const state = !snapshot.dca.enabled ? "Vypnuto" : snapshot.transparency?.safeMode ? "Nákupy blokované" : snapshot.entriesPaused ? "Společná pauza" : "Zapnuto";
-  $("#home-dca-summary").textContent = `${state} · ${frequency || "Interval neověřen"}${total === null || frequencies.size !== 1 ? "" : ` · ${formatPrice(total, snapshot.balance.asset)} za termín`}`;
+  control.title = snapshot.entriesPaused ? "Nejprve vyřešte společnou pauzu nebo blokaci nákupů v nastavení účtu → Automatizace nákupů." : "Ovládá pouze nové vstupy Tradingu. Správa otevřených pozic pokračuje.";
 }
 
 function renderDcaPortfolio(snapshot) {
@@ -1166,7 +1182,7 @@ function renderDcaPortfolio(snapshot) {
   valuation.title = value === null ? "Čekám na aktuální ceny všech nakoupených aktiv." : `${scope} Nakoupené množství oceněné posledními dostupnými cenami (${formatDate(snapshot.holdings?.capturedAt)}). Nezohledňuje pozdější prodeje, převody ani poplatky.`;
   valuation.classList.toggle("positive", value !== null && value > invested);
   valuation.classList.toggle("negative", value !== null && value < invested);
-  $("#dca-schedule").textContent = snapshot.entriesPaused && snapshot.dca.enabled ? "Plán čeká na zrušení společné pauzy nákupů v Nástrojích." : snapshot.dca.statusText || "Termín není dostupný";
+  $("#dca-schedule").textContent = snapshot.entriesPaused && snapshot.dca.enabled ? "Plán čeká na zrušení společné pauzy v nastavení účtu → Automatizace nákupů." : snapshot.dca.statusText || "Termín není dostupný";
   renderDcaSettings(snapshot);
   for (const row of document.querySelectorAll('.dca-amount-row')) {
     const symbol = row.dataset.symbol;

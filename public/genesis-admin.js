@@ -12,7 +12,7 @@ function renderGenesisCodes() {
   for (const code of matching) {
     const row = document.createElement("tr");
     const values = [`#${String(code.number).padStart(3, "0")}`, `${tideNumber(code.rewardTide)} TIDE`,
-      code.status === "redeemed" ? "Aktivovaný" : "Nevyzvednutý", code.redeemedUsername ? `@${code.redeemedUsername}` : "—",
+      code.status === "redeemed" ? "Aktivovaný" : "Nevyzvednutý", code.redeemedUsername ? `@${OceanNames.formatNickname(code.redeemedUsername)}` : "—",
       code.redeemedAt ? new Date(code.redeemedAt).toLocaleString("cs-CZ") : "—"];
     values.forEach((value, index) => {
       const cell = document.createElement("td"); cell.textContent = value;
@@ -46,7 +46,7 @@ async function loadGenesisOverview() {
       const card = document.createElement("div"), title = document.createElement("small"), amount = document.createElement("strong");
       title.textContent = label; amount.textContent = `${tideNumber(value)} TIDE`; card.append(title, amount); $("#genesis-summary").append(card);
     }
-    message.textContent = wave.accountingValid ? `${wave.redeemedCodes} / ${wave.totalCodes} aktivací · Účetní součty souhlasí${wave.adminUsername ? ` · Správce @${wave.adminUsername}` : ""}` : "Účetní součty vyžadují kontrolu.";
+    message.textContent = wave.accountingValid ? `${wave.redeemedCodes} / ${wave.totalCodes} aktivací · Účetní součty souhlasí${wave.adminUsername ? ` · Správce @${OceanNames.formatNickname(wave.adminUsername)}` : ""}` : "Účetní součty vyžadují kontrolu.";
     message.classList.toggle("genesis-accounting-error", !wave.accountingValid);
     $("#genesis-export").disabled = false;
     renderGenesisCodes();

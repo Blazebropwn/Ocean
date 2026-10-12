@@ -10,7 +10,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   try {
     const { user } = await inviteRequest('/api/me');
     if (user.role !== 'owner' || !(user.accessApproved ?? user.emailVerified)) throw new Error('Přístup má pouze schválený správce.');
-    $('#admin-identity').textContent = `@${user.username}`;
+    $('#admin-identity').textContent = `@${OceanNames.formatNickname(user.username)}`;
     $('#admin-body').classList.remove('hidden');
     $('#admin-status').textContent = '';
     await window.initAdmin();

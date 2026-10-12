@@ -105,7 +105,7 @@ async function loadMembers() {
     const name = document.createElement("strong");
     const detail = document.createElement("small");
     const state = document.createElement("span");
-    name.textContent = `@${member.username}`;
+    name.textContent = `@${OceanNames.formatNickname(member.username)}`;
     detail.textContent = member.email || member.displayId;
     state.textContent = member.suspended ? "🔒 Pozastaven" : member.approved ? "Schválen" : "Čeká";
     state.className = `invite-status ${member.suspended ? "pending" : member.approved ? "active" : "pending"}`;
@@ -128,7 +128,7 @@ async function loadMembers() {
     suspension.className = `suspend-member${member.suspended ? " unblock-member" : ""}`;
     suspension.textContent = member.suspended ? "Odblokovat účet" : "Pozastavit účet";
     suspension.addEventListener("click", async () => {
-      const action = member.suspended ? `Odblokovat @${member.username}? Nové nákupy zůstanou pozastavené, dokud si je uživatel sám nezapne.` : `Pozastavit @${member.username}? Funkce účtu se zamknou a nové nákupy se pozastaví. Ochranné objednávky na Binance zůstanou zachované.`;
+      const action = member.suspended ? `Odblokovat @${OceanNames.formatNickname(member.username)}? Nové nákupy zůstanou pozastavené, dokud si je uživatel sám nezapne.` : `Pozastavit @${OceanNames.formatNickname(member.username)}? Funkce účtu se zamknou a nové nákupy se pozastaví. Ochranné objednávky na Binance zůstanou zachované.`;
       if (!window.confirm(action)) return;
       suspension.disabled = true;
       try {
@@ -167,13 +167,13 @@ async function loadMembers() {
     resetPassword.className = "reset-member-password";
     resetPassword.textContent = "Obnovit heslo";
     resetPassword.addEventListener("click", async () => {
-      if (!window.confirm(`Vytvořit nový odkaz pro @${member.username}? Předchozí odkaz přestane platit.`)) return;
+      if (!window.confirm(`Vytvořit nový odkaz pro @${OceanNames.formatNickname(member.username)}? Předchozí odkaz přestane platit.`)) return;
       resetPassword.disabled = true;
       try {
         const { reset } = await inviteRequest(`/api/members/${member.id}/password-reset`, { method: "POST", body: "{}" });
         $("#member-reset-url").value = reset.resetUrl;
         $("#member-reset-result").classList.remove("hidden");
-        setInviteMessage(`Odkaz pro @${member.username} platí 30 minut.`, true);
+        setInviteMessage(`Odkaz pro @${OceanNames.formatNickname(member.username)} platí 30 minut.`, true);
       } catch (error) {
         setInviteMessage(error instanceof Error ? error.message : "Něco se nepovedlo.");
       } finally {
@@ -187,7 +187,7 @@ async function loadMembers() {
     deleteMember.className = "delete-member";
     deleteMember.textContent = "Smazat účet";
     deleteMember.addEventListener("click", async () => {
-      const confirmation = window.prompt(`Trvalé smazání @${member.username}\n\nZanikne přihlášení, Binance klíče, Telegram, Kryptotron i historie agenta. Pro potvrzení napište přesně uživatelské jméno:`, "");
+      const confirmation = window.prompt(`Trvalé smazání @${OceanNames.formatNickname(member.username)}\n\nZanikne přihlášení, Binance klíče, Telegram, Kryptotron i historie agenta. Pro potvrzení napište přesně uživatelské jméno:`, "");
       if (confirmation === null) return;
       deleteMember.disabled = true;
       setInviteMessage("");
@@ -197,7 +197,7 @@ async function loadMembers() {
           body: JSON.stringify({ confirmation }),
         });
         await loadMembers();
-        setInviteMessage(`Účet @${member.username} byl trvale smazán.`, true);
+        setInviteMessage(`Účet @${OceanNames.formatNickname(member.username)} byl trvale smazán.`, true);
       } catch (error) {
         setInviteMessage(error instanceof Error ? error.message : "Účet se nepodařilo smazat.");
         deleteMember.disabled = false;
@@ -297,7 +297,9 @@ async function openAccountReset(member) {
   document.body.append(dialog);
   const status = dialog.querySelector(".reset-status"), submit = dialog.querySelector('[type="submit"]');
   const input = dialog.querySelector("input");
-  dialog.querySelector(".reset-member-name").textContent = `@${member.username}`;
+  input.placeholder = member.username;
+  input.setAttribute("aria-label", "Potvrď přihlašovací jméno v původním zápisu");
+  dialog.querySelector(".reset-member-name").textContent = `@${OceanNames.formatNickname(member.username)}`;
   let snapshot = null, sending = false, timer = null;
   let requestId = crypto.randomUUID();
   const enable = () => { submit.disabled = sending || !snapshot || snapshot.reset.request?.status === "queued" || (snapshot.reset.request?.id === requestId && snapshot.reset.request?.status === "completed") || input.value !== member.username; };

@@ -2,7 +2,7 @@
 <html lang="cs">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <title>Ocean</title>
     <meta name="theme-color" content="#0c1014"><link rel="stylesheet" href="/command-deck.css"><link rel="stylesheet" href="/ocean-theme.css"><link rel="stylesheet" href="/ocean-workspace.css"><link rel="stylesheet" href="/economy.css">
   </head>
@@ -22,7 +22,7 @@
           ><small id="profile-genesis" class="hidden"></small
           ><a href="#redeem" data-open-view="gift">Redeem code <b>→</b></a
           ><a class="hidden" id="invite-admin-link" href="/invites.html">Správa <b>→</b></a
-          ><a href="/change-password.html">Nastavení účtu <b>→</b></a
+          ><button type="button" data-dialog="account-settings-dialog">Nastavení účtu <b>→</b></button
           ><a href="/telegram.html">Telegram <b>→</b></a
           ><button id="logout" type="button">Odhlásit se</button>
         </div>
@@ -94,7 +94,7 @@
         <div class="workspace">
           <div class="workspace-head">
             <div><h1 id="workspace-title">Home</h1><p id="workspace-subtitle" class="hidden"></p></div>
-            <span class="system-state" id="system-state" role="status"><i></i><span id="system-state-text">Načítám stav</span></span>
+
           </div>
           <div class="verify-banner hidden" id="verify-banner">
             <span id="verify-banner-text">Ověřte svůj e-mail.</span
@@ -113,30 +113,7 @@
             <p class="account-lock-note">Tvůj účet, TIDE i historie zůstávají zachované. Nové nákupy jsou pozastavené; blokace neruší ochranné objednávky na Binance.</p>
           </section>
           <div class="dashboard-grid app-view" id="overview-view" aria-label="Home">
-<section class="kryptotron-card" id="kryptotron"><div class="connection-panel hidden" id="connection-panel">
-<div class="provisioning-status hidden" id="provisioning-status" role="status">
-<i></i>
-<div>
-<strong id="provisioning-heading">Připravuji Kryptotron</strong>
-<small id="provisioning-detail"></small>
-</div>
-</div>
-<form autocomplete="off" class="connection-form" id="connection-form">
-<label class="hidden" id="connection-environment-field">Režim
-                    <select id="connection-environment" name="environment">
-<option value="testnet">Zkušební provoz</option>
-<option value="mainnet">Ostrý provoz</option>
-</select>
-</label>
-<input id="connection-environment-fallback" name="environment" type="hidden" value="testnet"/>
-<label>API key<input autocomplete="off" minlength="16" name="apiKey" required="" type="password"/></label>
-<label>Secret key<input autocomplete="off" minlength="16" name="apiSecret" required="" type="password"/></label>
-<label class="safety-check"><input name="withdrawalsDisabledConfirmed" required="" type="checkbox"/><span>Výběry přes API jsou na Binance zakázané.</span></label>
-<button class="primary" type="submit">Ověřit a uložit</button>
-<p class="message" id="connection-message" role="alert"></p>
-</form>
-</div>
-<div class="portfolio-surface">
+<section class="kryptotron-card" id="kryptotron"><div class="portfolio-surface">
   <div class="home-tabs" role="tablist" aria-label="Pracovní prostor">
     <button type="button" id="home-tab" role="tab" aria-selected="true" aria-controls="home-workspace" data-home-tab="home">Přehled</button>
     <button type="button" id="trading-tab" role="tab" aria-selected="false" aria-controls="trading-workspace" tabindex="-1" data-home-tab="trading">Trading</button>
@@ -144,17 +121,16 @@
   </div>
   <section id="home-workspace" aria-labelledby="home-tab">
     <section class="asset-grid" id="asset-grid" aria-label="Zůstatky na Binance Spot"><article class="asset-card"><span>USDC</span><strong>—</strong></article><article class="asset-card"><span>BTC</span><strong>—</strong></article><article class="asset-card"><span>ETH</span><strong>—</strong></article><article class="asset-card"><span>SOL</span><strong>—</strong></article></section>
-    <div class="home-summaries">
-      <button type="button" data-home-target="trading"><span><strong>Trading</strong><small id="home-trading-summary">Načítám stav</small></span><span aria-hidden="true">›</span></button>
-      <button type="button" data-home-target="dca"><span><strong>DCA</strong><small id="home-dca-summary">Načítám plán</small></span><span aria-hidden="true">›</span></button>
-    </div>
   </section>
   <section class="home-pane positions-card" id="trading-workspace" role="tabpanel" aria-labelledby="trading-tab" tabindex="0">
     <header><div class="panel-heading"><h2>Trading</h2></div><div class="trading-toggle"><span id="trading-toggle-status">Načítám</span><button type="button" id="trading-control" role="switch" aria-checked="false" aria-label="Nové vstupy Tradingu" aria-describedby="trading-control-help" disabled></button></div></header>
     <span id="trading-control-help" class="sr-only">Vypnutí zastaví nové vstupy Tradingu. Správa a ochrana otevřených pozic pokračují.</span>
-    <p class="home-notice hidden" id="automation-paused">Všechny nové nákupy jsou společně pozastavené. <button type="button" data-dialog="tools-dialog">Otevřít ovládání</button></p>
+    <p class="home-notice hidden" id="automation-paused">Všechny nové nákupy jsou společně pozastavené. <button type="button" data-dialog="automation-dialog">Otevřít ovládání</button></p>
 
     <div class="workspace-section-heading"><h3>Otevřené pozice <span id="position-count">0</span></h3><span class="app-status" id="kryptotron-status"><i></i>Načítám</span></div>
+  <div class="bot-error hidden" id="bot-error-wrap">
+<small>Upozornění</small><strong id="bot-error"></strong>
+</div>
     <div id="positions-list"></div>
     <div class="positions-footer"><span id="next-check-short">—</span><div><button type="button" data-dialog="strategy-dialog">Pravidla a riziko</button><button type="button" data-dialog="trading-history-dialog">Historie</button></div></div>
   </section>
@@ -168,11 +144,8 @@
       <p id="dca-settings-feedback" class="dca-plan-feedback" role="status"></p>
     </form>
   </section>
-  <footer class="overview-footer"><span class="mode-badge" id="bot-environment">—</span><span id="bot-balance-updated" role="status">—</span><div class="overview-links"><button type="button" data-dialog="strategy-dialog" aria-haspopup="dialog" aria-controls="strategy-dialog">O strategii</button><button type="button" data-dialog="activity-dialog">Aktivita</button><button type="button" data-dialog="tools-dialog">Nástroje</button></div><button class="overview-more" type="button" data-dialog="more-dialog" aria-haspopup="dialog">Více</button></footer>
-  <div class="kryptotron-degraded hidden" id="kryptotron-degraded" role="status">Stav není dostupný. Zkouším spojení obnovit.</div>
-  <div class="bot-error hidden" id="bot-error-wrap">
-<small>Upozornění</small><strong id="bot-error"></strong>
-</div>
+
+
 </div></section>
           </div>
           <section
@@ -211,9 +184,16 @@
           </section>
           <section class="vault-view app-view hidden" id="vault-view" aria-labelledby="vault-title">
             <div class="vault-intro"><div><span class="section-kicker">DLOUHODOBÝ PŘEHLED</span><h2 id="vault-title">Historie nákupů</h2><p>Přehled pravidelných investic.</p></div><span class="vault-emblem" aria-hidden="true">V</span></div>
-            <p class="vault-notice" id="vault-notice" role="status">Připoj Binance na Home a načti historii nákupů.</p>
+            <p class="vault-notice" id="vault-notice" role="status">Připoj Binance v nastavení profilu a načti historii nákupů.</p>
             <div class="vault-metrics"><article><small>Evidované investice</small><strong id="vault-invested">—</strong><p>Součet uložených DCA nákupů</p></article><article><small>Dokončené nákupy</small><strong id="vault-count">—</strong><p>Úspěšně provedené objednávky</p></article><article><small>Pravidelný nákup</small><strong id="vault-amount">—</strong><p id="vault-schedule">Nastavení se načte z tvého účtu</p></article></div>
             <section class="vault-history" aria-labelledby="vault-history-title"><header><div><small>TVŮJ ARCHIV</small><h3 id="vault-history-title">Historie nákupů</h3></div><label>Aktivum<select id="vault-filter"><option value="all">Všechna aktiva</option></select></label></header><div class="vault-table-scroll"><table><thead><tr><th scope="col">Aktivum</th><th scope="col">Datum</th><th scope="col">Množství</th><th scope="col">Investováno</th></tr></thead><tbody id="vault-purchases"></tbody></table></div><div class="vault-pagination"><button id="vault-prev" type="button" aria-label="Předchozí stránka">←</button><span id="vault-page">1 / 1</span><button id="vault-next" type="button" aria-label="Další stránka">→</button></div><p class="vault-empty" id="vault-empty">Zatím tu nejsou žádné načtené nákupy.</p></section>
+<section aria-labelledby="agent-card-title" class="agent-card" id="agent-card">
+<header><div><small>ANALÝZA · BEZ OBCHODOVÁNÍ</small><h3 id="agent-card-title">Kontrola portfolia</h3></div><span id="agent-state">PŘIPRAVEN</span></header>
+<p id="agent-summary">Ověří koncentraci portfolia.</p>
+<div class="agent-metrics"><span><small>Poslední analýza</small><strong id="agent-last-run">—</strong></span><span><small>Akce</small><strong id="agent-actions">—</strong></span><span><small>Výsledek</small><strong id="agent-result">—</strong></span></div>
+<div class="agent-buttons"><button id="agent-run" type="button">Spustit analýzu</button><button class="hidden" id="agent-ledger-open" type="button">Zobrazit report</button></div>
+<p class="agent-message" id="agent-message" role="status"></p>
+</section>
             <p class="vault-footnote">Vault zobrazuje uloženou historii DCA, nejvýše 156 posledních nákupů. Nejde o aktuální zůstatky ani tržní hodnotu portfolia. Prostředky zůstávají na tvém Binance účtu.</p>
           </section>
         </div>
@@ -251,6 +231,21 @@
     <details class="trade-explanations hidden" id="strategy-residuals-detail"><summary>Drobné zůstatky po zaokrouhlení</summary><div id="strategy-residuals"></div></details>
     <div class="decision-grid" id="decision-grid"><p>Čekám na první kontrolu trhu.</p></div>
   </section>
+<div class="settings-links"><button type="button" data-dialog="activity-dialog">Aktivita strategie</button></div>
+<section class="streak-module">
+<div class="dca-head">
+<div>
+<small>Simulace · 1R</small>
+<h3>Streak Governor</h3>
+</div>
+<button aria-checked="false" id="streak-control" role="switch" type="button">
+                        Načítám
+                      </button>
+</div>
+<div class="dca-data">
+<span><small>Stav</small><strong id="streak-status">READY</strong></span><span><small>Série</small><strong id="streak-count">0 výher</strong></span><span><small>Výsledek</small><strong id="streak-pnl">0,00 USDC</strong></span>
+</div>
+</section>
 </dialog>
 <dialog class="workspace-dialog" id="close-position-dialog" aria-labelledby="close-position-title">
   <header class="dialog-heading"><h2 id="close-position-title">Uzavřít pozici</h2><button type="button" data-close-dialog aria-label="Zavřít">×</button></header>
@@ -282,32 +277,49 @@
   <details class="position-calculation"><summary aria-label="Jak se počítá hodnota a výsledek pozice">ⓘ Výpočet</summary><p>Orientační hodnota podle poslední dostupné ceny. Výsledek je rozdíl proti vstupní ceně za držené množství, bez poplatků. Konečný výsledek uzavřeného obchodu najdeš v historii.</p></details>
   <details class="position-protection"><summary><span>Ochrana pozice</span><strong id="bot-protection">—</strong></summary><dl class="position-metrics"><div><dt>Nouzový stop</dt><dd id="bot-stop-price">—</dd></div><div><dt>Aktivace trailingu</dt><dd id="bot-trail-activation">—</dd></div></dl></details>
 </dialog>
-<dialog class="workspace-dialog" id="more-dialog" aria-labelledby="more-title"><header class="dialog-heading"><h2 id="more-title">Více</h2><button type="button" data-close-dialog aria-label="Zavřít">×</button></header><nav class="more-links" aria-label="Další možnosti"><button type="button" data-dialog="strategy-dialog">O strategii <span aria-hidden="true">›</span></button><button type="button" data-dialog="activity-dialog">Aktivita <span aria-hidden="true">›</span></button><button type="button" data-dialog="tools-dialog">Nástroje <span aria-hidden="true">›</span></button></nav></dialog>
 <dialog class="workspace-dialog" id="activity-dialog"><header class="dialog-heading"><h2>Aktivita</h2><button type="button" data-close-dialog aria-label="Zavřít">×</button></header><section class="logbook">
 <div class="logbook-title">Poslední události</div>
 <ol id="bot-events">
 <li><time>—</time><span>Načítám události</span></li>
 </ol>
-</section></dialog><dialog class="workspace-dialog" id="tools-dialog"><header class="dialog-heading"><h2>Nástroje</h2><button type="button" data-close-dialog aria-label="Zavřít">×</button></header><section class="automation-control"><h3>Společná pauza nákupů</h3><p>Zastaví nové nákupy Tradingu i DCA. Existující pozice a ochranné příkazy se spravují dál.</p><button type="button" id="bot-control" disabled>Načítám</button></section><section class="streak-module">
-<div class="dca-head">
+</section></dialog>
+<dialog class="workspace-dialog" id="account-settings-dialog" aria-labelledby="account-settings-title">
+<header class="dialog-heading"><h2 id="account-settings-title">Nastavení účtu</h2><button type="button" data-close-dialog aria-label="Zavřít">×</button></header>
+<nav class="settings-links" aria-label="Nastavení účtu"><a href="/change-password.html">Změna hesla</a><a href="/telegram.html">Telegram</a><button type="button" data-dialog="connected-accounts-dialog" data-approved-account>Propojené účty</button><button type="button" data-dialog="automation-dialog" data-approved-account>Automatizace nákupů</button></nav>
+</dialog>
+<dialog class="workspace-dialog" id="connected-accounts-dialog" aria-labelledby="connected-accounts-title">
+<header class="dialog-heading"><h2 id="connected-accounts-title">Propojené účty</h2><button type="button" data-close-dialog aria-label="Zavřít">×</button></header>
+<nav class="settings-links" aria-label="Propojené účty"><button type="button" data-dialog="binance-dialog">Binance <span id="binance-connection-status">Načítám stav</span></button></nav>
+</dialog>
+<dialog class="workspace-dialog" id="binance-dialog" aria-labelledby="binance-title">
+<header class="dialog-heading"><h2 id="binance-title">Binance</h2><button type="button" data-close-dialog aria-label="Zavřít">×</button></header>
+<div class="connection-status"><span class="system-state" id="system-state" role="status"><i></i><span id="system-state-text">Načítám stav</span></span><dl><div><dt>Provozní režim</dt><dd id="bot-environment">—</dd></div><div><dt>Aktualizace zůstatků</dt><dd id="bot-balance-updated">—</dd></div></dl></div>
+  <div class="kryptotron-degraded hidden" id="kryptotron-degraded" role="status">Stav není dostupný. Zkouším spojení obnovit.</div>
+<div class="connection-panel hidden" id="connection-panel">
+<div class="provisioning-status hidden" id="provisioning-status" role="status">
+<i></i>
 <div>
-<small>Simulace · 1R</small>
-<h3>Streak Governor</h3>
+<strong id="provisioning-heading">Připravuji Kryptotron</strong>
+<small id="provisioning-detail"></small>
 </div>
-<button aria-checked="false" id="streak-control" role="switch" type="button">
-                        Načítám
-                      </button>
 </div>
-<div class="dca-data">
-<span><small>Stav</small><strong id="streak-status">READY</strong></span><span><small>Série</small><strong id="streak-count">0 výher</strong></span><span><small>Výsledek</small><strong id="streak-pnl">0,00 USDC</strong></span>
+<form autocomplete="off" class="connection-form" id="connection-form">
+<label class="hidden" id="connection-environment-field">Režim
+                    <select id="connection-environment" name="environment">
+<option value="testnet">Zkušební provoz</option>
+<option value="mainnet">Ostrý provoz</option>
+</select>
+</label>
+<input id="connection-environment-fallback" name="environment" type="hidden" value="testnet"/>
+<label>API key<input autocomplete="off" minlength="16" name="apiKey" required="" type="password"/></label>
+<label>Secret key<input autocomplete="off" minlength="16" name="apiSecret" required="" type="password"/></label>
+<label class="safety-check"><input name="withdrawalsDisabledConfirmed" required="" type="checkbox"/><span>Výběry přes API jsou na Binance zakázané.</span></label>
+<button class="primary" type="submit">Ověřit a uložit</button>
+<p class="message" id="connection-message" role="alert"></p>
+</form>
 </div>
-</section><section aria-labelledby="agent-card-title" class="agent-card" id="agent-card">
-<header><div><small>ANALÝZA · BEZ OBCHODOVÁNÍ</small><h3 id="agent-card-title">Kontrola portfolia</h3></div><span id="agent-state">PŘIPRAVEN</span></header>
-<p id="agent-summary">Ověří koncentraci portfolia.</p>
-<div class="agent-metrics"><span><small>Poslední analýza</small><strong id="agent-last-run">—</strong></span><span><small>Akce</small><strong id="agent-actions">—</strong></span><span><small>Výsledek</small><strong id="agent-result">—</strong></span></div>
-<div class="agent-buttons"><button id="agent-run" type="button">Spustit analýzu</button><button class="hidden" id="agent-ledger-open" type="button">Zobrazit report</button></div>
-<p class="agent-message" id="agent-message" role="status"></p>
-</section><button class="connection-disconnect hidden" id="disconnect-binance" type="button">Odpojit Binance</button></dialog>
-    <script src="/economy.js" defer></script><script src="/app.js" defer></script>
+<button class="connection-disconnect hidden" id="disconnect-binance" type="button">Odpojit Binance</button><p id="disconnect-message" class="message" role="alert"></p></dialog>
+<dialog class="workspace-dialog" id="automation-dialog" aria-labelledby="automation-title"><header class="dialog-heading"><h2 id="automation-title">Automatizace nákupů</h2><button type="button" data-close-dialog aria-label="Zavřít">×</button></header><section class="automation-control"><h3>Společná pauza nákupů</h3><p>Zastaví nové nákupy Tradingu i DCA. Existující pozice a ochranné příkazy se spravují dál.</p><button type="button" id="bot-control" disabled>Načítám</button></section></dialog>
+    <script src="/display-name.js" defer></script><script src="/economy.js" defer></script><script src="/app.js" defer></script>
   </body>
 </html>

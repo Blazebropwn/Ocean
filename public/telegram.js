@@ -15,7 +15,7 @@ async function loadTelegram() {
   $("#telegram-loading").classList.add("hidden");
   $("#telegram-connected").classList.toggle("hidden", !telegram.connected);
   $("#telegram-disconnected").classList.toggle("hidden", telegram.connected);
-  $("#telegram-account").textContent = telegram.username ? `@${telegram.username}` : "Tvůj Telegram";
+  $("#telegram-account").textContent = telegram.username ? `@${OceanNames.formatNickname(telegram.username)}` : "Tvůj Telegram";
   $("#create-telegram-code").disabled = !telegram.available;
   $("#telegram-chat").classList.toggle("hidden", !telegram.botUsername);
   if (telegram.botUsername) $("#telegram-chat").href = `https://t.me/${encodeURIComponent(telegram.botUsername)}`;

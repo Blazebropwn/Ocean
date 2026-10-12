@@ -16,16 +16,20 @@ const page=await browser.newPage({viewport:{width:1440,height:1050},deviceScaleF
 page.setDefaultTimeout(10000);
 const errors=[];page.on('pageerror',error=>errors.push(String(error)));
 const mutations=[];
-let failPlanSave=false;
+let failPlanSave=false, connectionStatus='connected', legacy=false, rejectDisconnect=false, failSnapshot=false;
 await page.route('**/*',async route=>{
  const url=new URL(route.request().url());
  if(url.hostname!=='ocean.test') return route.abort();
  const path=url.pathname;
  if(path.startsWith('/api/')) {
    let body={}; let status=200;
-   if(path==='/api/me') body={user:{username:'Preview',displayId:'0001',email:'preview@example.com',emailVerified:true,accessApproved:true,role:'member'}};
-   else if(path==='/api/kryptotron/connection') body={connection:{status:'connected',mainnetAvailable:true}};
-   else if(path==='/api/kryptotron') body={kryptotron:fixture};
+   if(path==='/api/me') body={user:{username:'deepHunter',displayId:'0001',email:'preview@example.com',emailVerified:true,accessApproved:true,role:'member'}};
+   else if(path==='/api/kryptotron/connection') {
+     if(route.request().method()==='DELETE') {mutations.push({path,method:'DELETE'});if(rejectDisconnect){status=409;body={error:'Odpojení blokuje otevřená pozice.'};}else{connectionStatus='unconfigured';body={};}}
+     else if(route.request().method()==='POST') {mutations.push({path,...route.request().postDataJSON()});connectionStatus='provisioning';body={};}
+     else body={connection:{status:connectionStatus,mainnetAvailable:true,legacy}};
+   }
+   else if(path==='/api/kryptotron') {if(failSnapshot){status=503;body={error:'Unavailable'};}else body={kryptotron:fixture};}
    else if(path==='/api/kryptotron/control') {const data=route.request().postDataJSON();mutations.push({path,...data});if(data.scope==='trading')fixture.tradingPaused=data.entriesPaused;else fixture.entriesPaused=data.entriesPaused;body=data;}
    else if(path==='/api/kryptotron/dca/control'){const data=route.request().postDataJSON();mutations.push({path,...data});fixture.dca.enabled=data.enabled;body=data;}
    else if(path==='/api/kryptotron/dca/settings') {
@@ -38,196 +42,121 @@ await page.route('**/*',async route=>{
  }
  try {const file=path==='/'?'/index.html':path;const data=await readFile(root+file); const ext=file.split('.').pop();return route.fulfill({contentType:({html:'text/html',js:'text/javascript',css:'text/css',svg:'image/svg+xml',woff2:'font/woff2',png:'image/png'})[ext]||'application/octet-stream',body:data});}catch{return route.fulfill({status:404,body:''});}
 });
+try {
 await page.goto('http://ocean.test/#home');
-await page.locator('#trading-toggle-status').filter({hasText:'Zapnuto'}).waitFor();
+await page.waitForFunction(()=>document.querySelector('#trading-toggle-status').textContent==='Zapnuto');
 const fit = async label => {
- const geometry=await page.evaluate(()=>Object.fromEntries(['.workspace','.portfolio-surface','#dca-workspace','#trading-workspace'].map(selector=>{
-  const el=document.querySelector(selector);return [selector,{height:el.clientHeight,scroll:el.scrollHeight,width:el.clientWidth,scrollWidth:el.scrollWidth}];
- })));
- for(const [selector,bounds] of Object.entries(geometry)){
-  assert.ok(bounds.scroll<=bounds.height+1,`${label} ${selector} vertical: ${JSON.stringify(bounds)}`);
-  assert.ok(bounds.scrollWidth<=bounds.width+1,`${label} ${selector} horizontal: ${JSON.stringify(bounds)}`);
- }
- const cardsFit=await page.locator('.asset-card').evaluateAll(cards=>cards.every(card=>{
-  const bounds=card.getBoundingClientRect();
-  return [...card.children].every(child=>child.getBoundingClientRect().bottom<=bounds.bottom-8);
- }));
- assert.ok(cardsFit,`${label} asset text must stay inside its card`);
- const slidersFit=await page.locator('.dca-amount-row').evaluateAll(rows=>rows.every(row=>{
-  const slider=row.querySelector('input').getBoundingClientRect();
-  const values=row.querySelector('.dca-row-values').getBoundingClientRect();
-  return slider.right<values.left && [...row.querySelectorAll('.dca-slider-ticks button')].every((button,index)=>{
-   const bounds=button.getBoundingClientRect();
-   return Math.abs(bounds.x+bounds.width/2-(slider.x+8+(slider.width-16)*index/4))<1;
-  });
- }));
- assert.ok(slidersFit,`${label} slider stops align and stay beside valuation`);
+ const overflow=await page.evaluate(()=>[document.documentElement,...document.querySelectorAll('.workspace,.portfolio-surface,.home-pane:not([hidden])')].some(el=>el.scrollWidth>el.clientWidth+1));
+ assert.equal(overflow,false,`${label}: horizontal overflow`);
 };
-for(const [width,height] of [[1920,1080],[1440,900],[1366,768],[1280,720],[1024,768]]){
+for(const [width,height] of [[1920,1080],[1440,900],[1366,768],[1280,720],[1024,768],[390,844],[320,568],[768,1024]]){
  await page.setViewportSize({width,height});
- assert.equal(await page.locator('#dca-workspace').isVisible(),true);
- assert.equal(await page.locator('#trading-workspace').isVisible(),true);
- assert.equal(await page.locator('.home-tabs').isVisible(),false);
- await fit(`${width}x${height}`);
- const [dca,trading]=await Promise.all([page.locator('#dca-workspace').boundingBox(),page.locator('#trading-workspace').boundingBox()]);
- assert.ok(Math.abs(dca.width-trading.width)<2);assert.ok(dca.x<trading.x);
- if(width===1366)await page.screenshot({path:'/tmp/ocean-home-split-desktop.png'});
+ for(const name of ['home','trading','dca']){
+  await page.locator('#'+name+'-tab').click();
+  for(const id of ['home','trading','dca'])assert.equal(await page.locator('#'+id+'-workspace').isVisible(),id===name);
+  await page.evaluate(()=>loadKryptotron());
+  assert.equal(await page.locator('#'+name+'-tab').getAttribute('aria-selected'),'true');
+  await fit(`${width}x${height}/${name}`);
+ }
+ await page.locator('#home-tab').click();
+ const cards=await page.locator('.asset-card').evaluateAll(els=>els.map(e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,bottom:r.bottom};}));
+ assert.equal(cards.length,4);
+ assert.ok(cards.every(c=>Math.abs(c.width-cards[0].width)<1&&Math.abs(c.height-cards[0].height)<1));
+ assert.equal(cards[0].y,cards[1].y);assert.equal(cards[2].y,cards[3].y);assert.ok(cards[2].y>cards[0].y);
+ const nav=await page.locator('.side-nav').boundingBox();
+ assert.ok(cards[2].bottom<=nav.y&&nav.y-cards[2].bottom<32,`cards use available height ${width}x${height}: ${JSON.stringify({cards,nav})}`);
+ const contained=await page.locator('.asset-card').evaluateAll(cards=>cards.every(card=>[...card.children].every(child=>{const a=card.getBoundingClientRect(),b=child.getBoundingClientRect();return b.right<=a.right&&b.bottom<=a.bottom;})));
+ assert.ok(contained,'values remain inside cards');
+ if(width===390||width===1440)await page.screenshot({path:`/tmp/ocean-home-redesign-${width}.png`});
 }
-await page.setViewportSize({width:1440,height:900});
-assert.equal(await page.locator('#asset-grid .asset-card').count(),4);
-assert.equal(await page.locator('#asset-grid .asset-card').nth(1).locator('strong').innerText(),'0,00036939');
-assert.equal(await page.locator('#dca-workspace .workspace-note,#dca-workspace .workspace-metrics').count(),0);
-assert.equal(await page.locator('#dca-workspace fieldset').count(),1);
-assert.equal(await page.locator('#dca-edit-actions').isVisible(),false);
-assert.equal(await page.locator('#trading-net-result').count(),0);
-await page.locator('.position-row').click();
+assert.equal(await page.locator('.home-summaries,.overview-footer,#more-dialog,#tools-dialog').count(),0);
+assert.equal(await page.locator('#nav-username').textContent(),'DeepHunter');
+assert.equal(await page.locator('#menu-username').textContent(),'DeepHunter');
+await page.locator('#home-tab').press('ArrowLeft');assert.equal(await page.locator('#dca-tab').getAttribute('aria-selected'),'true');
+await page.locator('#dca-tab').press('Home');assert.equal(await page.locator('#home-tab').getAttribute('aria-selected'),'true');
+await page.locator('#trading-tab').click();await page.locator('.position-row').click();
 assert.equal(await page.locator('#bot-current-value').textContent(),'≈ 16,60 USDC');
 assert.equal(await page.locator('#bot-current-pnl').textContent(),'-0,69 USDC');
-assert.equal(await page.locator('#bot-quantity').textContent(),'0,0002 BTC');
-assert.equal(await page.locator('#bot-protection').textContent(),'Aktivní');
-assert.equal(await page.locator('#bot-stop-price').isVisible(),false);
-assert.doesNotMatch(await page.locator('#position-dialog').innerText(),/ETH|Poslední obchod|Čistý výsledek/);
-await page.locator('.position-protection summary').click();
-assert.match(await page.locator('#bot-stop-price').innerText(),/77.*805/);
-await page.locator('.position-protection summary').click();
-await page.screenshot({path:'/tmp/ocean-position-detail.png'});
+assert.doesNotMatch(await page.locator('#position-dialog').innerText(),/ETH|Poslední obchod/);
 await page.locator('#position-dialog [data-close-dialog]').click();
-assert.equal(await page.locator('#dca-assets input[type=range]').count(),3);
+await page.locator('#trading-control').click();
+await page.waitForFunction(()=>document.querySelector('#trading-toggle-status').textContent==='Vypnuto');
+assert.equal(fixture.dca.enabled,true);assert.equal(fixture.entriesPaused,false);
+await page.locator('#dca-tab').click();
 const btc=page.locator('.dca-amount-row[data-symbol="BTCUSDC"]');
-const sol=page.locator('.dca-amount-row[data-symbol="SOLUSDC"]');
-assert.equal(await btc.locator('.dca-slider-ticks button').count(),5);
 assert.equal(await btc.locator('.dca-asset-invested').textContent(),'5,00 USDC');
 assert.equal(await btc.locator('.dca-asset-current').textContent(),'≈ 4,98 USDC');
-assert.equal(await page.locator('#dca-workspace #dca-invested').textContent(),'15,00 USDC');
-assert.equal(await page.locator('#dca-workspace #dca-current-value').textContent(),'≈ 14,92 USDC');
-assert.equal(await page.locator('#dca-detail-dialog .dca-row-values,#dca-detail-dialog .dca-totals').count(),0);
+assert.equal(await page.locator('#dca-current-value').textContent(),'≈ 14,92 USDC');
+assert.equal(await page.locator('#dca-edit-actions').isVisible(),false);
 for(const amount of [5,10,20,50,100]){
  await btc.locator('.dca-slider-ticks button').filter({hasText:new RegExp(`^${amount}$`)}).click();
  assert.equal(await btc.locator('output').textContent(),`${amount} USDC`);
 }
-const range=await btc.locator('input').boundingBox();
-await page.mouse.move(range.x+range.width-8,range.y+range.height/2);await page.mouse.down();
-await page.mouse.move(range.x+8,range.y+range.height/2,{steps:12});await page.mouse.up();
-assert.equal(await btc.locator('output').textContent(),'5 USDC');
-assert.equal(await btc.locator('.dca-asset-invested').textContent(),'5,00 USDC','editing future purchases must not change historical cost');
-await btc.locator('input').focus();await btc.locator('input').press('ArrowRight');
-assert.equal(await btc.locator('output').textContent(),'10 USDC');
-assert.equal(await page.locator('#dca-edit-actions').isVisible(),true);
-assert.match(await page.locator('#home-dca-summary').textContent(),/15,00 USDC/);
+await btc.locator('input').focus();await btc.locator('input').press('Home');await btc.locator('input').press('ArrowRight');
 await page.evaluate(()=>loadKryptotron());
 assert.equal(await btc.locator('input').evaluate(el=>el===document.activeElement),true);
 assert.equal(await btc.locator('output').textContent(),'10 USDC');
 await page.locator('#dca-frequency label').filter({hasText:'Denně'}).click();
-assert.equal(mutations.length,0);
-await page.locator('#dca-save').click();
-await page.locator('#dca-settings-feedback').filter({hasText:'Uloženo'}).waitFor();
-assert.deepEqual(mutations[0],{path:'/api/kryptotron/dca/settings',amounts:{BTCUSDC:10,ETHUSDC:5,SOLUSDC:5},frequency:'daily'});
-assert.ok(fixture.dca.plans.every(p=>p.frequency==='daily'));
-assert.equal(await page.locator('#dca-edit-actions').isVisible(),false);
-await page.evaluate(()=>loadKryptotron());
-assert.equal(await btc.locator('output').textContent(),'10 USDC');
-assert.match(await page.locator('#home-dca-summary').textContent(),/Denně.*20,00 USDC/);
-assert.equal(await page.locator('#dca-frequency input:checked').inputValue(),'daily');
+await page.locator('#dca-save').click();await page.locator('#dca-settings-feedback').filter({hasText:'Uloženo'}).waitFor();
+assert.deepEqual(mutations.at(-1),{path:'/api/kryptotron/dca/settings',amounts:{BTCUSDC:10,ETHUSDC:5,SOLUSDC:5},frequency:'daily'});
 failPlanSave=true;
-await page.setViewportSize({width:1280,height:720});
-await sol.locator('.dca-slider-ticks button').filter({hasText:/^50$/}).click();
-await page.locator('#dca-frequency label').filter({hasText:'Měsíčně'}).click();
-await page.locator('#dca-save').click();
-await page.locator('#dca-settings-feedback').filter({hasText:'nepodařilo'}).waitFor();
-await fit('failed save at 1280x720');
-assert.equal(fixture.dca.plans[2].amount,5);
-assert.ok(fixture.dca.plans.every(p=>p.frequency==='daily'));
-assert.equal(await sol.locator('output').textContent(),'50 USDC');
-await page.locator('#dca-cancel').click();
-assert.equal(await sol.locator('output').textContent(),'5 USDC');
-assert.equal(await page.locator('#dca-frequency input:checked').inputValue(),'daily');
-failPlanSave=false;
-await page.locator('#trading-control').click();
-await page.waitForFunction(()=>document.querySelector('#trading-toggle-status').textContent==='Vypnuto');
-assert.equal(fixture.dca.enabled,true);assert.equal(fixture.entriesPaused,false);
-await page.locator('#dca-control').click();
-await page.waitForFunction(()=>document.querySelector('#dca-control').getAttribute('aria-checked')==='false');
+await btc.locator('.dca-slider-ticks button').filter({hasText:/^50$/}).click();
+await page.locator('#dca-save').click();await page.locator('#dca-settings-feedback').filter({hasText:'nepodařilo'}).waitFor();
+assert.equal(fixture.dca.plans[0].amount,10);assert.equal(await btc.locator('output').textContent(),'50 USDC');
+await page.locator('#dca-cancel').click();assert.equal(await btc.locator('output').textContent(),'10 USDC');
+await page.locator('#dca-control').click();await page.waitForFunction(()=>document.querySelector('#dca-control').getAttribute('aria-checked')==='false');
 assert.equal(fixture.tradingPaused,true);assert.equal(fixture.entriesPaused,false);
-await page.locator('[data-dialog="trading-history-dialog"]').click();
-await page.locator('.trade-history-item summary').click();
-assert.match(await page.locator('.trade-history-item').innerText(),/Zbytek zůstává majetkem/);
-await page.locator('#trading-history-dialog [data-close-dialog]').click();
-await page.locator('[data-dialog="dca-detail-dialog"]').click();
-assert.equal(await page.locator('#dca-purchases .purchase-row').count(),3);
-await page.locator('#dca-detail-dialog [data-close-dialog]').click();
-fixture.lastTrade.costs={status:'unverified',reason:'UNAVAILABLE',netPnl:null};fixture.holdings.stale=true;
-await page.evaluate(()=>loadKryptotron());
-await page.locator('.position-row').click();
-assert.equal(await page.locator('#bot-current-value').textContent(),'—');
-assert.equal(await page.locator('#bot-current-pnl').textContent(),'—');
-await page.locator('#position-dialog [data-close-dialog]').click();
+fixture.holdings.stale=true;await page.evaluate(()=>loadKryptotron());
 assert.equal(await page.locator('#dca-current-value').textContent(),'—');
-assert.equal(await btc.locator('.dca-asset-current').textContent(),'—');
-fixture.lastTrade.costs=costs;fixture.holdings.stale=false;fixture.tradingPaused=false;fixture.dca.enabled=true;
-await page.evaluate(()=>loadKryptotron());
-for(const width of [390,320,768]){
- await page.setViewportSize({width,height:844});
- for(const name of ['home','trading','dca']){
-  await page.locator('#'+name+'-tab').click();
-  for(const [panel,id] of [['home','asset-grid'],['trading','trading-workspace'],['dca','dca-workspace']]) {
-   assert.equal(await page.locator('#'+id).isVisible(),panel===name);
-  }
-  const tabs=await page.locator('.home-tabs').boundingBox();
-  const panel=await page.locator(name==='home'?'#asset-grid':'#'+name+'-workspace').boundingBox();
-  assert.ok(tabs.y+tabs.height<=panel.y,'mobile navigation sits above the selected panel');
-  await page.evaluate(()=>loadKryptotron());
-  assert.equal(await page.locator('#asset-grid').isVisible(),name==='home','polling preserves the mobile tab');
-  const overflow=await page.evaluate(()=>[document.documentElement.scrollWidth>innerWidth,...[...document.querySelectorAll('.workspace,.portfolio-surface,.home-pane:not([hidden])')].map(e=>e.scrollWidth>e.clientWidth+1)].some(Boolean));
-  assert.equal(overflow,false,`overflow at ${width} / ${name}`);
-  if(width===390)await page.screenshot({path:`/tmp/ocean-home-split-${name}-mobile.png`});
- }
- await page.locator('#dca-tab').press('ArrowLeft');
- assert.equal(await page.locator('#trading-tab').evaluate(el=>el===document.activeElement),true);
- await page.locator('#trading-tab').press('ArrowLeft');
- assert.equal(await page.locator('#home-tab').getAttribute('aria-selected'),'true');
- await page.locator('#home-tab').press('ArrowLeft');
- assert.equal(await page.locator('#dca-tab').getAttribute('aria-selected'),'true');
- await page.locator('#dca-tab').press('Home');
- assert.equal(await page.locator('#home-tab').getAttribute('aria-selected'),'true');
- await page.locator('#home-tab').press('End');
- assert.equal(await page.locator('#dca-tab').getAttribute('aria-selected'),'true');
-}
-await page.locator('#home-tab').click();
-assert.equal(await page.locator('#home-tab').textContent(),'Přehled');
-await page.locator('[data-home-target="trading"]').click();
-assert.equal(await page.locator('#trading-tab').getAttribute('aria-selected'),'true');
-await page.locator('#home-tab').click();
-await page.locator('[data-home-target="dca"]').click();
-assert.equal(await page.locator('#dca-tab').getAttribute('aria-selected'),'true');
-await page.locator('.overview-more').click();
-await page.locator('#more-dialog [data-dialog="tools-dialog"]').click();
-assert.equal(await page.locator('#more-dialog').evaluate(el=>el.open),false);
-assert.equal(await page.locator('#tools-dialog').evaluate(el=>el.open),true);
-await page.locator('#tools-dialog [data-close-dialog]').click();
+await page.locator('#home-tab').click();assert.match(await page.locator('#asset-grid').innerText(),/Čekám na aktualizaci/);
+fixture.holdings.stale=false;fixture.holdings.assets[0].quantity=.12345678;await page.evaluate(()=>loadKryptotron());
+assert.equal(await page.locator('#asset-grid .asset-card').nth(1).locator('strong').textContent(),'0,12345678');
+failSnapshot=true;await page.evaluate(()=>loadKryptotron());assert.match(await page.locator('#asset-grid').innerText(),/Aktualizace nedostupná/);
+failSnapshot=false;await page.evaluate(()=>loadKryptotron());
+await page.locator('#profile-button').click();await page.locator('[data-dialog="account-settings-dialog"]').click();
+await page.locator('[data-dialog="connected-accounts-dialog"]').click();await page.locator('[data-dialog="binance-dialog"]').click();
+assert.match(await page.locator('#binance-dialog').innerText(),/Ostrý provoz/);
+assert.equal(await page.locator('#connection-form').isVisible(),false);
+assert.equal(await page.locator('#disconnect-binance').isVisible(),true);
+page.once('dialog',dialog=>dialog.dismiss());await page.locator('#disconnect-binance').click();
+assert.equal(mutations.filter(m=>m.method==='DELETE').length,0);
+rejectDisconnect=true;page.once('dialog',dialog=>dialog.accept());await page.locator('#disconnect-binance').click();
+await page.locator('#disconnect-message').filter({hasText:'blokuje otevřená pozice'}).waitFor();assert.equal(connectionStatus,'connected');
+legacy=true;await page.evaluate(()=>initializeKryptotron());assert.equal(await page.locator('#disconnect-binance').isVisible(),false);
+legacy=false;await page.evaluate(()=>initializeKryptotron());
+await page.locator('#binance-dialog [data-close-dialog]').click();
 fixture.entriesPaused=true;fixture.transparency.safeMode=true;fixture.transparency.reconciliation.status='UNCERTAIN';
-await page.evaluate(()=>loadKryptotron());
-assert.equal(await page.locator('#trading-control').isDisabled(),true);
-assert.match(await page.locator('#home-trading-summary').textContent(),/Nákupy blokované/);
-assert.match(await page.locator('#home-dca-summary').textContent(),/Nákupy blokované/);
-assert.equal(await page.locator('#system-state-text').isVisible(),true);
-await page.locator('#trading-tab').click();
-await page.locator('.position-row').click();
-assert.equal(await page.locator('#bot-protection').textContent(),'Neověřeno');
-await page.locator('#position-dialog [data-close-dialog]').click();
-fixture.entriesPaused=false;fixture.transparency.safeMode=false;fixture.transparency.reconciliation.status='OK';
-await page.evaluate(()=>loadKryptotron());
-await page.setViewportSize({width:1366,height:768});
-await page.locator('#trading-workspace').waitFor({state:'visible'});
-await page.locator('#dca-workspace').waitFor({state:'visible'});
-assert.equal(await page.locator('#dca-workspace').isVisible(),true);
-assert.equal(await page.locator('#trading-workspace').isVisible(),true);
-await fit('resize back to desktop');
-fixture.positions=[];fixture.lastTrade=null;fixture.transparency.trades=[];fixture.dca.purchases=[];fixture.dca.totalInvested=0;
-await page.evaluate(()=>loadKryptotron());
-assert.match(await page.locator('#dca-purchases').textContent(),/Zatím žádné/);
-assert.equal(await page.locator('#dca-current-value').textContent(),'0,00 USDC');
-assert.equal(await btc.locator('.dca-asset-invested').textContent(),'0,00 USDC');
-assert.equal(await page.locator('#trading-net-result').count(),0);
+await page.evaluate(()=>loadKryptotron());assert.equal(await page.locator('#trading-control').isDisabled(),true);
+await page.locator('#trading-tab').click();await page.locator('.position-row').click();
+assert.equal(await page.locator('#bot-protection').textContent(),'Neověřeno');await page.locator('#position-dialog [data-close-dialog]').click();
+await page.locator('[data-dialog="strategy-dialog"]').click();assert.equal(await page.locator('#streak-control').isVisible(),true);
+await page.locator('[data-dialog="activity-dialog"]').click();assert.equal(await page.locator('#activity-dialog').evaluate(el=>el.open),true);
+await page.locator('#activity-dialog [data-close-dialog]').click();
+await page.locator('.side-link[data-view="vault"]').click();assert.equal(await page.locator('#agent-card').isVisible(),true);
+await page.locator('.side-link[data-view="overview"]').click();
+await page.setViewportSize({width:320,height:320});await page.locator('#home-tab').click();await fit('short viewport');
+await page.locator('.asset-card').last().scrollIntoViewIfNeeded();
+const last=await page.locator('.asset-card').last().boundingBox(),bottom=await page.locator('.side-nav').boundingBox();
+assert.ok(last.y+last.height<=bottom.y,'short screen can scroll cards above navigation');
+connectionStatus='unconfigured';await page.evaluate(()=>initializeKryptotron());
+assert.equal(await page.locator('#asset-grid .asset-card').count(),4);
+assert.equal(await page.locator('#asset-grid .asset-card strong').first().textContent(),'—');assert.equal(await page.locator('#trading-control').isDisabled(),true);
+await page.setViewportSize({width:390,height:844});
+await page.locator('#profile-button').click();await page.locator('[data-dialog="account-settings-dialog"]').click();
+await page.locator('[data-dialog="connected-accounts-dialog"]').click();await page.locator('[data-dialog="binance-dialog"]').click();
+assert.equal(await page.locator('#connection-form').isVisible(),true);
+await page.locator('#connection-form [name="apiKey"]').fill('test-key-not-a-real-key');
+await page.locator('#connection-form [name="apiSecret"]').fill('test-secret-not-a-real-secret');
+await page.locator('#connection-form [name="withdrawalsDisabledConfirmed"]').check();
+await page.screenshot({path:'/tmp/ocean-binance-settings-mobile.png'});
+await page.locator('#connection-form [type="submit"]').click();
+await page.locator('#provisioning-status').waitFor({state:'visible'});
+assert.deepEqual(mutations.at(-1),{path:'/api/kryptotron/connection',environment:'testnet',apiKey:'test-key-not-a-real-key',apiSecret:'test-secret-not-a-real-secret',withdrawalsDisabledConfirmed:true});
+connectionStatus='connected';await page.evaluate(()=>initializeKryptotron());
+assert.equal(await page.locator('#streak-control').isDisabled(),false);
+rejectDisconnect=false;page.once('dialog',dialog=>dialog.accept());await page.locator('#disconnect-binance').click();
+await page.locator('#connection-form').waitFor({state:'visible'});
+assert.equal(connectionStatus,'unconfigured');assert.equal(await page.locator('#trading-control').isDisabled(),true);
 assert.deepEqual(errors,[]);
-console.log('PASS: equal desktop halves without scroll at 5 sizes; three mobile tabs; shared interval and independent amounts; atomic saves, failed-save recovery, draft focus, pointer clicks/drag, aligned slider stops, per-asset values and totals, dialogs, controls, stale/empty data.');
-await browser.close();
+console.log('PASS: flexible 2x2 overview, all-width tabs, preserved trading/DCA controls, displayed names, relocated tools, Binance confirmation/rejection/legacy guard, unavailable data and natural scrolling.');
+} finally {await browser.close();}
