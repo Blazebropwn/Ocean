@@ -932,6 +932,7 @@ for (const button of document.querySelectorAll("[data-dialog]")) button.addEvent
 for (const button of document.querySelectorAll("[data-close-dialog]")) button.addEventListener("click", () => button.closest("dialog").close());
 for (const dialog of document.querySelectorAll(".workspace-dialog")) dialog.addEventListener("click", (event) => { if (event.target === dialog) { const bounds = dialog.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) dialog.close(); } });
 let selectedHomeWorkspace = "home";
+const compactHome = window.matchMedia("(max-width: 900px)");
 function selectHomeWorkspace(name, focus = false) {
   selectedHomeWorkspace = name;
   for (const tab of document.querySelectorAll("[data-home-tab]")) {
@@ -939,12 +940,13 @@ function selectHomeWorkspace(name, focus = false) {
     tab.setAttribute("aria-selected", String(selected));
     tab.tabIndex = selected ? 0 : -1;
     const pane = $("#" + tab.getAttribute("aria-controls"));
-    pane.hidden = !selected;
-    pane.setAttribute("role", "tabpanel");
+    pane.hidden = compactHome.matches && !selected;
+    pane.setAttribute("role", compactHome.matches ? "tabpanel" : "region");
     pane.setAttribute("aria-label", tab.textContent.trim());
-    if (selected && focus) tab.focus();
+    if (selected && focus && compactHome.matches) tab.focus();
   }
 }
+compactHome.addEventListener("change", () => selectHomeWorkspace(selectedHomeWorkspace));
 selectHomeWorkspace(selectedHomeWorkspace);
 for (const tab of document.querySelectorAll("[data-home-tab]")) {
   tab.addEventListener("click", () => selectHomeWorkspace(tab.dataset.homeTab));

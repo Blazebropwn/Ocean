@@ -1,15 +1,18 @@
 # Home a ověřené náklady obchodů
 
-Přehled obsahuje jen čtyři skutečné zůstatky z Binance Spot v pružné mřížce
-2 × 2. USDC je dostupná hotovost; BTC, ETH a SOL zahrnují i množství zamčené
-v objednávkách. Stejně velké karty vyplňují dostupnou výšku mezi záložkami a
-spodní navigací. Layout používá dynamický viewport a safe areas; při malé
-výšce nebo velkém textu se obsah přirozeně posouvá.
+Na mobilu a menších obrazovkách do 900 px obsahuje Přehled čtyři skutečné
+zůstatky z Binance Spot v pružné mřížce 2 × 2. Stejně velké karty vyplňují
+dostupnou výšku mezi záložkami a spodní navigací. Trading a DCA mají vlastní
+záložky. Na desktopu je navigace vlevo, čtyři zůstatky v jedné řadě a pod nimi
+dva stejně široké panely: DCA vlevo a Trading vpravo. Horní záložky se skrývají.
+Layout používá dynamický viewport a safe areas; při malé výšce nebo velkém
+textu se obsah přirozeně posouvá.
 
-Na mobilu i desktopu se přepíná mezi Přehledem, Tradingem a DCA. Aktivní
-záložka i rozpracované nastavení přežijí pravidelné načítání dat a změnu
-velikosti okna. Souhrnné panely Trading/DCA ani spodní informační řádek
-v Přehledu nejsou. Evidenci DCA a Tradingu nepřičítáme ke zůstatkům.
+USDC je dostupná hotovost; BTC, ETH a SOL zahrnují i množství zamčené
+v objednávkách. Evidenci DCA a Tradingu nepřičítáme ke zůstatkům.
+Aktivní mobilní záložka i rozpracované nastavení přežijí pravidelné načítání
+dat a přechod mezi mobilním a desktopovým rozložením. Duplicitní souhrnné
+panely Trading/DCA ani spodní informační řádek v Přehledu nejsou.
 
 Trading ukazuje otevřené pozice a stav ochrany; historii s poplatky a
 pravidla/riziko otevírají tlačítka. Detail patří pouze vybrané pozici:

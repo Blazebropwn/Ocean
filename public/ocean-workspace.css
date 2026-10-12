@@ -493,14 +493,16 @@
  .dca-totals > div:last-child { text-align:right; }
 }
 
-/* Home: one active tab and a flexible 2 × 2 balance grid at every width. */
+/* Compact Home: one active tab and a flexible 2 × 2 balance grid. */
 .ocean-workspace.home-mode { --home-header:64px; --home-nav:72px; }
 .ocean-workspace.home-mode .nav { height:calc(var(--home-header) + env(safe-area-inset-top)); padding-top:env(safe-area-inset-top); padding-left:max(18px,env(safe-area-inset-left)); padding-right:max(18px,env(safe-area-inset-right)); }
 .ocean-workspace.home-mode main { height:calc(100dvh - var(--home-header) - env(safe-area-inset-top)); }
+@media (max-width:900px) {
 .ocean-workspace.home-mode .dashboard { grid-template-columns:minmax(0,1fr); padding-bottom:calc(var(--home-nav) + env(safe-area-inset-bottom)); }
 .ocean-workspace.home-mode .side-nav { position:fixed; inset:auto 0 0; height:calc(var(--home-nav) + env(safe-area-inset-bottom)); display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); padding:6px max(14px,env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left)); border:0; border-top:1px solid var(--line); background:#11171c; z-index:35; }
 .ocean-workspace.home-mode .side-link { display:flex; align-items:center; justify-content:center; flex-direction:column; gap:4px; min-height:0; margin:0; padding:6px; }
 .ocean-workspace.home-mode .side-link b { display:block; font-size:11px; font-weight:500; }
+}
 .ocean-workspace.home-mode .workspace { padding:18px max(20px,env(safe-area-inset-right)) 18px max(20px,env(safe-area-inset-left)); gap:14px; }
 .portfolio-surface { height:100%; min-height:0; display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(min-content,1fr); grid-template-areas:"tabs" "pane"; gap:14px; position:relative; }
 .home-tabs { grid-area:tabs; display:flex; gap:4px; padding:4px; border:1px solid var(--line); border-radius:9px; background:var(--deep); }
@@ -539,3 +541,15 @@
 
 .profile-menu button[data-dialog] { color:var(--ink-soft); }
 .profile-menu button[data-dialog]:hover { color:var(--cyan); }
+
+/* Desktop Home: balances above two workspaces, with the original sidebar. */
+@media (min-width:901px) {
+ .portfolio-surface { grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:minmax(min-content,clamp(128px,15vh,150px)) minmax(min-content,1fr); grid-template-areas:"assets assets" "dca trading"; }
+ .home-tabs { display:none; }
+ #home-workspace { grid-area:assets; }
+ #dca-workspace { grid-area:dca; }
+ #trading-workspace { grid-area:trading; }
+ #home-workspace .asset-grid { grid-template-columns:repeat(4,minmax(0,1fr)); grid-template-rows:minmax(0,1fr); }
+ #home-workspace .asset-card { padding:18px 20px; gap:8px; }
+ #home-workspace .asset-card > strong { font-size:clamp(20px,2.25vw,36px); }
+}

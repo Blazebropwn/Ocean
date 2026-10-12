@@ -49,22 +49,39 @@ const fit = async label => {
  const overflow=await page.evaluate(()=>[document.documentElement,...document.querySelectorAll('.workspace,.portfolio-surface,.home-pane:not([hidden])')].some(el=>el.scrollWidth>el.clientWidth+1));
  assert.equal(overflow,false,`${label}: horizontal overflow`);
 };
-for(const [width,height] of [[1920,1080],[1440,900],[1366,768],[1280,720],[1024,768],[390,844],[320,568],[768,1024]]){
+for(const [width,height] of [[1920,1080],[1440,900],[1366,768],[1280,720],[1024,768],[901,768],[900,768],[390,844],[320,568],[768,1024]]){
  await page.setViewportSize({width,height});
- for(const name of ['home','trading','dca']){
-  await page.locator('#'+name+'-tab').click();
-  for(const id of ['home','trading','dca'])assert.equal(await page.locator('#'+id+'-workspace').isVisible(),id===name);
+ const desktop=width>900;
+ if(desktop){
+  assert.equal(await page.locator('.home-tabs').isVisible(),false);
+  for(const id of ['home','trading','dca'])assert.equal(await page.locator('#'+id+'-workspace').isVisible(),true);
   await page.evaluate(()=>loadKryptotron());
-  assert.equal(await page.locator('#'+name+'-tab').getAttribute('aria-selected'),'true');
-  await fit(`${width}x${height}/${name}`);
+  await fit(`${width}x${height}/desktop`);
+ }else{
+  for(const name of ['home','trading','dca']){
+   await page.locator('#'+name+'-tab').click();
+   for(const id of ['home','trading','dca'])assert.equal(await page.locator('#'+id+'-workspace').isVisible(),id===name);
+   await page.evaluate(()=>loadKryptotron());
+   assert.equal(await page.locator('#'+name+'-tab').getAttribute('aria-selected'),'true');
+   await fit(`${width}x${height}/${name}`);
+  }
+  await page.locator('#home-tab').click();
  }
- await page.locator('#home-tab').click();
  const cards=await page.locator('.asset-card').evaluateAll(els=>els.map(e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,bottom:r.bottom};}));
  assert.equal(cards.length,4);
  assert.ok(cards.every(c=>Math.abs(c.width-cards[0].width)<1&&Math.abs(c.height-cards[0].height)<1));
- assert.equal(cards[0].y,cards[1].y);assert.equal(cards[2].y,cards[3].y);assert.ok(cards[2].y>cards[0].y);
  const nav=await page.locator('.side-nav').boundingBox();
- assert.ok(cards[2].bottom<=nav.y&&nav.y-cards[2].bottom<32,`cards use available height ${width}x${height}: ${JSON.stringify({cards,nav})}`);
+ if(desktop){
+  assert.ok(cards.every(c=>c.y===cards[0].y),'desktop balances form one row');
+  assert.ok(nav.x===0&&nav.width<200&&nav.height>height-100,'desktop navigation stays at the side');
+  const dca=await page.locator('#dca-workspace').boundingBox(),trading=await page.locator('#trading-workspace').boundingBox();
+  assert.ok(dca.x>=nav.width&&trading.x>dca.x&&Math.abs(dca.y-trading.y)<1&&dca.y>cards[0].bottom,'DCA left, Trading right, below balances');
+  assert.ok(Math.abs(dca.width-trading.width)<1&&Math.abs(dca.height-trading.height)<1,'equal desktop panels');
+  if(width>=1280)assert.ok(dca.y+dca.height<=height&&height-(dca.y+dca.height)<32,'panels fill viewport without scrolling');
+ }else{
+  assert.equal(cards[0].y,cards[1].y);assert.equal(cards[2].y,cards[3].y);assert.ok(cards[2].y>cards[0].y);
+  assert.ok(cards[2].bottom<=nav.y&&nav.y-cards[2].bottom<32,`cards use available height ${width}x${height}: ${JSON.stringify({cards,nav})}`);
+ }
  const contained=await page.locator('.asset-card').evaluateAll(cards=>cards.every(card=>[...card.children].every(child=>{const a=card.getBoundingClientRect(),b=child.getBoundingClientRect();return b.right<=a.right&&b.bottom<=a.bottom;})));
  assert.ok(contained,'values remain inside cards');
  if(width===390||width===1440)await page.screenshot({path:`/tmp/ocean-home-redesign-${width}.png`});
@@ -95,6 +112,15 @@ for(const amount of [5,10,20,50,100]){
 await btc.locator('input').focus();await btc.locator('input').press('Home');await btc.locator('input').press('ArrowRight');
 await page.evaluate(()=>loadKryptotron());
 assert.equal(await btc.locator('input').evaluate(el=>el===document.activeElement),true);
+assert.equal(await btc.locator('output').textContent(),'10 USDC');
+await page.setViewportSize({width:1440,height:900});
+await page.waitForFunction(()=>!document.querySelector('#trading-workspace').hidden);
+assert.equal(await btc.locator('output').textContent(),'10 USDC');
+await page.evaluate(()=>loadKryptotron());
+await page.setViewportSize({width:390,height:844});
+await page.waitForFunction(()=>document.querySelector('#trading-workspace').hidden);
+assert.equal(await page.locator('#dca-workspace').isVisible(),true);
+assert.equal(await page.locator('#dca-tab').getAttribute('aria-selected'),'true');
 assert.equal(await btc.locator('output').textContent(),'10 USDC');
 await page.locator('#dca-frequency label').filter({hasText:'Denně'}).click();
 await page.locator('#dca-save').click();await page.locator('#dca-settings-feedback').filter({hasText:'Uloženo'}).waitFor();
@@ -158,5 +184,5 @@ rejectDisconnect=false;page.once('dialog',dialog=>dialog.accept());await page.lo
 await page.locator('#connection-form').waitFor({state:'visible'});
 assert.equal(connectionStatus,'unconfigured');assert.equal(await page.locator('#trading-control').isDisabled(),true);
 assert.deepEqual(errors,[]);
-console.log('PASS: flexible 2x2 overview, all-width tabs, preserved trading/DCA controls, displayed names, relocated tools, Binance confirmation/rejection/legacy guard, unavailable data and natural scrolling.');
+console.log('PASS: desktop sidebar and split panels, mobile 2x2 overview and tabs, responsive draft preservation, preserved trading/DCA controls, displayed names, relocated tools, Binance confirmation/rejection/legacy guard, unavailable data and natural scrolling.');
 } finally {await browser.close();}
