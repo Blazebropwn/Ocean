@@ -185,26 +185,16 @@
               </div>
             </div>
           </section>
-          <section class="vault-view app-view hidden" id="vault-view" aria-label="Historie DCA">
-            <div class="vault-metrics"><article><small>Investováno v DCA</small><strong id="vault-invested">—</strong></article><article><small>Dokončené nákupy</small><strong id="vault-count">—</strong></article></div>
-            <section class="vault-history" aria-labelledby="vault-history-title">
-              <header><h2 id="vault-history-title">Nákupy DCA</h2><label><span class="sr-only">Filtrovat podle aktiva</span><select id="vault-filter"><option value="all">Všechna aktiva</option></select></label></header>
-              <div class="vault-table-scroll"><table><thead><tr><th scope="col">Aktivum</th><th scope="col">Datum</th><th scope="col">Množství</th><th scope="col">Investováno</th></tr></thead><tbody id="vault-purchases"></tbody></table></div>
-              <div class="vault-pagination hidden"><button id="vault-prev" type="button" aria-label="Předchozí stránka">←</button><span id="vault-page">1 / 1</span><button id="vault-next" type="button" aria-label="Další stránka">→</button></div>
-              <p class="vault-empty" id="vault-empty">Zatím tu nejsou žádné načtené nákupy.</p>
+          <section class="vault-view app-view hidden" id="vault-view" aria-label="Přehled DCA investic">
+            <section class="vault-overview" aria-label="Ocenění evidovaných nákupů">
+              <div class="vault-overview-heading"><span>Ocenění DCA nákupů</span><span id="vault-count">—</span></div>
+              <strong class="vault-value" id="vault-value">—</strong>
+              <div class="vault-overview-bottom"><span>Vloženo <strong id="vault-invested">—</strong></span><span class="vault-change" id="vault-change">—</span></div>
             </section>
-            <p class="vault-notice" id="vault-notice" role="status">Připoj Binance v nastavení profilu a načti historii nákupů.</p>
-            <details aria-labelledby="agent-card-title" class="agent-card" id="agent-card">
-              <summary><div><h3 id="agent-card-title">Analýza portfolia</h3><p>Rozložení aktiv na Binance</p></div><span class="agent-disclosure-mark" aria-hidden="true">+</span></summary>
-              <div class="agent-card-body">
-                <div class="agent-card-state"><span>Dostupnost analýzy</span><span id="agent-state">PŘIPRAVEN</span></div>
-                <p id="agent-summary">Ukáže rozložení portfolia a největší pozice. Neprovádí žádné obchody.</p>
-                <div class="agent-metrics"><span><small>Poslední analýza</small><strong id="agent-last-run">—</strong></span><span><small>Kroky analýzy</small><strong id="agent-actions">—</strong></span><span><small>Výsledek</small><strong id="agent-result">—</strong></span></div>
-                <div class="agent-buttons"><button id="agent-run" type="button">Spustit analýzu</button><button class="hidden" id="agent-ledger-open" type="button">Zobrazit výsledky</button></div>
-                <p class="agent-message" id="agent-message" role="status"></p>
-              </div>
-            </details>
-            <p class="vault-footnote">Historie zahrnuje až 156 posledních nákupů DCA. Aktuální zůstatky najdeš v Přehledu. Prostředky zůstávají na Binance.</p>
+            <section class="vault-assets" id="vault-assets" aria-label="Nakoupená aktiva"></section>
+            <div class="vault-tools"><button type="button" id="vault-history-open">Historie nákupů <span aria-hidden="true">↗</span></button><button type="button" data-dialog="vault-analysis-dialog">Analýza portfolia <span aria-hidden="true">↗</span></button></div>
+            <p class="vault-notice" id="vault-notice" role="status">Připoj Binance v nastavení profilu.</p>
+            <p class="vault-footnote">Ocenění až 156 posledních nákupů. Prodeje a převody nezohledňuje; aktuální zůstatky jsou v Přehledu.</p>
           </section>
         </div>
         <span class="hidden" id="username"></span
@@ -212,6 +202,28 @@
         ><b class="hidden" id="email-status"></b>
       </section>
     </main>
+    <dialog class="workspace-dialog vault-history-dialog" id="vault-history-dialog" aria-labelledby="vault-history-title">
+      <header class="dialog-heading"><h2 id="vault-history-title">Historie DCA</h2><button type="button" data-close-dialog aria-label="Zavřít">×</button></header>
+            <section class="vault-history" aria-label="Jednotlivé nákupy DCA">
+              <header><label><span class="sr-only">Filtrovat podle aktiva</span><select id="vault-filter"><option value="all">Všechna aktiva</option></select></label></header>
+              <dl class="vault-detail-stats hidden" id="vault-detail-stats"></dl>
+              <div class="vault-table-scroll"><table><thead><tr><th scope="col">Aktivum</th><th scope="col">Datum</th><th scope="col">Množství</th><th scope="col">Investováno</th></tr></thead><tbody id="vault-purchases"></tbody></table></div>
+              <div class="vault-pagination hidden"><button id="vault-prev" type="button" aria-label="Předchozí stránka">←</button><span id="vault-page">1 / 1</span><button id="vault-next" type="button" aria-label="Další stránka">→</button></div>
+              <p class="vault-empty" id="vault-empty">Zatím tu nejsou žádné načtené nákupy.</p>
+            </section>
+    </dialog>
+    <dialog class="workspace-dialog" id="vault-analysis-dialog" aria-labelledby="agent-card-title">
+      <header class="dialog-heading"><h2 id="agent-card-title">Analýza portfolia</h2><button type="button" data-close-dialog aria-label="Zavřít">×</button></header>
+      <section class="agent-card" id="agent-card" aria-label="Rozložení portfolia na Binance">
+              <div class="agent-card-body">
+                <div class="agent-card-state"><span>Dostupnost analýzy</span><span id="agent-state">PŘIPRAVEN</span></div>
+                <p id="agent-summary">Ukáže rozložení portfolia a největší pozice. Neprovádí žádné obchody.</p>
+                <div class="agent-metrics"><span><small>Poslední analýza</small><strong id="agent-last-run">—</strong></span><span><small>Kroky analýzy</small><strong id="agent-actions">—</strong></span><span><small>Výsledek</small><strong id="agent-result">—</strong></span></div>
+                <div class="agent-buttons"><button id="agent-run" type="button">Spustit analýzu</button><button class="hidden" id="agent-ledger-open" type="button">Zobrazit výsledky</button></div>
+                <p class="agent-message" id="agent-message" role="status"></p>
+              </div>
+      </section>
+    </dialog>
     <dialog class="agent-dialog" id="agent-dialog" aria-labelledby="agent-dialog-title">
       <div class="agent-dialog-head"><div><small>VÝSLEDKY A PRŮBĚH</small><h2 id="agent-dialog-title">Analýza portfolia</h2></div><button id="agent-dialog-close" type="button" aria-label="Zavřít">×</button></div>
       <div class="agent-run-history" id="agent-run-history" aria-label="Historie analýz"></div>

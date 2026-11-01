@@ -34,11 +34,16 @@ posledních nejvýše 156 nákupů je uveden v historii i v popisku hodnot. Ocen
 nezohledňuje poplatky, pozdější prodeje ani převody. Při chybějících nebo
 zastaralých cenách je ocenění neznámé, nikoli nula.
 
-Vault začíná souhrnem evidovaných investic a počtu nákupů, následuje
-filtrovatelná historie DCA. Stránkování se zobrazí jen pro více stránek;
-prázdná historie zobrazí vysvětlení bez prázdné tabulky. Doplňková analýza
-koncentrace Binance portfolia je ve výchozím stavu zavřená rozbalovací karta.
-Rozbalení nespouští analýzu; stávající tlačítka spouštění a výsledků zůstávají.
+Vault je samostatný přehled na jednu obrazovku: ocenění evidovaných nákupů,
+vložená částka, rozdíl ocenění a tři řádky BTC, ETH a SOL. Množství, vklady,
+ocenění i počet nákupů vycházejí ze stejné historie nejvýše 156 nákupů.
+Chybějící nebo zastaralá cena zneplatní souhrnné ocenění, nikoli známé vklady.
+Ocenění není aktuální zůstatek a nezohledňuje pozdější prodeje, převody ani
+dodatečné poplatky. Klepnutí na aktivum otevře dialog s množstvím, váženou
+průměrnou nákupní cenou a filtrovanou historií. Kompletní historie a doplňková
+analýza portfolia mají vlastní dialogy, takže nezvětšují hlavní stránku.
+Stránkování se zobrazí jen pro více stránek; prázdná historie zobrazí vysvětlení.
+Otevření dialogu analýzy nespouští výpočet; tlačítka spouštění a výsledků zůstávají.
 Úspěšný výpočet označujeme jako dokončený, nikoli jako potvrzení bezpečnosti
 portfolia. Analýza neobchoduje a není součástí evidence DCA nákupů.
 
@@ -51,7 +56,7 @@ portfolia. Analýza neobchoduje a není součástí evidence DCA nákupů.
 | Rozhodování, rizika, evidence ochrany | Trading → Pravidla a riziko |
 | Provozní události | Trading → Pravidla a riziko → Aktivita strategie |
 | Streak Governor (simulace) | Trading → Pravidla a riziko |
-| Analýza portfolia a její výsledky | Vault → rozbalovací karta Analýza portfolia |
+| Analýza portfolia a její výsledky | Vault → tlačítko Analýza portfolia |
 | Heslo a Telegram | Nastavení účtu; původní samostatné stránky zachovány |
 
 Přesun používá původní formuláře a endpointy. Odpojení dál vyžaduje

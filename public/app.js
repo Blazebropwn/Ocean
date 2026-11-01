@@ -237,6 +237,7 @@ function viewFromHash() {
 function showAppView(view, activeLink = null) {
   const selected = ["overview", "arcade", "vault", "gift", "slot"].includes(view) ? view : "overview";
   document.body.classList.toggle("home-mode", selected === "overview");
+  document.body.classList.toggle("vault-mode", selected === "vault");
   document.body.classList.toggle("arcade-mode", selected === "arcade");
   document.body.classList.toggle("slot-mode", selected === "slot");
   document.body.classList.toggle("redeem-mode", selected === "gift");
@@ -563,13 +564,61 @@ function setSystemState(message, warning) {
 function setVaultUnavailable(message) {
   $("#vault-notice").textContent = message;
   $("#vault-notice").classList.add("warning");
+  $("#vault-value").textContent = "—";
+  $("#vault-change").textContent = "Ocenění nedostupné";
+  $("#vault-change").classList.remove("positive", "negative");
+  document.querySelectorAll(".vault-coin-amounts > strong").forEach(value => { value.textContent = "—"; });
+}
+
+function vaultAssetTotals(snapshot, symbol) {
+  const purchases = (snapshot.dca.purchases || []).filter(item => item.symbol === symbol);
+  const quantity = purchases.reduce((sum, item) => sum + item.quantity, 0);
+  const invested = purchases.reduce((sum, item) => sum + item.amount, 0);
+  const asset = symbol.replace(/USDC$/, "");
+  const price = snapshot.holdings?.stale ? null : snapshot.holdings?.assets?.find(item => item.asset === asset)?.price;
+  const value = quantity === 0 ? 0 : Number.isFinite(price) && price > 0 ? quantity * price : null;
+  return { asset, quantity, invested, value };
+}
+
+function renderVaultOverview(snapshot) {
+  const quote = snapshot.balance.asset;
+  const purchases = snapshot.dca.purchases || [];
+  const symbols = [...new Set(["BTCUSDC", "ETHUSDC", "SOLUSDC", ...purchases.map(item => item.symbol)])];
+  const totals = symbols.map(symbol => ({ symbol, ...vaultAssetTotals(snapshot, symbol) }));
+  const invested = totals.reduce((sum, item) => sum + item.invested, 0);
+  const value = totals.some(item => item.value === null) ? null : totals.reduce((sum, item) => sum + item.value, 0);
+  $("#vault-invested").textContent = formatPrice(invested, quote);
+  $("#vault-value").textContent = value === null ? "—" : `${value > 0 ? "≈ " : ""}${formatPrice(value, quote)}`;
+  const count = purchases.length;
+  $("#vault-count").textContent = `${count} ${count === 1 ? "nákup" : count >= 2 && count <= 4 ? "nákupy" : "nákupů"}`;
+  const change = $("#vault-change");
+  const difference = value === null ? null : value - invested;
+  change.textContent = value === null ? "Ocenění nedostupné" : invested === 0 ? "Zatím bez nákupů" : `${difference > 0 ? "+" : ""}${formatPrice(difference, quote)} · ${new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 1, signDisplay: "exceptZero" }).format(difference / invested * 100)} %`;
+  change.title = "Rozdíl mezi posledním dostupným oceněním nakoupeného množství a evidovanými vklady. Nezohledňuje pozdější prodeje, převody ani dodatečné poplatky.";
+  change.classList.toggle("positive", difference !== null && difference > 0);
+  change.classList.toggle("negative", difference !== null && difference < 0);
+  const assets = $("#vault-assets");
+  assets.replaceChildren();
+  for (const item of totals) {
+    const row = node("button", "vault-coin"); row.type = "button";
+    row.dataset.symbol = item.symbol;
+    row.setAttribute("aria-label", `${item.asset}: zobrazit nákupy a průměrnou cenu`);
+    row.setAttribute("aria-haspopup", "dialog");
+    const icon = node("i", `asset-icon ${item.asset.toLowerCase()}`, assetSymbols[item.asset] || item.asset.slice(0, 1)); icon.setAttribute("aria-hidden", "true");
+    const identity = node("span", "vault-coin-identity");
+    identity.append(node("strong", "", item.asset), node("small", "", `${formatQuantity(item.quantity)} ${item.asset}`));
+    const amounts = node("span", "vault-coin-amounts");
+    amounts.append(node("strong", "", item.value === null ? "—" : `${item.value > 0 ? "≈ " : ""}${formatPrice(item.value, quote)}`), node("small", "", `Vloženo ${formatPrice(item.invested, quote)}`));
+    const arrow = node("span", "vault-coin-arrow", "›"); arrow.setAttribute("aria-hidden", "true");
+    row.append(icon, identity, amounts, arrow);
+    row.addEventListener("click", () => openVaultHistory(item.symbol));
+    assets.append(row);
+  }
 }
 
 function renderVault(snapshot) {
   vaultSnapshot = snapshot;
-  const dca = snapshot.dca;
-  $("#vault-invested").textContent = formatPrice(dca.totalInvested, snapshot.balance.asset);
-  $("#vault-count").textContent = String(dca.purchaseCount);
+  renderVaultOverview(snapshot);
   $("#vault-notice").textContent = `Aktualizováno ${formatDate(snapshot.updatedAt)}${snapshot.environment === "mainnet" ? "" : snapshot.environment === "testnet" ? " · zkušební provoz" : " · režim neověřen"}`;
   $("#vault-notice").classList.remove("warning");
   const filter = $("#vault-filter");
@@ -577,7 +626,7 @@ function renderVault(snapshot) {
   const all = document.createElement("option");
   all.value = "all"; all.textContent = "Všechna aktiva";
   filter.replaceChildren(all);
-  for (const symbol of [...new Set((dca.purchases || []).map((purchase) => purchase.symbol))].sort()) {
+  for (const symbol of [...new Set(["BTCUSDC", "ETHUSDC", "SOLUSDC", ...(snapshot.dca.purchases || []).map((purchase) => purchase.symbol)])].sort()) {
     const option = document.createElement("option");
     option.value = symbol; option.textContent = symbol.replace(snapshot.balance.asset, "");
     filter.append(option);
@@ -586,12 +635,28 @@ function renderVault(snapshot) {
   renderVaultPurchases();
 }
 
+function openVaultHistory(symbol = "all") {
+  $("#vault-filter").value = symbol;
+  vaultPage = 0;
+  renderVaultPurchases();
+  $("#vault-history-dialog").showModal();
+}
+
 function renderVaultPurchases() {
   const table = $("#vault-purchases");
   table.replaceChildren();
-  if (!vaultSnapshot) return;
-  const asset = vaultSnapshot.balance.asset;
   const selected = $("#vault-filter").value;
+  $("#vault-history-title").textContent = selected === "all" ? "Historie DCA" : `${selected.replace(/USDC$/, "")} · nákupy`;
+  const detail = $("#vault-detail-stats"); detail.replaceChildren();
+  if (!vaultSnapshot) { detail.classList.add("hidden"); return; }
+  const asset = vaultSnapshot.balance.asset;
+  detail.classList.toggle("hidden", selected === "all");
+  if (selected !== "all") {
+    const totals = vaultAssetTotals(vaultSnapshot, selected);
+    for (const [label, value] of [["Nakoupeno", `${formatQuantity(totals.quantity)} ${totals.asset}`], ["Průměrná cena", totals.quantity > 0 ? formatPrice(totals.invested / totals.quantity, asset) : "—"]]) {
+      const group = node("div"); group.append(node("dt", "", label), node("dd", "", value)); detail.append(group);
+    }
+  }
   const allPurchases = (vaultSnapshot.dca.purchases || []).filter((item) => selected === "all" || item.symbol === selected);
   const pageSize = innerWidth <= 760 ? (innerHeight < 740 ? 2 : 3) : (innerHeight < 850 ? 4 : 6);
   const pages = Math.max(1, Math.ceil(allPurchases.length / pageSize));
@@ -622,6 +687,7 @@ function renderVaultPurchases() {
 $("#vault-filter").addEventListener("change", () => { vaultPage = 0; renderVaultPurchases(); });
 $("#vault-prev").addEventListener("click", () => { vaultPage = Math.max(0, vaultPage - 1); renderVaultPurchases(); });
 $("#vault-next").addEventListener("click", () => { vaultPage += 1; renderVaultPurchases(); });
+$("#vault-history-open").addEventListener("click", () => openVaultHistory());
 window.addEventListener("resize", renderVaultPurchases);
 
 function node(tag, className, text) {
@@ -1087,7 +1153,10 @@ async function initializeKryptotron() {
     $("#dca-toggle-status").classList.add("dca-status-notice");
     document.querySelectorAll('#trading-control,#dca-control,#bot-control,#streak-control,#dca-settings-form input,#dca-settings-form button').forEach(el => { el.disabled = true; });
     $("#vault-purchases").replaceChildren();
-    for (const id of ["vault-invested", "vault-count"]) $("#" + id).textContent = "—";
+    for (const id of ["vault-invested", "vault-count", "vault-value", "vault-change"]) $("#" + id).textContent = "—";
+    $("#vault-change").classList.remove("positive", "negative");
+    $("#vault-assets").replaceChildren();
+    $("#vault-detail-stats").replaceChildren();
     $("#vault-empty").classList.remove("hidden");
     $(".vault-pagination").classList.add("hidden");
     $(".vault-table-scroll").classList.add("hidden");

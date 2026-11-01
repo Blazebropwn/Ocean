@@ -148,14 +148,8 @@
 .ocean-workspace .vault-view { width:100%; min-height:min-content; flex:1 0 auto; display:flex; flex-direction:column; gap:14px; place-items:normal; }
 .vault-notice { color:var(--muted); font-size:11px; line-height:1.5; margin:0; }
 .vault-notice.warning { color:var(--warn); }
-.vault-metrics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); background:var(--panel); border:1px solid var(--line); border-radius:14px; }
-.vault-metrics article { padding:18px 20px; min-width:0; }
-.vault-metrics article + article { border-left:1px solid var(--line); }
-.vault-metrics small { font-size:12px; color:var(--muted); }
-.vault-metrics strong { display:block; margin-top:8px; font-size:26px; font-weight:550; letter-spacing:-.035em; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
 .vault-history { flex:none; min-height:min-content; display:flex; flex-direction:column; border:1px solid var(--line); border-radius:14px; background:var(--panel); padding:18px 20px; }
 .vault-history header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; }
-.vault-history h2 { margin:0; font-size:17px; font-weight:550; }
 .vault-history label { display:flex; align-items:center; gap:10px; font-size:11px; color:var(--muted); }
 .vault-history select { min-height:40px; color:var(--ink-soft); background:var(--deep); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:inherit; font-size:12px; }
 .vault-table-scroll { min-width:0; }
@@ -170,14 +164,6 @@
 .vault-pagination button:disabled { opacity:.3; cursor:default; }
 .vault-empty { color:var(--muted); font-size:12px; text-align:center; }
 .vault-footnote { color:var(--muted); font-size:11px; line-height:1.6; margin:0; max-width:950px; }
-.vault-view .agent-card { padding:0; border-radius:14px; }
-.agent-card > summary { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:16px 20px; cursor:pointer; list-style:none; }
-.agent-card > summary::-webkit-details-marker { display:none; }
-.agent-card > summary h3 { margin:0; font-size:15px; font-weight:550; }
-.agent-card > summary p { margin:5px 0 0; font-size:12px; color:var(--muted); }
-.agent-disclosure-mark { color:var(--muted); font-size:22px; line-height:1; }
-.agent-card[open] .agent-disclosure-mark { transform:rotate(45deg); }
-.agent-card > summary:focus-visible { outline:2px solid var(--cyan); outline-offset:2px; border-radius:14px; }
 .agent-card-body { border-top:1px solid var(--line); padding:16px 20px; }
 .agent-card-state { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:11px; color:var(--muted); }
 #agent-state { color:var(--cyan); font-size:11px; }
@@ -215,9 +201,6 @@
  .asset-card > small { font-size:12px; }
  .goals-card { padding:16px 18px; }
  .goals-card h2,.positions-card h2 { font-size:18px; }
- .vault-metrics article { padding:16px; }
- .vault-metrics small { font-size:11px; }
- .vault-metrics strong { font-size:22px; }
  .vault-history { padding:16px; }
  .vault-history header { flex-wrap:wrap; margin-bottom:8px; }
  .vault-history table,.vault-history tbody { display:block; }
@@ -239,7 +222,6 @@
  .ocean-workspace .workspace-head h1 { font-size:24px; }
  .ocean-workspace .system-state { display:flex; padding:6px 9px; font-size:11px; max-width:155px; }
  .ocean-workspace .workspace-head { min-height:29px; }
- .vault-history h2 { font-size:16px; }
  .ocean-workspace .vault-view { gap:10px; }
 }
 @media (max-height:730px) and (min-width:761px) {
@@ -594,8 +576,62 @@
  #dca-workspace .dca-frequency span { padding-block:10px; }
  #dca-workspace .dca-amount-row { padding-block:4px; }
  #dca-workspace .dca-totals { padding-block:8px; gap:8px; }
- .agent-card > summary,.agent-card-body { padding:14px 16px; }
+ .agent-card-body { padding:14px 16px; }
  .agent-report { grid-template-columns:repeat(2,minmax(0,1fr)); }
  .agent-report > span:nth-child(odd) { border-left:0; }
  .agent-report > span:nth-child(n+3) { border-top:1px solid var(--line); }
+}
+
+/* Vault: a one-screen investment overview; history and analysis live in dialogs. */
+.ocean-workspace.vault-mode .workspace { max-width:1080px; gap:14px; }
+.ocean-workspace.vault-mode .vault-view { flex:0 0 auto; gap:12px; }
+.vault-overview { padding:20px; border:1px solid #34544d; border-radius:16px; background:linear-gradient(130deg,#203832,var(--panel)); }
+.vault-overview-heading,.vault-overview-bottom { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.vault-overview-heading { font-size:12px; color:var(--ink-soft); }
+.vault-overview-heading > :last-child { color:var(--muted); font-size:11px; }
+.vault-value { display:block; margin:12px 0 16px; font-size:clamp(28px,4vw,40px); font-weight:550; line-height:1.15; letter-spacing:-.035em; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.vault-overview-bottom { flex-wrap:wrap; font-size:12px; color:var(--muted); }
+.vault-overview-bottom strong { color:var(--ink-soft); font-weight:500; }
+.vault-change { font-size:12px; font-variant-numeric:tabular-nums; }
+.vault-assets { border:1px solid var(--line); border-radius:14px; background:var(--panel); }
+.vault-coin { width:100%; display:grid; grid-template-columns:30px minmax(0,1fr) minmax(0,1.2fr) 10px; align-items:center; gap:12px; padding:18px; border:0; border-bottom:1px solid var(--line); border-radius:0; background:transparent; color:var(--ink); text-align:left; font:inherit; cursor:pointer; }
+.vault-coin:first-child { border-radius:14px 14px 0 0; }
+.vault-coin:last-child { border-bottom:0; border-radius:0 0 14px 14px; }
+.vault-coin:hover { background:#20312e; }
+.vault-coin:focus-visible { outline:2px solid var(--cyan); outline-offset:-2px; }
+.vault-coin strong { display:block; font-size:15px; font-weight:550; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.vault-coin small { display:block; margin-top:5px; color:var(--muted); font-size:11px; line-height:1.4; overflow-wrap:anywhere; }
+.vault-coin-amounts { text-align:right; }
+.vault-coin-arrow { color:var(--muted); font-size:20px; }
+.vault-tools { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.vault-tools button { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:42px; padding:10px 12px; border:1px solid var(--line); border-radius:9px; background:var(--panel); color:var(--ink-soft); font:inherit; font-size:12px; cursor:pointer; }
+.vault-tools button:hover { border-color:var(--line-hot); color:var(--cyan); }
+.vault-tools button span { color:var(--muted); }
+.vault-history-dialog .vault-history { border:0; padding:0; background:none; }
+.vault-history-dialog .vault-history header { justify-content:flex-end; }
+.vault-detail-stats { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:0 0 12px; padding-bottom:16px; border-bottom:1px solid var(--line); }
+.vault-detail-stats dt { color:var(--muted); font-size:11px; }
+.vault-detail-stats dd { margin:6px 0 0; font-size:15px; overflow-wrap:anywhere; }
+#vault-analysis-dialog .agent-card,#vault-analysis-dialog .agent-card-body { padding:0; margin:0; border:0; background:none; }
+@media (max-width:900px) {
+ .ocean-workspace.vault-mode .workspace { padding:14px; gap:10px; }
+ .ocean-workspace.vault-mode .vault-view { gap:10px; }
+ .vault-overview { padding:16px; }
+ .vault-value { margin:10px 0 12px; font-size:30px; }
+ .vault-coin { padding:14px; gap:10px; grid-template-columns:28px minmax(0,1fr) minmax(0,1.25fr) 8px; }
+ .vault-coin strong { font-size:14px; }
+ .vault-view .vault-footnote { font-size:10px; line-height:1.5; }
+}
+@media (max-width:560px) and (max-height:700px) {
+ .ocean-workspace.vault-mode .vault-view { gap:8px; }
+ .vault-overview { padding:12px 14px; }
+ .vault-value { margin:8px 0 10px; font-size:28px; }
+ .vault-coin { padding:11px 12px; gap:8px; }
+ .vault-coin small { font-size:10px; margin-top:3px; }
+ .vault-tools button { min-height:38px; padding:8px 10px; font-size:11px; }
+ .vault-overview-bottom,.vault-change { font-size:11px; }
+}
+@media (max-width:360px) and (max-height:600px) {
+ .ocean-workspace.vault-mode .vault-view { gap:6px; }
+ .vault-coin { padding-block:10px; }
 }
