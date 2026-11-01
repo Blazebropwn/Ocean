@@ -145,7 +145,7 @@
 .workspace-dialog .logbook ol { height:auto; max-height:none; }
 .workspace-dialog .logbook li { padding:12px; line-height:1.5; }
 .workspace-dialog .connection-disconnect { margin-top:12px; }
-.ocean-workspace .vault-view { width:100%; min-height:0; flex:1; display:flex; flex-direction:column; gap:14px; place-items:normal; }
+.ocean-workspace .vault-view { width:100%; min-height:min-content; flex:1 0 auto; display:flex; flex-direction:column; gap:14px; place-items:normal; }
 .vault-intro { display:none; }
 .vault-notice { color:var(--muted); font-size:11px; margin:0; }
 .vault-notice.warning { color:var(--warn); }
@@ -155,7 +155,7 @@
 .vault-metrics strong { display:block; margin:10px 0; font-size:26px; font-weight:500; letter-spacing:-.035em; }
 #vault-amount { font-size:22px; }
 .vault-metrics p { margin:0; color:var(--muted); font-size:10px; line-height:1.5; }
-.vault-history { flex:1; min-height:0; display:flex; flex-direction:column; border:1px solid var(--line); border-radius:14px; background:var(--panel); padding:20px 24px; }
+.vault-history { flex:1 0 auto; min-height:min-content; display:flex; flex-direction:column; border:1px solid var(--line); border-radius:14px; background:var(--panel); padding:20px 24px; }
 .vault-history header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; }
 .vault-history header small { display:none; }
 .vault-history h3 { margin:0; font-size:17px; font-weight:550; }
@@ -493,7 +493,7 @@
  .dca-totals > div:last-child { text-align:right; }
 }
 
-/* Compact Home: one active tab and a flexible 2 × 2 balance grid. */
+/* Compact Home: one active tab and four compact balance rows. */
 .ocean-workspace.home-mode { --home-header:64px; --home-nav:72px; }
 .ocean-workspace.home-mode .nav { height:calc(var(--home-header) + env(safe-area-inset-top)); padding-top:env(safe-area-inset-top); padding-left:max(18px,env(safe-area-inset-left)); padding-right:max(18px,env(safe-area-inset-right)); }
 .ocean-workspace.home-mode main { height:calc(100dvh - var(--home-header) - env(safe-area-inset-top)); }
@@ -552,4 +552,18 @@
  #home-workspace .asset-grid { grid-template-columns:repeat(4,minmax(0,1fr)); grid-template-rows:minmax(0,1fr); }
  #home-workspace .asset-card { padding:18px 20px; gap:8px; }
  #home-workspace .asset-card > strong { font-size:clamp(20px,2.25vw,36px); }
+}
+
+/* Keep every Vault section in flow when the archive exceeds the viewport. */
+.ocean-workspace .vault-view > * { flex-shrink:0; }
+.vault-table-scroll { flex-shrink:0; }
+
+@media (max-width:900px) {
+ .portfolio-surface { grid-template-rows:auto minmax(min-content,1fr); }
+ #home-workspace { align-self:start; }
+ #home-workspace .asset-grid { grid-template-columns:minmax(0,1fr); grid-template-rows:repeat(4,auto); gap:10px; }
+ #home-workspace .asset-card { grid-template-columns:auto minmax(0,1fr); grid-template-rows:auto auto; align-items:center; padding:14px 16px; gap:4px 12px; }
+ #home-workspace .asset-heading { grid-row:1 / 3; }
+ #home-workspace .asset-card > strong { align-self:auto; text-align:right; font-size:clamp(18px,4.3vw,26px); }
+ #home-workspace .asset-card > small { grid-column:2; text-align:right; }
 }

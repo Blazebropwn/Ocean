@@ -79,8 +79,9 @@ for(const [width,height] of [[1920,1080],[1440,900],[1366,768],[1280,720],[1024,
   assert.ok(Math.abs(dca.width-trading.width)<1&&Math.abs(dca.height-trading.height)<1,'equal desktop panels');
   if(width>=1280)assert.ok(dca.y+dca.height<=height&&height-(dca.y+dca.height)<32,'panels fill viewport without scrolling');
  }else{
-  assert.equal(cards[0].y,cards[1].y);assert.equal(cards[2].y,cards[3].y);assert.ok(cards[2].y>cards[0].y);
-  assert.ok(cards[2].bottom<=nav.y&&nav.y-cards[2].bottom<32,`cards use available height ${width}x${height}: ${JSON.stringify({cards,nav})}`);
+  assert.ok(cards.every((card,index)=>index===0||card.y>=cards[index-1].bottom),'mobile balances form four rows');
+  assert.ok(cards.every(card=>card.height<110),'mobile balances stay compact');
+  assert.ok(cards[3].bottom<=nav.y,`balance rows fit above navigation ${width}x${height}`);
  }
  const contained=await page.locator('.asset-card').evaluateAll(cards=>cards.every(card=>[...card.children].every(child=>{const a=card.getBoundingClientRect(),b=child.getBoundingClientRect();return b.right<=a.right&&b.bottom<=a.bottom;})));
  assert.ok(contained,'values remain inside cards');
@@ -159,6 +160,20 @@ await page.locator('[data-dialog="strategy-dialog"]').click();assert.equal(await
 await page.locator('[data-dialog="activity-dialog"]').click();assert.equal(await page.locator('#activity-dialog').evaluate(el=>el.open),true);
 await page.locator('#activity-dialog [data-close-dialog]').click();
 await page.locator('.side-link[data-view="vault"]').click();assert.equal(await page.locator('#agent-card').isVisible(),true);
+for(const [width,height] of [[390,844],[320,568],[768,1024],[1440,900]]) {
+ await page.setViewportSize({width,height});
+ const bounds=await page.locator('#vault-view').evaluate(el=>{
+  const history=el.querySelector('.vault-history').getBoundingClientRect();
+  const agent=el.querySelector('.agent-card').getBoundingClientRect();
+  const children=[...el.querySelector('.vault-history').children].filter(e=>getComputedStyle(e).display!=='none').map(e=>e.getBoundingClientRect());
+  return {historyBottom:history.bottom,agentTop:agent.top,contentBottom:Math.max(...children.map(r=>r.bottom))};
+ });
+ assert.ok(bounds.historyBottom<=bounds.agentTop,'Vault archive does not overlap analysis');
+ assert.ok(bounds.contentBottom<=bounds.historyBottom,'Vault archive contains its purchases and pagination');
+ await fit(`${width}x${height}/vault`);
+ if(width===390)await page.screenshot({path:'/tmp/ocean-vault-mobile.png'});
+}
+await page.setViewportSize({width:390,height:844});
 await page.locator('.side-link[data-view="overview"]').click();
 await page.setViewportSize({width:320,height:320});await page.locator('#home-tab').click();await fit('short viewport');
 await page.locator('.asset-card').last().scrollIntoViewIfNeeded();
@@ -184,5 +199,5 @@ rejectDisconnect=false;page.once('dialog',dialog=>dialog.accept());await page.lo
 await page.locator('#connection-form').waitFor({state:'visible'});
 assert.equal(connectionStatus,'unconfigured');assert.equal(await page.locator('#trading-control').isDisabled(),true);
 assert.deepEqual(errors,[]);
-console.log('PASS: desktop sidebar and split panels, mobile 2x2 overview and tabs, responsive draft preservation, preserved trading/DCA controls, displayed names, relocated tools, Binance confirmation/rejection/legacy guard, unavailable data and natural scrolling.');
+console.log('PASS: desktop sidebar and split panels, mobile four-row overview and tabs, Vault archive containment, responsive draft preservation, preserved trading/DCA controls, displayed names, relocated tools, Binance confirmation/rejection/legacy guard, unavailable data and natural scrolling.');
 } finally {await browser.close();}
