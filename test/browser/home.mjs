@@ -7,6 +7,7 @@ const now=new Date().toISOString();
 const positions=[{symbol:'BTCUSDC',inPosition:true,entryPrice:86450,quantity:.0002,protectionActive:true,protectionStatus:'ACTIVE',protectionPrice:77805,protectionActivationPrice:89043,protectionTrailingBips:150},{symbol:'ETHUSDC',inPosition:false}];
 const costs={status:'verified',reason:'VERIFIED',netPnl:.00685974,grossPnl:.026376,allocatedEntryCost:10.2571262,netProceeds:10.26398594,residualQuantity:.00009591,residualCost:.2342288,entryFees:[{asset:'ETH',amount:.00000409}],exitFees:[{asset:'USDC',amount:.00976006}]};
 const closed={symbol:'ETHUSDC',action:'CLOSED',at:now,exitedAt:now,reason:'Uživatel ručně uzavřel pozici.',entryPrice:2439.85,exitPrice:2446.13,quantity:.0042,grossPnl:.026376,costs};
+const agentRun={id:'preview-run',success:true,status:'succeeded',completedAt:now,startedAt:now,actionCount:4,humanInterventions:0,result:{metrics:{riskLevel:'moderate',riskScore:42,largestPosition:{asset:'BTC',sharePct:35}}},ledger:['portfolio_snapshot_loaded','risk_metrics_calculated','risk_report_generated','risk_report_validated'].map((actionType,index)=>({sequence:index+1,actionType,result:'success'}))};
 const fixture={environment:'mainnet',status:'waiting',entriesPaused:false,tradingPaused:false,updatedAt:now,lastMarketCheckAt:now,nextCheckAt:now,lastError:null,
  balance:{asset:'USDC',amount:26.98,updatedAt:now,error:null},holdings:{stale:false,capturedAt:now,assets:[{asset:'BTC',quantity:.00036939,price:83000,value:30.66},{asset:'ETH',quantity:.00577461,price:2506,value:14.47},{asset:'SOL',quantity:.12763535,price:109.6,value:13.99}]},
  positions,lastTrade:closed,limits:{dailyLoss:0,weeklyLoss:0},transparency:{strategyStatus:'ACTIVE',safeMode:false,reconciliation:{status:'OK',checkedAt:now,issues:[]},trades:[closed],decisions:[{symbol:'BTCUSDC',checkedAt:now,nextCheckAt:now,marketRegime:'BULL',decision:'HOLD',reason:'Pozice je chráněná.',price:83000,emaFast:82000,emaSlow:81000,risk:{stopLossPct:10,maxOrderQuote:50,dailyLossLimit:5,weeklyLossLimit:15}}]},
@@ -24,6 +25,9 @@ await page.route('**/*',async route=>{
  if(path.startsWith('/api/')) {
    let body={}; let status=200;
    if(path==='/api/me') body={user:{username:'deepHunter',displayId:'0001',email:'preview@example.com',emailVerified:true,accessApproved:true,role:'member'}};
+   else if(path==='/api/agent') body={agent:{killSwitchActive:false,status:'active',lastRun:agentRun}};
+   else if(path==='/api/agent/runs') {if(route.request().method()==='POST'){mutations.push({path,method:'POST'});body={run:agentRun};}else body={runs:[agentRun]};}
+   else if(path==='/api/agent/runs/preview-run') body={run:agentRun};
    else if(path==='/api/kryptotron/connection') {
      if(route.request().method()==='DELETE') {mutations.push({path,method:'DELETE'});if(rejectDisconnect){status=409;body={error:'Odpojení blokuje otevřená pozice.'};}else{connectionStatus='unconfigured';body={};}}
      else if(route.request().method()==='POST') {mutations.push({path,...route.request().postDataJSON()});connectionStatus='provisioning';body={};}
@@ -46,10 +50,10 @@ try {
 await page.goto('http://ocean.test/#home');
 await page.waitForFunction(()=>document.querySelector('#trading-toggle-status').textContent==='Zapnuto');
 const fit = async label => {
- const overflow=await page.evaluate(()=>[document.documentElement,...document.querySelectorAll('.workspace,.portfolio-surface,.home-pane:not([hidden])')].some(el=>el.scrollWidth>el.clientWidth+1));
+ const overflow=await page.evaluate(()=>[document.documentElement,...document.querySelectorAll('.workspace,.portfolio-surface,.home-pane:not([hidden]),.workspace-dialog[open],.agent-dialog[open]')].some(el=>el.scrollWidth>el.clientWidth+1));
  assert.equal(overflow,false,`${label}: horizontal overflow`);
 };
-for(const [width,height] of [[1920,1080],[1440,900],[1366,768],[1280,720],[1024,768],[901,768],[900,768],[390,844],[320,568],[768,1024]]){
+for(const [width,height] of [[1920,1080],[1440,900],[1366,768],[1280,720],[1024,768],[901,768],[900,768],[390,844],[390,680],[375,640],[320,568],[768,1024]]){
  await page.setViewportSize({width,height});
  const desktop=width>900;
  if(desktop){
@@ -64,6 +68,11 @@ for(const [width,height] of [[1920,1080],[1440,900],[1366,768],[1280,720],[1024,
    await page.evaluate(()=>loadKryptotron());
    assert.equal(await page.locator('#'+name+'-tab').getAttribute('aria-selected'),'true');
    await fit(`${width}x${height}/${name}`);
+   if(name==='dca'&&width>=375&&height>=640){
+    assert.equal(await page.locator('#dca-panel-title').isVisible(),false,'mobile DCA has no duplicate heading');
+    assert.ok(await page.locator('.workspace').evaluate(el=>el.scrollHeight<=el.clientHeight+1),`DCA fits without scrolling at ${width}x${height}`);
+    if(width===390&&height===680)await page.screenshot({path:'/tmp/ocean-dca-mobile.png'});
+   }
   }
   await page.locator('#home-tab').click();
  }
@@ -114,6 +123,8 @@ await btc.locator('input').focus();await btc.locator('input').press('Home');awai
 await page.evaluate(()=>loadKryptotron());
 assert.equal(await btc.locator('input').evaluate(el=>el===document.activeElement),true);
 assert.equal(await btc.locator('output').textContent(),'10 USDC');
+await page.setViewportSize({width:390,height:680});
+assert.ok(await page.locator('.workspace').evaluate(el=>el.scrollHeight<=el.clientHeight+1),'DCA with pending changes fits a phone viewport');
 await page.setViewportSize({width:1440,height:900});
 await page.waitForFunction(()=>!document.querySelector('#trading-workspace').hidden);
 assert.equal(await btc.locator('output').textContent(),'10 USDC');
@@ -154,12 +165,19 @@ legacy=false;await page.evaluate(()=>initializeKryptotron());
 await page.locator('#binance-dialog [data-close-dialog]').click();
 fixture.entriesPaused=true;fixture.transparency.safeMode=true;fixture.transparency.reconciliation.status='UNCERTAIN';
 await page.evaluate(()=>loadKryptotron());assert.equal(await page.locator('#trading-control').isDisabled(),true);
+fixture.dca.enabled=true;await page.evaluate(()=>loadKryptotron());
+await page.locator('#dca-tab').click();
+assert.equal(await page.locator('#dca-toggle-status').textContent(),'Čeká na obnovení');
+assert.ok(await page.locator('#dca-toggle-status').evaluate(el=>el.clientWidth>20&&getComputedStyle(el).position!=='absolute'),'DCA pause remains visible on mobile');
 await page.locator('#trading-tab').click();await page.locator('.position-row').click();
 assert.equal(await page.locator('#bot-protection').textContent(),'Neověřeno');await page.locator('#position-dialog [data-close-dialog]').click();
 await page.locator('[data-dialog="strategy-dialog"]').click();assert.equal(await page.locator('#streak-control').isVisible(),true);
 await page.locator('[data-dialog="activity-dialog"]').click();assert.equal(await page.locator('#activity-dialog').evaluate(el=>el.open),true);
 await page.locator('#activity-dialog [data-close-dialog]').click();
 await page.locator('.side-link[data-view="vault"]').click();assert.equal(await page.locator('#agent-card').isVisible(),true);
+assert.equal(await page.locator('#agent-card').getAttribute('open'),null,'portfolio analysis starts collapsed');
+assert.equal(await page.locator('#agent-run').isVisible(),false);
+assert.equal(mutations.some(m=>m.path==='/api/agent/runs'),false,'opening Vault does not run an analysis');
 for(const [width,height] of [[390,844],[320,568],[768,1024],[1440,900]]) {
  await page.setViewportSize({width,height});
  const bounds=await page.locator('#vault-view').evaluate(el=>{
@@ -173,6 +191,36 @@ for(const [width,height] of [[390,844],[320,568],[768,1024],[1440,900]]) {
  await fit(`${width}x${height}/vault`);
  if(width===390)await page.screenshot({path:'/tmp/ocean-vault-mobile.png'});
 }
+await page.setViewportSize({width:390,height:680});
+await page.locator('#agent-card summary').click();
+assert.equal(await page.locator('#agent-run').isVisible(),true);
+assert.equal(await page.locator('#agent-result').textContent(),'DOKONČENO');
+await page.screenshot({path:'/tmp/ocean-vault-analysis-mobile.png'});
+await page.locator('#agent-run').click();
+await page.locator('#agent-message').filter({hasText:'Analýza portfolia je hotová.'}).waitFor();
+assert.deepEqual(mutations.at(-1),{path:'/api/agent/runs',method:'POST'});
+await page.locator('#agent-ledger-open').click();
+await page.locator('#agent-ledger li').last().waitFor();
+assert.match(await page.locator('#agent-dialog').innerText(),/Skóre koncentrace/);
+assert.match(await page.locator('#agent-ledger').innerText(),/Načtení portfolia/);
+await fit('portfolio analysis report on mobile');
+await page.screenshot({path:'/tmp/ocean-analysis-report-mobile.png'});
+await page.locator('#agent-dialog-close').click();
+await page.locator('#agent-card summary').click();
+const originalPurchases=[...fixture.dca.purchases];
+fixture.dca.purchases=Array.from({length:9},(_,i)=>({...originalPurchases[i%3],at:new Date(Date.now()-i*86400000).toISOString()}));
+await page.evaluate(()=>loadKryptotron());
+await page.locator('#vault-next').click();
+assert.equal(await page.locator('#vault-page').textContent(),'2 / 5');
+await page.locator('#vault-filter').selectOption('ETHUSDC');
+assert.equal(await page.locator('#vault-page').textContent(),'1 / 2');
+assert.equal(await page.locator('#vault-purchases tr').count(),2);
+assert.doesNotMatch(await page.locator('#vault-purchases').innerText(),/BTC|SOL/);
+fixture.dca.purchases=[];await page.evaluate(()=>loadKryptotron());
+assert.equal(await page.locator('#vault-empty').isVisible(),true);
+assert.equal(await page.locator('.vault-pagination').isVisible(),false);
+assert.equal(await page.locator('.vault-table-scroll').isVisible(),false);
+fixture.dca.purchases=originalPurchases;await page.evaluate(()=>loadKryptotron());
 await page.setViewportSize({width:390,height:844});
 await page.locator('.side-link[data-view="overview"]').click();
 await page.setViewportSize({width:320,height:320});await page.locator('#home-tab').click();await fit('short viewport');
@@ -199,5 +247,5 @@ rejectDisconnect=false;page.once('dialog',dialog=>dialog.accept());await page.lo
 await page.locator('#connection-form').waitFor({state:'visible'});
 assert.equal(connectionStatus,'unconfigured');assert.equal(await page.locator('#trading-control').isDisabled(),true);
 assert.deepEqual(errors,[]);
-console.log('PASS: desktop sidebar and split panels, mobile four-row overview and tabs, Vault archive containment, responsive draft preservation, preserved trading/DCA controls, displayed names, relocated tools, Binance confirmation/rejection/legacy guard, unavailable data and natural scrolling.');
+console.log('PASS: compact mobile DCA without scrolling, collapsed portfolio analysis and report, Vault filtering/pagination/empty state, desktop panels, four-row balances, preserved draft/controls and Binance connection states.');
 } finally {await browser.close();}

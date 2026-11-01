@@ -1,8 +1,7 @@
 # Home a ověřené náklady obchodů
 
 Na mobilu a menších obrazovkách do 900 px obsahuje Přehled čtyři skutečné
-zůstatky z Binance Spot v pružné mřížce 2 × 2. Stejně velké karty vyplňují
-dostupnou výšku mezi záložkami a spodní navigací. Trading a DCA mají vlastní
+zůstatky z Binance Spot ve čtyřech kompaktních řádcích. Trading a DCA mají vlastní
 záložky. Na desktopu je navigace vlevo, čtyři zůstatky v jedné řadě a pod nimi
 dva stejně široké panely: DCA vlevo a Trading vpravo. Horní záložky se skrývají.
 Layout používá dynamický viewport a safe areas; při malé výšce nebo velkém
@@ -22,7 +21,10 @@ stopu a trailingu pod Ochranou pozice. Výsledky uzavřených obchodů zůstáva
 v historii. Zastaralé ceny se nezobrazují jako aktuální a nepotvrzená
 rekonciliace neoznačuje ochranu v detailu za ověřenou. DCA v hlavním panelu obsahuje společný
 interval, tři samostatné posuvníky částek a společné uložení. Tlačítka
-uložení/zrušení se zobrazí při změně plánu; neúspěšné uložení zachová návrh. Každý řádek
+intervalu a vypínač jsou v jednom řádku; na mobilu se duplicitní nadpis DCA
+skrývá. Při běžném textu se obsah včetně rozpracovaných změn vejde do
+viewportů 375 × 640 a 390 × 680 px; menší plochy mohou přirozeně posouvat obsah.
+Uložení/zrušení se zobrazí při změně plánu; neúspěšné uložení zachová návrh. Každý řádek
 má vlevo kratší posuvník a vpravo investovanou částku a aktuální ocenění
 evidovaných nákupů daného aktiva. Pod řádky jsou oba součty za celé DCA.
 Změna částky budoucího nákupu nepřepočítává historické hodnoty. Na nejužších
@@ -31,6 +33,14 @@ termíny a poslední nákupy; stejné hodnoty v dialogu neduplikujeme. Rozsah
 posledních nejvýše 156 nákupů je uveden v historii i v popisku hodnot. Ocenění nákupů není tvrzení o dnešním vlastnictví:
 nezohledňuje poplatky, pozdější prodeje ani převody. Při chybějících nebo
 zastaralých cenách je ocenění neznámé, nikoli nula.
+
+Vault začíná souhrnem evidovaných investic a počtu nákupů, následuje
+filtrovatelná historie DCA. Stránkování se zobrazí jen pro více stránek;
+prázdná historie zobrazí vysvětlení bez prázdné tabulky. Doplňková analýza
+koncentrace Binance portfolia je ve výchozím stavu zavřená rozbalovací karta.
+Rozbalení nespouští analýzu; stávající tlačítka spouštění a výsledků zůstávají.
+Úspěšný výpočet označujeme jako dokončený, nikoli jako potvrzení bezpečnosti
+portfolia. Analýza neobchoduje a není součástí evidence DCA nákupů.
 
 ## Inventura a umístění funkcí
 
@@ -41,7 +51,7 @@ zastaralých cenách je ocenění neznámé, nikoli nula.
 | Rozhodování, rizika, evidence ochrany | Trading → Pravidla a riziko |
 | Provozní události | Trading → Pravidla a riziko → Aktivita strategie |
 | Streak Governor (simulace) | Trading → Pravidla a riziko |
-| Kontrola portfolia a její reporty | Vault |
+| Analýza portfolia a její výsledky | Vault → rozbalovací karta Analýza portfolia |
 | Heslo a Telegram | Nastavení účtu; původní samostatné stránky zachovány |
 
 Přesun používá původní formuláře a endpointy. Odpojení dál vyžaduje

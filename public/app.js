@@ -114,6 +114,10 @@ function setAgentEmpty() {
   $("#agent-ledger-open").classList.add("hidden");
 }
 
+function agentRunLabel(run) {
+  return run.success ? "Dokončeno" : { queued: "Čeká", running: "Probíhá", succeeded: "Dokončeno", failed: "Selhalo", cancelled: "Zrušeno" }[run.status] || "Stav neznámý";
+}
+
 async function loadAgentCard() {
   try {
     const { agent } = await request("/api/agent");
@@ -122,7 +126,7 @@ async function loadAgentCard() {
     $("#agent-state").textContent = agent.killSwitchActive ? "VYPNUT" : agent.status === "active" ? "AKTIVNÍ" : "POZASTAVEN";
     $("#agent-last-run").textContent = run ? formatDate(run.completedAt || run.startedAt) : "—";
     $("#agent-actions").textContent = run ? String(run.actionCount) : "—";
-    $("#agent-result").textContent = !run ? "—" : run.success ? "OVĚŘENO" : run.status === "failed" ? "SELHAL" : run.status.toUpperCase();
+    $("#agent-result").textContent = run ? agentRunLabel(run).toLocaleUpperCase("cs-CZ") : "—";
     $("#agent-result").className = run?.success ? "positive" : run?.status === "failed" ? "negative" : "";
     $("#agent-ledger-open").classList.toggle("hidden", !run);
   } catch (error) {
@@ -152,8 +156,9 @@ async function loadAgentRunDetail(runId) {
     const { run } = await request(`/api/agent/runs/${runId}`);
     report.replaceChildren();
     const metrics = run.result?.metrics;
-    appendAgentValue(report, "Stav", run.success ? "Ověřeno" : "Selhalo");
-    appendAgentValue(report, "Riziko", metrics ? `${metrics.riskLevel.toUpperCase()} · ${metrics.riskScore}` : "—");
+    appendAgentValue(report, "Stav", agentRunLabel(run));
+    const levels = { low: "Nízká", moderate: "Střední", high: "Vysoká" };
+    appendAgentValue(report, "Skóre koncentrace", metrics ? `${levels[metrics.riskLevel] || metrics.riskLevel} · ${metrics.riskScore}` : "—");
     appendAgentValue(report, "Největší pozice", metrics?.largestPosition ? `${metrics.largestPosition.asset} · ${metrics.largestPosition.sharePct} %` : "—");
     appendAgentValue(report, "Zásahy člověka", String(run.humanInterventions));
     if (run.error?.message) appendAgentValue(report, "Důvod", run.error.message);
@@ -163,7 +168,7 @@ async function loadAgentRunDetail(runId) {
       const content = document.createElement("span");
       const state = document.createElement("strong");
       sequence.textContent = String(entry.sequence).padStart(2, "0");
-      content.textContent = entry.actionType.replaceAll("_", " ");
+      content.textContent = { portfolio_snapshot_loaded: "Načtení portfolia", risk_metrics_calculated: "Výpočet rozložení", risk_report_generated: "Sestavení výsledků", risk_report_validated: "Kontrola výpočtu" }[entry.actionType] || entry.actionType.replaceAll("_", " ");
       state.textContent = entry.result === "success" ? "OK" : "FAIL";
       state.className = entry.result === "success" ? "positive" : "negative";
       item.append(sequence, content, state);
@@ -187,7 +192,7 @@ async function openAgentLedger() {
       const button = document.createElement("button");
       button.type = "button";
       button.dataset.runId = run.id;
-      button.textContent = `${formatDate(run.completedAt || run.startedAt)} · ${run.success ? "OK" : run.status === "failed" ? "FAIL" : run.status.toUpperCase()}`;
+      button.textContent = `${formatDate(run.completedAt || run.startedAt)} · ${agentRunLabel(run)}`;
       button.addEventListener("click", () => loadAgentRunDetail(run.id));
       history.append(button);
     }
@@ -203,11 +208,11 @@ $("#agent-run").addEventListener("click", async () => {
   const feedback = $("#agent-message");
   button.disabled = true;
   button.textContent = "Analyzuji…";
-  feedback.textContent = "Načítám portfolio a ověřuji report.";
+  feedback.textContent = "Načítám portfolio a počítám jeho rozložení.";
   try {
     const { run } = await request("/api/agent/runs", { method: "POST", body: "{}" });
     agentLastRunId = run.id;
-    feedback.textContent = "Risk report byl ověřen.";
+    feedback.textContent = "Analýza portfolia je hotová.";
     await loadAgentCard();
   } catch (error) {
     if (error.runId) agentLastRunId = error.runId;
@@ -565,9 +570,7 @@ function renderVault(snapshot) {
   const dca = snapshot.dca;
   $("#vault-invested").textContent = formatPrice(dca.totalInvested, snapshot.balance.asset);
   $("#vault-count").textContent = String(dca.purchaseCount);
-  $("#vault-amount").textContent = dcaPlans(snapshot).map(p => `${p.symbol.replace(/USDC$/, "")} ${p.amount} USDC · ${dcaFrequencies[p.frequency].toLowerCase()}`).join(" / ");
-  $("#vault-schedule").textContent = dca.enabled ? dca.statusText : "Pravidelné nákupy jsou pozastavené";
-  $("#vault-notice").textContent = `Historie načtena ${formatDate(snapshot.updatedAt)} · ${snapshot.environment === "mainnet" ? "ostrý provoz" : snapshot.environment === "testnet" ? "zkušební provoz" : "režim neověřen"}`;
+  $("#vault-notice").textContent = `Aktualizováno ${formatDate(snapshot.updatedAt)}${snapshot.environment === "mainnet" ? "" : snapshot.environment === "testnet" ? " · zkušební provoz" : " · režim neověřen"}`;
   $("#vault-notice").classList.remove("warning");
   const filter = $("#vault-filter");
   const selected = filter.value;
@@ -597,6 +600,8 @@ function renderVaultPurchases() {
   $("#vault-page").textContent = `${vaultPage + 1} / ${pages}`;
   $("#vault-prev").disabled = vaultPage === 0;
   $("#vault-next").disabled = vaultPage >= pages - 1;
+  $(".vault-pagination").classList.toggle("hidden", pages <= 1);
+  $(".vault-table-scroll").classList.toggle("hidden", purchases.length === 0);
   $("#vault-empty").classList.toggle("hidden", purchases.length > 0);
   $("#vault-empty").textContent = selected === "all" ? "Zatím nemáš evidovaný žádný DCA nákup. Po prvním provedeném nákupu se objeví tady." : "Pro toto aktivum nejsou evidované nákupy.";
   for (const purchase of purchases) {
@@ -604,7 +609,7 @@ function renderVaultPurchases() {
     const symbol = purchase.symbol.replace(asset, "");
     const assetCell = document.createElement("td");
     const label = document.createElement("span"); label.className = "vault-asset";
-    const icon = document.createElement("i"); icon.textContent = symbol.slice(0, 1); icon.setAttribute("aria-hidden", "true");
+    const icon = document.createElement("i"); icon.className = `asset-icon ${symbol.toLowerCase()}`; icon.textContent = { BTC: "₿", ETH: "Ξ", SOL: "◎" }[symbol] || symbol.slice(0, 1); icon.setAttribute("aria-hidden", "true");
     const name = document.createElement("strong"); name.textContent = symbol;
     label.append(icon, name); assetCell.append(label); row.append(assetCell);
     const at = Number.isFinite(Date.parse(purchase.at)) ? formatDate(purchase.at) : "Datum neevidováno";
@@ -1005,6 +1010,7 @@ async function loadKryptotron() {
     dcaTest.textContent = dcaTestPending ? "Zpracovávám…" : kryptotron.dca.testStatus === "completed" ? "Otestovat znovu" : "Otestovat nákup";
     $("#dca-control").disabled = false;
     $("#dca-toggle-status").textContent = dcaEnabled ? (kryptotron.entriesPaused ? "Čeká na obnovení" : "Zapnuto") : "Vypnuto";
+    $("#dca-toggle-status").classList.toggle("dca-status-notice", dcaEnabled && kryptotron.entriesPaused);
     $("#dca-control").classList.toggle("enabled", dcaEnabled);
     $("#dca-control").setAttribute("aria-checked", String(dcaEnabled));
     streakEnabled = kryptotron.streak.enabled;
@@ -1078,11 +1084,13 @@ async function initializeKryptotron() {
     $("#dca-current-value").textContent = "—";
     $("#dca-edit-actions").hidden = true;
     for (const id of ["dca-toggle-status", "trading-toggle-status"]) $("#" + id).textContent = "Nepřipojeno";
+    $("#dca-toggle-status").classList.add("dca-status-notice");
     document.querySelectorAll('#trading-control,#dca-control,#bot-control,#streak-control,#dca-settings-form input,#dca-settings-form button').forEach(el => { el.disabled = true; });
     $("#vault-purchases").replaceChildren();
-    for (const id of ["vault-invested", "vault-count", "vault-amount"]) $("#" + id).textContent = "—";
+    for (const id of ["vault-invested", "vault-count"]) $("#" + id).textContent = "—";
     $("#vault-empty").classList.remove("hidden");
-    $("#vault-schedule").textContent = "Nastavení se načte po připojení";
+    $(".vault-pagination").classList.add("hidden");
+    $(".vault-table-scroll").classList.add("hidden");
     setVaultUnavailable("Připoj Binance v nastavení profilu a načti historii nákupů.");
     disconnect.classList.add("hidden");
     panel.classList.remove("hidden");

@@ -135,9 +135,12 @@
     <div class="positions-footer"><span id="next-check-short">—</span><div><button type="button" data-dialog="strategy-dialog">Pravidla a riziko</button><button type="button" data-dialog="trading-history-dialog">Historie</button></div></div>
   </section>
   <section class="home-pane goals-card dca-card" id="dca-workspace" aria-labelledby="dca-panel-title">
-    <header><div class="panel-heading"><h2 id="dca-panel-title">DCA</h2></div><div class="dca-toggle"><span id="dca-toggle-status">Načítám</span><button aria-label="Pravidelné nákupy" aria-checked="false" id="dca-control" role="switch" type="button" disabled></button></div></header>
+    <header><div class="panel-heading"><h2 id="dca-panel-title">DCA</h2></div></header>
     <form id="dca-settings-form">
+      <div class="dca-plan-toolbar">
       <fieldset class="dca-frequency" id="dca-frequency"><legend class="sr-only">Společný interval pro BTC, ETH a SOL</legend><label><input type="radio" name="dca-frequency" value="daily"><span>Denně</span></label><label><input type="radio" name="dca-frequency" value="weekly"><span>Týdně</span></label><label><input type="radio" name="dca-frequency" value="monthly"><span>Měsíčně</span></label></fieldset>
+      <div class="dca-toggle"><span id="dca-toggle-status" role="status">Načítám</span><button aria-label="Pravidelné nákupy" aria-checked="false" id="dca-control" role="switch" type="button" disabled></button></div>
+      </div>
       <div class="dca-assets" id="dca-assets" aria-label="Částka za jeden nákup každého aktiva"></div>
       <div class="dca-totals" aria-label="Celkem v evidované historii DCA"><strong>Celkem</strong><div><span>Investováno</span><strong id="dca-invested">—</strong></div><div><span>Aktuální hodnota</span><strong id="dca-current-value">—</strong></div></div>
       <div class="dca-plan-actions"><button type="button" data-dialog="dca-detail-dialog">Historie DCA</button><div id="dca-edit-actions" hidden><button type="button" id="dca-cancel">Zrušit změny</button><button type="submit" id="dca-save" class="dca-plan-save" disabled>Uložit nastavení</button></div></div>
@@ -182,19 +185,26 @@
               </div>
             </div>
           </section>
-          <section class="vault-view app-view hidden" id="vault-view" aria-labelledby="vault-title">
-            <div class="vault-intro"><div><span class="section-kicker">DLOUHODOBÝ PŘEHLED</span><h2 id="vault-title">Historie nákupů</h2><p>Přehled pravidelných investic.</p></div><span class="vault-emblem" aria-hidden="true">V</span></div>
+          <section class="vault-view app-view hidden" id="vault-view" aria-label="Historie DCA">
+            <div class="vault-metrics"><article><small>Investováno v DCA</small><strong id="vault-invested">—</strong></article><article><small>Dokončené nákupy</small><strong id="vault-count">—</strong></article></div>
+            <section class="vault-history" aria-labelledby="vault-history-title">
+              <header><h2 id="vault-history-title">Nákupy DCA</h2><label><span class="sr-only">Filtrovat podle aktiva</span><select id="vault-filter"><option value="all">Všechna aktiva</option></select></label></header>
+              <div class="vault-table-scroll"><table><thead><tr><th scope="col">Aktivum</th><th scope="col">Datum</th><th scope="col">Množství</th><th scope="col">Investováno</th></tr></thead><tbody id="vault-purchases"></tbody></table></div>
+              <div class="vault-pagination hidden"><button id="vault-prev" type="button" aria-label="Předchozí stránka">←</button><span id="vault-page">1 / 1</span><button id="vault-next" type="button" aria-label="Další stránka">→</button></div>
+              <p class="vault-empty" id="vault-empty">Zatím tu nejsou žádné načtené nákupy.</p>
+            </section>
             <p class="vault-notice" id="vault-notice" role="status">Připoj Binance v nastavení profilu a načti historii nákupů.</p>
-            <div class="vault-metrics"><article><small>Evidované investice</small><strong id="vault-invested">—</strong><p>Součet uložených DCA nákupů</p></article><article><small>Dokončené nákupy</small><strong id="vault-count">—</strong><p>Úspěšně provedené objednávky</p></article><article><small>Pravidelný nákup</small><strong id="vault-amount">—</strong><p id="vault-schedule">Nastavení se načte z tvého účtu</p></article></div>
-            <section class="vault-history" aria-labelledby="vault-history-title"><header><div><small>TVŮJ ARCHIV</small><h3 id="vault-history-title">Historie nákupů</h3></div><label>Aktivum<select id="vault-filter"><option value="all">Všechna aktiva</option></select></label></header><div class="vault-table-scroll"><table><thead><tr><th scope="col">Aktivum</th><th scope="col">Datum</th><th scope="col">Množství</th><th scope="col">Investováno</th></tr></thead><tbody id="vault-purchases"></tbody></table></div><div class="vault-pagination"><button id="vault-prev" type="button" aria-label="Předchozí stránka">←</button><span id="vault-page">1 / 1</span><button id="vault-next" type="button" aria-label="Další stránka">→</button></div><p class="vault-empty" id="vault-empty">Zatím tu nejsou žádné načtené nákupy.</p></section>
-<section aria-labelledby="agent-card-title" class="agent-card" id="agent-card">
-<header><div><small>ANALÝZA · BEZ OBCHODOVÁNÍ</small><h3 id="agent-card-title">Kontrola portfolia</h3></div><span id="agent-state">PŘIPRAVEN</span></header>
-<p id="agent-summary">Ověří koncentraci portfolia.</p>
-<div class="agent-metrics"><span><small>Poslední analýza</small><strong id="agent-last-run">—</strong></span><span><small>Akce</small><strong id="agent-actions">—</strong></span><span><small>Výsledek</small><strong id="agent-result">—</strong></span></div>
-<div class="agent-buttons"><button id="agent-run" type="button">Spustit analýzu</button><button class="hidden" id="agent-ledger-open" type="button">Zobrazit report</button></div>
-<p class="agent-message" id="agent-message" role="status"></p>
-</section>
-            <p class="vault-footnote">Vault zobrazuje uloženou historii DCA, nejvýše 156 posledních nákupů. Nejde o aktuální zůstatky ani tržní hodnotu portfolia. Prostředky zůstávají na tvém Binance účtu.</p>
+            <details aria-labelledby="agent-card-title" class="agent-card" id="agent-card">
+              <summary><div><h3 id="agent-card-title">Analýza portfolia</h3><p>Rozložení aktiv na Binance</p></div><span class="agent-disclosure-mark" aria-hidden="true">+</span></summary>
+              <div class="agent-card-body">
+                <div class="agent-card-state"><span>Dostupnost analýzy</span><span id="agent-state">PŘIPRAVEN</span></div>
+                <p id="agent-summary">Ukáže rozložení portfolia a největší pozice. Neprovádí žádné obchody.</p>
+                <div class="agent-metrics"><span><small>Poslední analýza</small><strong id="agent-last-run">—</strong></span><span><small>Kroky analýzy</small><strong id="agent-actions">—</strong></span><span><small>Výsledek</small><strong id="agent-result">—</strong></span></div>
+                <div class="agent-buttons"><button id="agent-run" type="button">Spustit analýzu</button><button class="hidden" id="agent-ledger-open" type="button">Zobrazit výsledky</button></div>
+                <p class="agent-message" id="agent-message" role="status"></p>
+              </div>
+            </details>
+            <p class="vault-footnote">Historie zahrnuje až 156 posledních nákupů DCA. Aktuální zůstatky najdeš v Přehledu. Prostředky zůstávají na Binance.</p>
           </section>
         </div>
         <span class="hidden" id="username"></span
@@ -203,8 +213,8 @@
       </section>
     </main>
     <dialog class="agent-dialog" id="agent-dialog" aria-labelledby="agent-dialog-title">
-      <div class="agent-dialog-head"><div><small>PROOF LEDGER</small><h2 id="agent-dialog-title">Risk report</h2></div><button id="agent-dialog-close" type="button" aria-label="Zavřít">×</button></div>
-      <div class="agent-run-history" id="agent-run-history" aria-label="Historie runů"></div>
+      <div class="agent-dialog-head"><div><small>VÝSLEDKY A PRŮBĚH</small><h2 id="agent-dialog-title">Analýza portfolia</h2></div><button id="agent-dialog-close" type="button" aria-label="Zavřít">×</button></div>
+      <div class="agent-run-history" id="agent-run-history" aria-label="Historie analýz"></div>
       <div class="agent-report" id="agent-report"></div>
       <ol class="agent-ledger" id="agent-ledger"></ol>
     </dialog>
