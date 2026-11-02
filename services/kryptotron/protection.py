@@ -1,4 +1,4 @@
-from decimal import Decimal, ROUND_DOWN
+from decimal import Decimal, InvalidOperation, ROUND_DOWN
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -22,6 +22,20 @@ def decimal_string(value):
     return format(value, "f")
 
 
+def _trailing_delta_bounds(minimum, maximum):
+    error = "Neplatné meze Binance TRAILING_DELTA filtru"
+    if isinstance(minimum, bool) or isinstance(maximum, bool):
+        raise ValueError(error)
+    try:
+        bounds = tuple(Decimal(str(value)) for value in (minimum, maximum))
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise ValueError(error) from exc
+    if (any(not value.is_finite() or value <= 0 or value != value.to_integral_value() for value in bounds)
+            or bounds[0] > bounds[1]):
+        raise ValueError(error)
+    return tuple(int(value) for value in bounds)
+
+
 def build_protection_oco(
     symbol,
     quantity,
@@ -43,7 +57,8 @@ def build_protection_oco(
         raise ValueError("Aktivace trailingu musí být kladná")
 
     trailing_bips = percent_to_bips(trail_distance_pct)
-    if not int(min_trailing_bips) <= trailing_bips <= int(max_trailing_bips):
+    minimum, maximum = _trailing_delta_bounds(min_trailing_bips, max_trailing_bips)
+    if not minimum <= trailing_bips <= maximum:
         raise ValueError("Trailing vzdálenost nesplňuje Binance TRAILING_DELTA filtr")
 
     stop_price = floor_to_tick(entry * (1 - Decimal(str(max_loss_pct)) / 100), tick_size)
@@ -66,9 +81,15 @@ def build_protection_oco(
 
 
 def trailing_delta_filter(symbol_info):
-    for item in symbol_info.get("filters", []):
+    if not isinstance(symbol_info, dict) or not isinstance(symbol_info.get("filters"), list):
+        raise ValueError("Symbol nemá platný Binance TRAILING_DELTA filtr")
+    for item in symbol_info["filters"]:
+        if not isinstance(item, dict):
+            raise ValueError("Symbol nemá platný Binance TRAILING_DELTA filtr")
         if item.get("filterType") == "TRAILING_DELTA":
-            return int(item["minTrailingBelowDelta"]), int(item["maxTrailingBelowDelta"])
+            # build_protection_oco and the explicit restore both emit SELL
+            # TAKE_PROFIT as the trailing leg, which uses Binance's Above bounds.
+            return _trailing_delta_bounds(item.get("minTrailingAboveDelta"), item.get("maxTrailingAboveDelta"))
     raise ValueError("Symbol nemá Binance TRAILING_DELTA filtr")
 
 

@@ -90,3 +90,18 @@ nedotčený holdout. Skutečný výsledek tohoto testu bude dostupný nejdříve
 Proto ani úspěšný holdout tohoto modelu automaticky nepovoluje produkční
 obchodování. Nejdřív je nutné sjednotit model s cílovým workerem a ověřit
 provedení v izolovaném testovacím provozu.
+
+## Kontrola strategie 2. 11. 2026
+
+Izolované srovnání čtyř vstupů používající rolling 4h signály a 15m exekuci:
+
+```bash
+.venv/bin/python services/kryptotron/research/strategy_review.py \
+  --output /tmp/ocean-strategy-review.json
+```
+
+Používá pouze existující cache před původním cutoffem, odmítá chybějící nebo
+nesouhlasící 15m/4h data a nestahuje nové ceny. Pozdější chronologická část
+je již známá historie, nikoli nový OOS holdout. Není zapojeno živé obchodování
+ani automatická propagace parametrů. Metoda, výsledky a omezení jsou v
+[reportu z 2. 11. 2026](../../../docs/strategy-review-2026-11-02.md).

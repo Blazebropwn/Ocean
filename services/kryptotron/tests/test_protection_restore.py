@@ -24,7 +24,9 @@ class RestoreTests(BotStateTestCase):
         client.get_open_orders.return_value = []
         client.get_asset_balance.return_value = {'free': '.00024'}
         client.get_symbol_ticker.return_value = {'price': '84000'}
-        client.get_symbol_info.return_value = {'filters': [{'filterType': 'TRAILING_DELTA', 'minTrailingBelowDelta': 10, 'maxTrailingBelowDelta': 2000}]}
+        client.get_symbol_info.return_value = {'filters': [{'filterType': 'TRAILING_DELTA',
+            'minTrailingAboveDelta': 100, 'maxTrailingAboveDelta': 200,
+            'minTrailingBelowDelta': 300, 'maxTrailingBelowDelta': 500}]}
         client.create_oco_order.return_value = {'orderListId': 2}
         sync = Mock(side_effect=lambda c,s,symbol: {'status': 'cancelled' if s['positions'][symbol]['protection_client_id']=='ocean-protect-old' else 'active'})
         return state, client, sync
@@ -51,6 +53,14 @@ class RestoreTests(BotStateTestCase):
     def test_no_request_never_creates_protection(self):
         state, client, sync = self.fixture(); state.pop('protection_restore')
         self.run_restore(state, client, sync)
+        client.create_oco_order.assert_not_called()
+
+    def test_delta_valid_only_for_below_bounds_cannot_restore_take_profit_sell(self):
+        state, client, sync = self.fixture()
+        state['positions']['BTCUSDC']['protection_trailing_bips'] = 400
+        state['protection_restore']['trailing_bips'] = 400
+        self.run_restore(state, client, sync)
+        self.assertEqual(state['protection_restore']['status'], 'rejected')
         client.create_oco_order.assert_not_called()
 
     def test_inventory_mismatch_or_other_unknown_order_blocks_restoration(self):

@@ -72,6 +72,21 @@ def position_budget(free_quote):
     return min(free_quote * settings.POSITION_PCT / 100, settings.MAX_POSITION_USDT)
 
 
+def trend_exit_reason(data):
+    """A missed crossing must not strand an open position in a bearish trend.
+
+    Equality is neutral. Callers must supply validated, closed-candle EMA data;
+    invalid observations block the caller instead of manufacturing a sell signal.
+    """
+    fast, slow = data.get("ema_fast"), data.get("ema_slow")
+    if any(isinstance(value, bool) or not isinstance(value, (int, float))
+           or not math.isfinite(value) or value <= 0 for value in (fast, slow)):
+        raise ValueError("Výstup vyžaduje platné EMA z uzavřené svíčky")
+    if fast >= slow:
+        return None
+    return "DEATH_CROSS" if data.get("death_cross") is True else "BEAR_REGIME_EXIT"
+
+
 def decision_snapshot(state, symbol, data, now, *, minimum=0, free_quote=None):
     position = state.get("positions", {}).get(symbol, {})
     code, reason = entry_permission(state, now, symbol=symbol)
@@ -83,8 +98,11 @@ def decision_snapshot(state, symbol, data, now, *, minimum=0, free_quote=None):
         elif position.get("protection_status") != "ACTIVE":
             code, reason = "PROTECTION_ERROR", "Burzovní ochrana pozice není potvrzená."
             decision = "REVIEW"
-        elif data["death_cross"]:
-            code, reason = "DEATH_CROSS", "EMA50 překročila EMA200 směrem dolů; pravidlo požaduje výstup."
+        elif (exit_reason := trend_exit_reason(data)):
+            code = exit_reason
+            reason = ("EMA50 překročila EMA200 směrem dolů; pravidlo požaduje výstup."
+                      if code == "DEATH_CROSS" else
+                      "EMA50 je pod EMA200; pravidlo požaduje výstup i po zmeškaném překřížení.")
             decision = "EXIT_REQUIRED"
         else:
             code, reason = "POSITION_ALREADY_OPEN", "Pozice je otevřená a má potvrzenou burzovní ochranu."

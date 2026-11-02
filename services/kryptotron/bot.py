@@ -43,7 +43,7 @@ from utils import (
 from order_safety import apply_filled_buy, classify_order, new_buy_intent, with_execution_fills
 from reconciliation import inspect_account
 from account_reset import process_account_reset
-from risk import entry_permission, position_budget, decision_snapshot
+from risk import entry_permission, position_budget, decision_snapshot, trend_exit_reason
 from manual_close import active_request, position_id
 from protection_restore import active_restore, process_restore
 from events import add_event
@@ -478,6 +478,28 @@ def cancel_protection_for_market_exit(client, state, symbol):
     if not save_state(state):
         raise RuntimeError("Zrušení ochrany se nepodařilo bezpečně uložit")
     return True
+
+
+def process_trend_exit(client, state, symbol, data, step_size):
+    """Resume the trend exit after an outage through the normal guarded SELL path."""
+    ps = state.get("positions", {}).get(symbol, {})
+    if not ps.get("in_position"):
+        return False
+    if ((active_request(state) or {}).get("symbol") == symbol
+            or (active_restore(state) or {}).get("symbol") == symbol):
+        return False
+    reason = trend_exit_reason(data)
+    if reason is None:
+        return False
+    if state.get("safe_mode") or state.get("api_permissions_safe") is False:
+        raise RuntimeError("Neověřený stav blokuje market exit; existující ochrana zůstává na burze")
+    if state.get("pending_order") or state.get("pending_protection") or state.get("dca", {}).get("pending"):
+        raise RuntimeError("Výstup čeká na ověření předchozí objednávky")
+    log.info(f"[{symbol}] {reason} — ověřuji ochranu před prodejem")
+    if cancel_protection_for_market_exit(client, state, symbol):
+        execute_market_exit(client, state, symbol, step_size, reason)
+        return True
+    return False
 
 
 def process_manual_close(client, state, pair_filters):
@@ -1223,12 +1245,7 @@ def run():
                             f"SL: {active_sl:.2f}{trail_tag}"
                         )
 
-                        if data["death_cross"]:
-                            if state.get("safe_mode"):
-                                raise RuntimeError("Neověřený stav blokuje market exit; existující ochrana zůstává na burze")
-                            log.info(f"[{symbol}] Death Cross — prodávám")
-                            if cancel_protection_for_market_exit(client, state, symbol):
-                                execute_market_exit(client, state, symbol, step_size, "DEATH_CROSS")
+                        process_trend_exit(client, state, symbol, data, step_size)
 
                     # ── BEZ POZICE ────────────────────────────────────────────
                     else:

@@ -84,3 +84,22 @@ test("ops monitoring catches stale heartbeat, unresolved safety and persistence 
   assert.ok(issues.some(issue => issue.includes("bezpečnostní režim")));
   assert.ok(issues.some(issue => issue.includes("historie")));
 });
+
+test("bear-regime recovery exit remains distinguishable from waiting for an entry", () => {
+  const at = "2026-11-02T00:00:00.000Z";
+  const result = readKryptotronTransparency({
+    reconciliation: { status: "OK", checked_at: at },
+    decisions: {
+      BTCUSDC: { checkedAt: at, reasonCode: "BEAR_REGIME_EXIT", decision: "EXIT_REQUIRED", marketRegime: "BEAR" },
+      ETHUSDC: { checkedAt: at, reasonCode: "BEAR_REGIME", decision: "NO_ENTRY", marketRegime: "BEAR" },
+    },
+    trade_explanations: [{ symbol: "BTCUSDC", at, reasonCode: "BEAR_REGIME_EXIT" }],
+  }, Date.parse(at));
+  const exit = result.decisions.find(item => item.symbol === "BTCUSDC")!;
+  const entry = result.decisions.find(item => item.symbol === "ETHUSDC")!;
+  assert.equal(exit.reasonCode, "BEAR_REGIME_EXIT");
+  assert.equal(exit.decision, "EXIT_REQUIRED");
+  assert.match(exit.reason, /výstup/);
+  assert.match(entry.reason, /čeká/);
+  assert.match(result.trades[0]!.reason, /výstup/);
+});

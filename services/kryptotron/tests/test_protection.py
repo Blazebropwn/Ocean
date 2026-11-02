@@ -47,9 +47,57 @@ class ProtectionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "TRAILING_DELTA"):
             build_protection_oco("BTCUSDC", 0.001, 100_000, 0.01, 10, 3, 1.5, 200, 1000)
 
-    def test_reads_sell_trailing_filter(self):
-        info = {"filters": [{"filterType": "TRAILING_DELTA", "minTrailingBelowDelta": 10, "maxTrailingBelowDelta": 2000}]}
-        self.assertEqual(trailing_delta_filter(info), (10, 2000))
+    def trailing_info(self, minimum=100, maximum=200):
+        return {"filters": [{
+            "filterType": "TRAILING_DELTA",
+            "minTrailingAboveDelta": minimum, "maxTrailingAboveDelta": maximum,
+            "minTrailingBelowDelta": 300, "maxTrailingBelowDelta": 500,
+        }]}
+
+    def test_reads_take_profit_sell_above_filter(self):
+        self.assertEqual(trailing_delta_filter(self.trailing_info()), (100, 200))
+
+    def test_accepts_delta_in_above_range_even_when_outside_below_range(self):
+        bounds = trailing_delta_filter(self.trailing_info())
+        for percent, bips in ((1, 100), (1.5, 150), (2, 200)):
+            with self.subTest(percent=percent):
+                request = build_protection_oco("BTCUSDC", 0.001, 100_000, 0.01, 10, 3, percent, *bounds)
+                self.assertEqual(request["aboveTrailingDelta"], bips)
+
+    def test_rejects_delta_in_below_range_but_outside_above_range(self):
+        bounds = trailing_delta_filter(self.trailing_info())
+        with self.assertRaisesRegex(ValueError, "TRAILING_DELTA"):
+            build_protection_oco("BTCUSDC", 0.001, 100_000, 0.01, 10, 3, 4, *bounds)
+
+    def test_does_not_fall_back_to_below_bounds_when_above_is_incomplete(self):
+        for key in ("minTrailingAboveDelta", "maxTrailingAboveDelta"):
+            with self.subTest(key=key):
+                info = self.trailing_info()
+                del info["filters"][0][key]
+                with self.assertRaisesRegex(ValueError, "TRAILING_DELTA"):
+                    trailing_delta_filter(info)
+
+    def test_rejects_invalid_bounds_without_truncating_or_accepting_non_finite_values(self):
+        for minimum, maximum in ((None, 200), ("bad", 200), (True, 200),
+                                 (10.5, 200), (10, 200.5), ("NaN", 200),
+                                 (10, "Infinity"), (0, 200), (-10, 200),
+                                 (10, 0), (200, 100)):
+            with self.subTest(minimum=minimum, maximum=maximum):
+                with self.assertRaisesRegex(ValueError, "TRAILING_DELTA"):
+                    trailing_delta_filter(self.trailing_info(minimum, maximum))
+                with self.assertRaisesRegex(ValueError, "TRAILING_DELTA"):
+                    build_protection_oco("BTCUSDC", 0.001, 100_000, 0.01, 10, 3, 1.5, minimum, maximum)
+
+    def test_accepts_integer_string_bounds(self):
+        self.assertEqual(trailing_delta_filter(self.trailing_info("100", "200")), (100, 200))
+
+    def test_rejects_missing_or_malformed_filter(self):
+        for info in (None, {}, {"filters": None}, {"filters": {}},
+                     {"filters": [None]}, {"filters": []},
+                     {"filters": [{"filterType": "PRICE_FILTER"}]}):
+            with self.subTest(info=info):
+                with self.assertRaisesRegex(ValueError, "TRAILING_DELTA"):
+                    trailing_delta_filter(info)
 
     def test_stores_exchange_order_list_identity(self):
         position = {"position_qty": .01}
