@@ -7,6 +7,7 @@ const reasons: Record<string, string> = {
   MANUAL_CLOSE_PENDING: "Ruční uzavření čeká na potvrzení burzou.",
   ENTRY_ALLOWED: "Býčí režim a dostupný rizikový rozpočet dovolují vstup.",
   BEAR_REGIME: "EMA50 není nad EMA200. Strategie čeká na býčí režim.",
+  BEAR_REGIME_EXIT: "EMA50 je pod EMA200; pravidlo požaduje výstup i po zmeškaném překřížení.",
   POSITION_ALREADY_OPEN: "Pozice je otevřená a má potvrzenou burzovní ochranu.",
   ENTRIES_PAUSED: "Nové obchody jsou pozastavené uživatelem.",
   TRADING_PAUSED: "Nové vstupy Tradingu jsou pozastavené. DCA má vlastní nastavení.",
