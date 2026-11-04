@@ -19,23 +19,28 @@ z GeckoTerminal, vybere nejvýše pět kandidátů, zkontroluje report RugCheck,
 určí velikost a vyžádá Jupiter nákupní i zpětnou prodejní kotaci pro konkrétní
 raw množství. Pokud všechny podmínky projdou, atomicky zapíše virtuální nákup.
 Neúplná data nebo chyba služby vedou k odmítnutí a důvod zůstane v evidenci.
-Objevování používá pevný vzorek stránek 1, 5 a 10, nejvýše 60 různých mintů;
-nejde o úplný seznam nových poolů. Pooly s likviditou alespoň 10 000 USD si
+Objevování načte jednu stránku za kolo, nejvýše 20 různých mintů. Po úspěšném
+načtení střídá stránky 1 → 5 → 10 → 1; po chybě stejnou stránku zopakuje.
+Evidence `sampledPages` obsahuje skutečně načtenou stránku, `pageRotation`
+popisuje plán střídání. Jde o omezený vzorek, nikoli úplný seznam nových poolů.
+Pooly s likviditou alespoň 10 000 USD si
 pilot pamatuje v trvalém seznamu nejvýše 120 poolů, přednostně nad 50 000 USD.
 Tento seznam přežije restart; platnost končí 24 hodin po vytvoření poolu,
 nikoli po posledním objevení. Přijímací hranice 10 000 USD nemění nákupní
 minimum 50 000 USD ani minimální stáří pěti minut.
 
-Každé kolo obnoví nejvýše 20 dříve objevených poolů, které nejsou v čerstvém
-výběru. Fronta střídá nejdéle nekontrolované pooly. Obnovení přes pevný
+Každé kolo nejdřív obnoví nejvýše 20 dříve objevených poolů, potom hledá nové.
+Fronta střídá nejdéle nekontrolované pooly. Při naplněném seznamu jde nejvýše
+o dva GeckoTerminal požadavky za kolo místo původních čtyř; dostupná kapacita
+tak nemizí pouze na novinky před obnovením sledovaných trhů. Obnovení přes pevný
 GeckoTerminal endpoint `pools/multi` musí vrátit nová data se stejnou adresou,
 mintem, přesností a časem vytvoření. Chybějící či stará data se nepoužijí;
-uložený seznam není zdrojem cen. Posuzuje se nejvýše 80 různých tokenů.
+uložený seznam není zdrojem cen. Posuzuje se nejvýše 40 různých tokenů.
 Pokud má mint více poolů, přednost dostane pool splňující základní limity,
 potom vyšší likvidita. Pět podrobných kontrol se střídá podle nejstaršího
 rizikového prověření, aby opakovaně odmítané tokeny neblokovaly ostatní.
 
-Výpadek kterékoliv objevovací stránky zneplatní celý nový výběr. Čerstvě
+Výpadek právě načítané objevovací stránky zneplatní její nový výběr. Čerstvě
 obnovené sledované pooly lze přesto vyhodnotit; UI výslovně označí chybějící
 část dat. Pokud žádný zdroj nevrátí použitelná data a nastala chyba, kolo selže.
 
@@ -245,6 +250,8 @@ Další testy ověřují rozestupy požadavků, dlouhý `Retry-After`, zachován
 přes restart i ruční ovládání, obnovu historického feedu a Jupiter výstupy během
 omezení GeckoTerminalu. Obnovení dostupnosti externího zdroje se musí ověřit
 skutečným dokončeným produkčním kolem, nikoli pouze fixture testy.
+Testy dále ověřují přednost obnovy sledovaných poolů, rotaci jednotlivých
+objevovacích stránek a zastavení dalších požadavků po omezení obnovy.
 
 Další milník: sběr delší historie odmítnutých i přijatých kandidátů, audit
 Token-2022 a měření přesnějších nákladů. Helius stream a oddělený LIVE signer

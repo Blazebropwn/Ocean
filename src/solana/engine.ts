@@ -221,20 +221,17 @@ export class SolanaPaperEngine {
       this.event(userId, cycleId, "scanner", "blocked", null, reason, { retryAt: pausedUntil, monitoringPositionsOnly: true }, authorize);
       return [];
     }
-    this.progress(userId, cycleId, "scanner", "Hledám nové pooly a připravuji obnovu těch sledovaných.", authorize);
+    this.progress(userId, cycleId, "scanner", "Připravuji čerstvá data sledovaných poolů a hledání nových.", authorize);
     let discovered: SolanaCandidate[] = [];
     let discoveryError: string | null = null;
     let discoveryFailure: unknown;
-    try { discovered = (await this.provider.scan()).slice(0, 60); }
-    catch (error) { discoveryFailure = error; discoveryError = error instanceof Error ? error.message : "Nové pooly nejsou dostupné."; }
-    this.assertAuthorized(authorize, userId, cycleId);
-    this.watchlist.remember(userId, discovered, this.now());
-    const due = this.provider.refreshPools && !(discoveryFailure instanceof SolanaProviderRateLimitError) ? this.watchlist.due(userId, this.now(), discovered.map((candidate) => candidate.poolAddress), 20) : [];
+    // Spend the first shared-feed request on pools already selected for monitoring.
+    // New-pool discovery must not consume the request budget before their data can mature.
+    const due = this.provider.refreshPools ? this.watchlist.due(userId, this.now(), [], 20) : [];
     const requested = due.map((pool) => pool.poolAddress);
     let refreshed: SolanaCandidate[] = [];
     let refreshError: string | null = null;
     let refreshFailure: unknown;
-    details.discoveredPools = discovered.length;
     details.requestedPools = requested.length;
     this.store.recordScanDetails(userId, cycleId, details);
     if (requested.length) {
@@ -251,6 +248,16 @@ export class SolanaPaperEngine {
         refreshError = error instanceof Error ? error.message : "Sledované pooly se nepodařilo obnovit.";
       }
     }
+    // A 429 ends Gecko requests for this cycle. Other refresh failures may still be
+    // recovered by a fresh discovery response; no cached observation is substituted.
+    if (!(refreshFailure instanceof SolanaProviderRateLimitError)) {
+      this.progress(userId, cycleId, "scanner", "Hledám nově objevené pooly.", authorize);
+      try { discovered = (await this.provider.scan()).slice(0, 60); }
+      catch (error) { discoveryFailure = error; discoveryError = error instanceof Error ? error.message : "Nové pooly nejsou dostupné."; }
+      this.assertAuthorized(authorize, userId, cycleId);
+      this.watchlist.remember(userId, discovered, this.now());
+    }
+    details.discoveredPools = discovered.length;
     details.refreshedPools = refreshed.length;
     details.refreshErrors = requested.length - refreshed.length;
     details.lastError = [discoveryError, refreshError].filter(Boolean).join(" ") || null;
@@ -261,8 +268,17 @@ export class SolanaPaperEngine {
       if (refreshFailure instanceof SolanaProviderRateLimitError) throw refreshFailure;
       throw new Error(discoveryError || refreshError!);
     }
+    // A later observation of the same pool supersedes its earlier refresh, even
+    // when liquidity has fallen below the entry limit in the meantime.
+    const byPool = new Map<string, SolanaCandidate>();
+    for (const candidate of [...refreshed, ...discovered]) {
+      const previous = byPool.get(candidate.poolAddress);
+      const observedAt = Date.parse(candidate.observedAt);
+      const previousAt = previous ? Date.parse(previous.observedAt) : NaN;
+      if (!previous || Number.isFinite(observedAt) && (!Number.isFinite(previousAt) || observedAt >= previousAt)) byPool.set(candidate.poolAddress, candidate);
+    }
     const byMint = new Map<string, SolanaCandidate>();
-    for (const candidate of [...discovered, ...refreshed]) {
+    for (const candidate of byPool.values()) {
       const previous = byMint.get(candidate.mint);
       const eligible = candidateRejection(candidate, this.now()) === null;
       const previousEligible = previous && candidateRejection(previous, this.now()) === null;

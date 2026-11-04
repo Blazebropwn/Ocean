@@ -61,14 +61,15 @@ function poolFixture() {
 function source(db: OceanDatabase, time: Clock, intervalMs = 7_000) {
   const state = new SolanaProviderStateStore(db);
   const calls: { url: URL; at: number }[] = [];
-  const controls = { limited: false, failPage: 5, sellAmount: "4900000" };
+  const controls = { limited: false, failPage: 1, limitRefresh: false, sellAmount: "4900000" };
   const provider = new PublicSolanaMarketProvider({ now: () => new Date(time.value), sleep: ms => time.sleep(ms),
     geckoIntervalMs: intervalMs, jupiterIntervalMs: 0,
     geckoPersistence: { read: () => state.read("geckoterminal"), write: value => state.write("geckoterminal", value) },
     fetcher: async input => {
       const url = new URL(String(input)); calls.push({ url, at: time.value });
       if (url.hostname === "api.geckoterminal.com") {
-        if (controls.limited && Number(url.searchParams.get("page")) === controls.failPage) {
+        if (controls.limited && (Number(url.searchParams.get("page")) === controls.failPage
+          || controls.limitRefresh && url.pathname.includes("/pools/multi/"))) {
           return new Response("must-not-leak-provider-body-or-credential", { status: 429, headers: { "retry-after": String(RETRY_SECONDS) } });
         }
         return Response.json(poolFixture());
@@ -90,6 +91,8 @@ test("discovery pages and watched-pool refresh share a paced Gecko queue", async
   const db = openDatabase(":memory:"); const time = clock(); const feed = source(db, time);
   try {
     await feed.provider.scan();
+    await feed.provider.scan();
+    await feed.provider.scan();
     await feed.provider.refreshPools([POOL]);
     assert.deepEqual(feed.calls.map(call => call.at - START), [0, 7_000, 14_000, 21_000]);
     assert.deepEqual(feed.calls.slice(0, 3).map(call => call.url.searchParams.get("page")), ["1", "5", "10"]);
@@ -97,7 +100,7 @@ test("discovery pages and watched-pool refresh share a paced Gecko queue", async
   } finally { db.close(); }
 });
 
-test("a later-page 429 stops same-cycle refresh, preserves the visible feed and recovers only after durable Retry-After", async () => {
+test("a refresh 429 stops same-cycle discovery, preserves the visible feed and recovers only after durable Retry-After", async () => {
   const directory = mkdtempSync(join(tmpdir(), "ocean-rate-limit-")); const path = join(directory, "pilot.db");
   const time = clock(); let db = openDatabase(path); user(db);
   let feed = source(db, time);
@@ -108,12 +111,12 @@ test("a later-page 429 stops same-cycle refresh, preserves the visible feed and 
     const initial = auto.snapshot(OWNER);
     assert.equal(initial.candidates.length, 1); assert.equal(initial.candidateFeed.stale, false);
     assert.equal(initial.watchlist.trackedPools, 1); assert.equal(initial.counters.trades, 0);
-    time.value = START + 61_000; feed.controls.limited = true;
+    time.value = START + 61_000; feed.controls.limited = true; feed.controls.limitRefresh = true;
     const beforeFailure = feed.calls.length; await auto.tick();
     const failed = auto.snapshot(OWNER);
     const failedCalls = feed.calls.slice(beforeFailure);
-    assert.deepEqual(failedCalls.map(call => call.url.searchParams.get("page")), ["1", "5"]);
-    assert(failedCalls.every(call => !call.url.pathname.includes("/pools/multi/")));
+    assert.equal(failedCalls.length, 1);
+    assert(failedCalls[0]!.url.pathname.includes("/pools/multi/"));
     const retryAt = time.value + RETRY_SECONDS * 1000;
     assert.equal(failed.automation.nextRunAt, new Date(retryAt).toISOString());
     assert.equal(failed.marketData.retryAt, failed.automation.nextRunAt);
@@ -137,9 +140,11 @@ test("a later-page 429 stops same-cycle refresh, preserves the visible feed and 
     time.value = retryAt - 1; await auto.tick(); assert.equal(feed.calls.length, 0);
     time.value = retryAt; await auto.tick();
     const recovered = auto.snapshot(OWNER);
-    assert.equal(feed.calls.length, 3); assert.equal(recovered.marketData.rateLimited, false);
+    assert.equal(feed.calls.length, 2); assert.equal(recovered.marketData.rateLimited, false);
+    assert(feed.calls[0]!.url.pathname.includes("/pools/multi/"));
+    assert.equal(feed.calls[1]!.url.searchParams.get("page"), "1");
     assert.equal(recovered.candidateFeed.stale, false); assert.equal(recovered.candidates[0]!.stale, false);
-    assert.equal(recovered.candidates[0]!.observedAt, new Date(retryAt).toISOString());
+    assert.equal(recovered.candidates[0]!.observedAt, new Date(retryAt + 7_000).toISOString());
     assert.equal(recovered.diagnostics.inspectedTokens, 1); assert.equal(recovered.automation.lastError, null);
     assert.equal(feed.state.read("geckoterminal")?.consecutive429, 0);
     assert.equal(recovered.counters.trades, 0);
