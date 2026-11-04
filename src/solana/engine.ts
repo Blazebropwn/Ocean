@@ -3,6 +3,9 @@ import type { OceanDatabase, UserRecord } from "../db.js";
 import { hasApprovedAccess } from "../routes/shared.js";
 import { SolanaPaperStore, NETWORK_FEE_MICROS, CYCLE_COOLDOWN_MS, type PaperPosition } from "./store.js";
 import { SOLANA_TOKEN_PROGRAM, SOLANA_USDC_MINT, type Evidence, type SolanaCandidate, type SolanaCandidateSummary, type SolanaMarketProvider, type SolanaQuote, type SolanaRiskReport, type SolanaRuntime, type SolanaStage } from "./types.js";
+import { SolanaWatchlist } from "./watchlist.js";
+
+export const SOLANA_PAPER_POLICY_VERSION = "paper-2026-11-04-v2";
 
 export const SOLANA_PAPER_LIMITS = Object.freeze({
   maxPositionUsdc: 5, maxOpenPositions: 3, maxExposureUsdc: 15,
@@ -37,26 +40,37 @@ export function rawAmount(value: string) {
 }
 
 export function candidateRejection(candidate: SolanaCandidate, now: number): string | null {
-  if (!mintPattern.test(candidate.mint) || candidate.mint === SOLANA_USDC_MINT || !mintPattern.test(candidate.poolAddress)) return "Neplatný token nebo adresa poolu.";
-  if (!Number.isInteger(candidate.decimals) || candidate.decimals < 0 || candidate.decimals > 18) return "Neznámá přesnost tokenu.";
-  if (!recent(candidate.observedAt, now, 120_000)) return "Data poolu jsou zastaralá.";
+  return candidateRejections(candidate, now)[0] ?? null;
+}
+
+export function candidateRejections(candidate: SolanaCandidate, now: number): string[] {
+  const reasons: string[] = [];
+  if (!mintPattern.test(candidate.mint) || candidate.mint === SOLANA_USDC_MINT || !mintPattern.test(candidate.poolAddress)) reasons.push("Neplatný token nebo adresa poolu.");
+  if (!Number.isInteger(candidate.decimals) || candidate.decimals < 0 || candidate.decimals > 18) reasons.push("Neznámá přesnost tokenu.");
+  if (!recent(candidate.observedAt, now, 120_000)) reasons.push("Data poolu jsou zastaralá.");
   const created = Date.parse(candidate.poolCreatedAt);
   const age = now - created;
-  if (!Number.isFinite(created) || age < 5 * 60_000 || age > 24 * 60 * 60_000) return "Pool musí být starý 5 minut až 24 hodin.";
-  if (!Number.isFinite(candidate.liquidityUsd) || candidate.liquidityUsd < 50_000) return "Likvidita je nižší než 50 000 USD nebo ji nelze ověřit.";
-  if (!Number.isFinite(candidate.volume5mUsd) || candidate.volume5mUsd < 1_000) return "Objem za 5 minut je nižší než 1 000 USD nebo chybí.";
-  return null;
+  if (!Number.isFinite(created) || age < 5 * 60_000 || age > 24 * 60 * 60_000) reasons.push("Pool musí být starý 5 minut až 24 hodin.");
+  if (!Number.isFinite(candidate.liquidityUsd) || candidate.liquidityUsd < 50_000) reasons.push("Likvidita je nižší než 50 000 USD nebo ji nelze ověřit.");
+  if (!Number.isFinite(candidate.volume5mUsd) || candidate.volume5mUsd < 1_000) reasons.push("Objem za 5 minut je nižší než 1 000 USD nebo chybí.");
+  return reasons;
 }
 
 export function riskRejection(report: SolanaRiskReport, mint: string, now: number): string | null {
-  if (report.mint !== mint || !recent(report.observedAt, now, 120_000)) return "Rizikový report neodpovídá tokenu nebo je zastaralý.";
-  if (report.mintAuthorityRevoked !== true) return "Mint authority není prokazatelně odebraná.";
-  if (report.freezeAuthorityRevoked !== true) return "Freeze authority není prokazatelně odebraná.";
-  if (report.tokenProgram !== SOLANA_TOKEN_PROGRAM) return "Tokenový program není v pilotu povolený.";
-  if (report.topHolderPct === null || !Number.isFinite(report.topHolderPct) || report.topHolderPct < 0 || report.topHolderPct > 20) return "Koncentrace držitelů není ověřená nebo překračuje 20 %.";
-  if (report.liquidityLockedPct === null || !Number.isFinite(report.liquidityLockedPct) || report.liquidityLockedPct < 95 || report.liquidityLockedPct > 100) return "Není doložené uzamčení alespoň 95 % likvidity.";
-  if (!Array.isArray(report.risks) || report.risks.some((risk) => risk.level.toLowerCase() !== "info")) return "RugCheck obsahuje varování, nebezpečí nebo neznámé kontroly.";
-  return null;
+  return riskRejections(report, mint, now)[0] ?? null;
+}
+
+export function riskRejections(report: SolanaRiskReport, mint: string, now: number): string[] {
+  const reasons: string[] = [];
+  if (report.mint !== mint || !recent(report.observedAt, now, 120_000)) reasons.push("Rizikový report neodpovídá tokenu nebo je zastaralý.");
+  if (report.mintAuthorityRevoked !== true) reasons.push("Mint authority není prokazatelně odebraná.");
+  if (report.freezeAuthorityRevoked !== true) reasons.push("Freeze authority není prokazatelně odebraná.");
+  if (report.tokenProgram !== SOLANA_TOKEN_PROGRAM) reasons.push("Tokenový program není v pilotu povolený.");
+  if (report.topHolderPct === null || !Number.isFinite(report.topHolderPct) || report.topHolderPct < 0 || report.topHolderPct > 20) reasons.push("Koncentrace držitelů není ověřená nebo překračuje 20 %.");
+  if (report.liquidityLockedPct === null || !Number.isFinite(report.liquidityLockedPct) || report.liquidityLockedPct < 95 || report.liquidityLockedPct > 100) reasons.push("Není doložené uzamčení alespoň 95 % likvidity.");
+  if (!Array.isArray(report.risks)) reasons.push("RugCheck obsahuje varování, nebezpečí nebo neznámé kontroly.");
+  else for (const risk of report.risks) if (risk.level.toLowerCase() !== "info") reasons.push(`RugCheck (${risk.level}): ${risk.name}`);
+  return [...new Set(reasons)];
 }
 
 export function conservativeQuoteAmount(quote: SolanaQuote, inputMint: string, outputMint: string, amount: string, now: number): bigint {
@@ -88,8 +102,9 @@ function usdcMicros(amount: bigint) {
 
 export class SolanaPaperEngine {
   readonly store: SolanaPaperStore;
+  readonly watchlist: SolanaWatchlist;
   private readonly runtimes = new Map<string, SolanaRuntime>();
-  constructor(db: OceanDatabase, readonly provider: SolanaMarketProvider, readonly now: () => number = Date.now) { this.store = new SolanaPaperStore(db); }
+  constructor(db: OceanDatabase, readonly provider: SolanaMarketProvider, readonly now: () => number = Date.now) { this.store = new SolanaPaperStore(db); this.watchlist = new SolanaWatchlist(db); }
 
   runtime(userId: string): SolanaRuntime {
     return this.runtimes.get(userId) ?? { running: false, cycleId: null, stage: null, mint: null, symbol: null, detail: "Žádný cyklus právě neběží.", startedAt: null, updatedAt: null };
@@ -121,12 +136,22 @@ export class SolanaPaperEngine {
     const realized = db.prepare("SELECT COALESCE(SUM(proceeds_micros-cost_micros-entry_fee_micros),0) AS pnl FROM solana_paper_positions WHERE user_id=? AND closed_at IS NOT NULL").get(userId) as { pnl: number };
     const trades = compact ? [] : db.prepare("SELECT id,position_id,side,token_amount,gross_micros,network_fee_micros,occurred_at FROM solana_paper_trades WHERE user_id=? ORDER BY occurred_at DESC,id DESC LIMIT 30").all(userId) as { id: string; position_id: string; side: string; token_amount: string; gross_micros: number; network_fee_micros: number; occurred_at: number }[];
     const cycle = db.prepare("SELECT id,started_at,completed_at,status FROM solana_paper_cycles WHERE user_id=? ORDER BY started_at DESC,id DESC LIMIT 1").get(userId) as { id: string; started_at: number; completed_at: number | null; status: string } | undefined;
+    const candidates = this.store.candidates(userId);
+    const details = this.store.scanDetails(userId);
+    const watched = this.watchlist.stats(userId, now);
+    const rejectionCounts = new Map<string, number>();
+    for (const candidate of candidates.filter((candidate) => candidate.status === "blocked")) {
+      for (const reason of new Set(candidate.reasons?.length ? candidate.reasons : [candidate.reason])) rejectionCounts.set(reason, (rejectionCounts.get(reason) ?? 0) + 1);
+    }
     return {
       mode: "PAPER" as const, initialUsdc: money(account.initial_micros), cashUsdc: money(account.cash_micros),
       equityUsdc: allPriced ? money(account.cash_micros + markedTotalMicros) : null,
       realizedPnlUsdc: money(realized.pnl), unrealizedPnlUsdc: allPriced ? money(markedTotalMicros - positions.reduce((sum, position) => sum + position.cost_micros + position.entry_fee_micros, 0)) : null,
       limits: SOLANA_PAPER_LIMITS, stages, positions: marked,
-      runtime: this.runtime(userId), counters: this.store.counters(userId), equityHistory: this.store.equityHistory(userId), candidates: this.store.candidates(userId).sort((a, b) => {
+      runtime: this.runtime(userId), counters: this.store.counters(userId), equityHistory: this.store.equityHistory(userId),
+      diagnostics: { policyVersion: typeof details.policyVersion === "string" ? details.policyVersion : cycle ? "legacy" : SOLANA_PAPER_POLICY_VERSION, inspectedTokens: candidates.length, rejectedTokens: candidates.filter((candidate) => candidate.status === "blocked").length, rejectionCounts: [...rejectionCounts].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason)) },
+      watchlist: { trackedPools: watched.poolCount, trackedTokens: watched.mintCount, refreshedPools: typeof details.refreshedPools === "number" ? details.refreshedPools : 0, refreshErrors: typeof details.refreshErrors === "number" ? details.refreshErrors : 0, lastError: typeof details.lastError === "string" ? details.lastError : null },
+      candidates: candidates.sort((a, b) => {
         const rank = { checking: 0, bought: 1, passed: 2, eligible: 3, blocked: 4 };
         return rank[a.status] - rank[b.status];
       }).slice(0, 20),
@@ -176,6 +201,52 @@ export class SolanaPaperEngine {
     }
   }
 
+  private async scanCandidates(userId: string, cycleId: string, authorize: () => boolean) {
+    const details: Evidence = { policyVersion: SOLANA_PAPER_POLICY_VERSION, discoveredPools: 0, requestedPools: 0, refreshedPools: 0, refreshErrors: 0, lastError: null };
+    this.store.recordScanDetails(userId, cycleId, details);
+    this.progress(userId, cycleId, "scanner", "Hledám nové pooly a připravuji obnovu těch sledovaných.", authorize);
+    let discovered: SolanaCandidate[] = [];
+    let discoveryError: string | null = null;
+    try { discovered = (await this.provider.scan()).slice(0, 60); }
+    catch (error) { discoveryError = error instanceof Error ? error.message : "Nové pooly nejsou dostupné."; }
+    this.assertAuthorized(authorize, userId, cycleId);
+    this.watchlist.remember(userId, discovered, this.now());
+    const due = this.provider.refreshPools ? this.watchlist.due(userId, this.now(), discovered.map((candidate) => candidate.poolAddress), 20) : [];
+    const requested = due.map((pool) => pool.poolAddress);
+    let refreshed: SolanaCandidate[] = [];
+    let refreshError: string | null = null;
+    details.discoveredPools = discovered.length;
+    details.requestedPools = requested.length;
+    this.store.recordScanDetails(userId, cycleId, details);
+    if (requested.length) {
+      this.progress(userId, cycleId, "scanner", `Obnovuji čerstvá data ${requested.length} sledovaných poolů.`, authorize);
+      try {
+        const received = await this.provider.refreshPools!(requested);
+        this.assertAuthorized(authorize, userId, cycleId);
+        refreshed = this.watchlist.refreshed(userId, requested, received, this.now()).map((candidate) => ({ ...candidate, evidence: { ...candidate.evidence, discovery: "watched_pool_refresh" } }));
+        if (refreshed.length < requested.length) refreshError = `U ${requested.length - refreshed.length} sledovaných poolů chybí čerstvá ověřitelná data; v tomto kole se nepoužijí.`;
+      } catch (error) {
+        this.assertAuthorized(authorize, userId, cycleId);
+        this.watchlist.refreshed(userId, requested, [], this.now());
+        refreshError = error instanceof Error ? error.message : "Sledované pooly se nepodařilo obnovit.";
+      }
+    }
+    details.refreshedPools = refreshed.length;
+    details.refreshErrors = requested.length - refreshed.length;
+    details.lastError = [discoveryError, refreshError].filter(Boolean).join(" ") || null;
+    this.store.recordScanDetails(userId, cycleId, details);
+    if (details.lastError) this.event(userId, cycleId, "scanner", "error", null, String(details.lastError), { scan: details }, authorize);
+    if (!discovered.length && !refreshed.length && (discoveryError || refreshError)) throw new Error(discoveryError || refreshError!);
+    const byMint = new Map<string, SolanaCandidate>();
+    for (const candidate of [...discovered, ...refreshed]) {
+      const previous = byMint.get(candidate.mint);
+      const eligible = candidateRejection(candidate, this.now()) === null;
+      const previousEligible = previous && candidateRejection(previous, this.now()) === null;
+      if (!previous || (eligible && !previousEligible) || (eligible === Boolean(previousEligible) && previous.liquidityUsd < candidate.liquidityUsd)) byMint.set(candidate.mint, candidate);
+    }
+    return [...byMint.values()].sort((a, b) => b.liquidityUsd - a.liquidityUsd).slice(0, 80);
+  }
+
   async cycle(userId: string, authorize: () => boolean, closePositionId?: string, options: { allowEntry?: () => boolean } = {}) {
     if (!authorize()) throw new Error("Přístup už není platný.");
     const cycleId = this.store.acquire(userId, this.now());
@@ -187,19 +258,18 @@ export class SolanaPaperEngine {
         if (!await this.refreshPosition(userId, cycleId, position, authorize, true)) throw new Error("PAPER pozici se nepodařilo uzavřít; zůstává otevřená.");
       } else {
         for (const position of positions) await this.refreshPosition(userId, cycleId, position, authorize, false);
-        this.progress(userId, cycleId, "scanner", "Načítám aktuální Solana pooly z GeckoTerminalu (stránky 1, 5 a 10).", authorize);
-        const scanned = await this.provider.scan();
+        const candidates = await this.scanCandidates(userId, cycleId, authorize);
         this.assertAuthorized(authorize, userId, cycleId);
-        const candidates = [...new Map(scanned.slice(0, 60).map((candidate) => [candidate.mint, candidate])).values()];
         const selectionTime = this.now();
         const summaries: SolanaCandidateSummary[] = candidates.map((candidate) => {
-          const rejection = candidateRejection(candidate, selectionTime) ?? (this.store.everTraded(userId, candidate.mint) ? "Token už byl v pilotu obchodovaný; opakovaný vstup je zakázaný." : null);
-          return { mint: candidate.mint, symbol: candidate.symbol, liquidityUsd: candidate.liquidityUsd, volume5mUsd: candidate.volume5mUsd, observedAt: candidate.observedAt, status: rejection ? "blocked" : "eligible", reason: rejection ?? "Základní limity poolu splněné; čeká na rizikový předvýběr." };
+          const reasons = candidateRejections(candidate, selectionTime);
+          if (this.store.everTraded(userId, candidate.mint)) reasons.push("Token už byl v pilotu obchodovaný; opakovaný vstup je zakázaný.");
+          return { mint: candidate.mint, symbol: candidate.symbol, liquidityUsd: candidate.liquidityUsd, volume5mUsd: candidate.volume5mUsd, observedAt: candidate.observedAt, source: candidate.evidence.discovery === "watched_pool_refresh" ? "watchlist" : "discovery", status: reasons.length ? "blocked" : "eligible", reason: reasons[0] ?? "Základní limity poolu splněné; čeká na rizikový předvýběr.", reasons };
         });
-        const updateCandidate = (mint: string, status: SolanaCandidateSummary["status"], reason: string) => {
+        const updateCandidate = (mint: string, status: SolanaCandidateSummary["status"], reason: string | string[]) => {
           this.assertAuthorized(authorize, userId, cycleId);
           const item = summaries.find((candidate) => candidate.mint === mint);
-          if (item) { item.status = status; item.reason = reason; }
+          if (item) { item.status = status; item.reason = typeof reason === "string" ? reason : reason[0] ?? "Kontroly prošly."; item.reasons = status === "blocked" ? typeof reason === "string" ? [reason] : reason : []; }
           this.store.recordCandidates(userId, cycleId, summaries);
         };
         const paused = (candidate: SolanaCandidate, stage: SolanaStage["id"]) => {
@@ -210,15 +280,17 @@ export class SolanaPaperEngine {
           return true;
         };
         this.store.recordCandidates(userId, cycleId, summaries);
-        const eligible = candidates.filter((candidate) => candidateRejection(candidate, selectionTime) === null && !this.store.everTraded(userId, candidate.mint));
-        // Preserve provider liquidity order within eligible pools, then retain rejected pools as auditable fallbacks.
+        const lastRiskChecks = this.store.lastRiskChecks(userId);
+        const eligible = candidates.filter((candidate) => candidateRejection(candidate, selectionTime) === null && !this.store.everTraded(userId, candidate.mint))
+          .sort((a, b) => (lastRiskChecks.get(a.mint) ?? 0) - (lastRiskChecks.get(b.mint) ?? 0) || b.liquidityUsd - a.liquidityUsd || a.mint.localeCompare(b.mint));
+        // Rotate the bounded risk budget so permanently rejected popular tokens cannot starve the watchlist.
         const selectedMints = new Set<string>();
         const selected = [...eligible, ...candidates].filter((candidate) => {
           if (selectedMints.has(candidate.mint)) return false;
           selectedMints.add(candidate.mint);
           return true;
         }).slice(0, 5);
-        this.event(userId, cycleId, "scanner", "ok", null, `Scanner načetl ${candidates.length} nových poolů; předvýběr upřednostnil dosud neobchodované tokeny v základních limitech. Rizikové kontroly mají rozpočet nejvýše 5 kandidátů.`, { source: "indexed-pool-polling", candidateCount: candidates.length, eligiblePoolCount: eligible.length, selectedCount: selected.length }, authorize);
+        this.event(userId, cycleId, "scanner", "ok", null, `Scanner vyhodnocuje ${candidates.length} různých tokenů z nových i sledovaných poolů. Rizikové kontroly mají rozpočet nejvýše 5 kandidátů.`, { source: "discovery_and_refreshed_watchlist", policyVersion: SOLANA_PAPER_POLICY_VERSION, candidateCount: candidates.length, eligiblePoolCount: eligible.length, selectedCount: selected.length, scan: this.store.scanDetails(userId) }, authorize);
         for (const candidate of summaries.slice(0, 20)) this.event(userId, cycleId, "scanner", candidate.status === "blocked" ? "blocked" : "ok", candidate.mint, `${candidate.symbol}: ${candidate.reason}`, { candidate, discovery: true }, authorize);
         const seen = new Set<string>();
         for (const candidate of selected) {
@@ -232,8 +304,8 @@ export class SolanaPaperEngine {
             continue;
           }
           seen.add(candidate.mint);
-          const rejection = candidateRejection(candidate, this.now());
-          if (rejection) { updateCandidate(candidate.mint, "blocked", rejection); this.event(userId, cycleId, "scanner", "blocked", candidate.mint, rejection, { candidate }, authorize); continue; }
+          const rejections = candidateRejections(candidate, this.now());
+          if (rejections.length) { updateCandidate(candidate.mint, "blocked", rejections); this.event(userId, cycleId, "scanner", "blocked", candidate.mint, rejections.join(" "), { candidate, rejections }, authorize); continue; }
           let currentStage: SolanaStage["id"] = "rug-check";
           const partialEvidence: Evidence = { candidate };
           try {
@@ -243,10 +315,10 @@ export class SolanaPaperEngine {
             const risk = await this.provider.risk(candidate.mint);
             this.assertAuthorized(authorize, userId, cycleId);
             partialEvidence.risk = risk;
-            const rejected = riskRejection(risk, candidate.mint, this.now());
-            this.event(userId, cycleId, "rug-check", rejected ? "blocked" : "ok", candidate.mint, rejected ?? "Dostupné rizikové kontroly prošly; nejde o záruku bezpečnosti tokenu.", { candidate, risk }, authorize);
-            updateCandidate(candidate.mint, rejected ? "blocked" : "passed", rejected ?? "Rizikové kontroly prošly; čeká na velikost a obousměrnou kotaci.");
-            if (rejected) continue;
+            const rejected = [...candidateRejections(candidate, this.now()), ...riskRejections(risk, candidate.mint, this.now())];
+            this.event(userId, cycleId, "rug-check", rejected.length ? "blocked" : "ok", candidate.mint, rejected.length ? rejected.join(" ") : "Dostupné rizikové kontroly prošly; nejde o záruku bezpečnosti tokenu.", { candidate, risk, rejections: rejected }, authorize);
+            updateCandidate(candidate.mint, rejected.length ? "blocked" : "passed", rejected.length ? rejected : "Rizikové kontroly prošly; čeká na velikost a obousměrnou kotaci.");
+            if (rejected.length) continue;
             if (paused(candidate, "rug-check")) break;
             currentStage = "sizer";
             const open = this.store.positions(userId);

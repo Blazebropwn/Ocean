@@ -20,8 +20,8 @@
       <div class="solana-wallet" aria-label="Zkušební účet v USDC"><div><span>Hodnota účtu</span><strong data-solana="equity">—</strong><small>virtuální USDC</small></div><div><span>K dispozici</span><strong data-solana="cash">—</strong><small data-solana="positions-count">0 otevřených obchodů</small></div><div><span>Celkový výsledek</span><strong data-solana="pnl">—</strong><small data-solana="trades-count">0 zkušebních obchodů</small></div></div>
       <div class="solana-controls"><div class="solana-engine-state"><span class="solana-signal" aria-hidden="true"></span><div><strong data-solana="engine-status">Načítám</strong><small data-solana="countdown">Čekám na spojení</small></div></div><button type="button" class="solana-start" data-solana="toggle" disabled>Spustit sledování</button></div>
       <p class="solana-feedback" data-solana="feedback" role="status"></p>
-      <section class="solana-story" aria-label="Co se právě děje"><div class="solana-progress-summary"><div><h3 data-solana="story-title">Připraveno na první příležitost</h3><p data-solana="story-text">Spusť sledování a podívej se, co se na trhu děje.</p></div><small data-solana="last-check">První kontrola čeká na spuštění</small></div><div class="solana-pipeline" aria-label="Průběh skutečných kontrol"></div><div class="solana-progress-meta"><span data-solana="pipeline-caption">Postup vyhodnocení</span><div class="solana-counters"><span><b data-solana="pools-count">0</b> kontrol trhu</span><span><b data-solana="risk-count">0</b> prověření rizik</span><span><b data-solana="cycles-count">0</b> kontrolních kol</span></div></div></section>
-      <div class="solana-stream-grid"><section class="solana-stream"><header><div><h3>Objevené tokeny</h3><p>Co jsme právě prověřovali</p></div><span data-solana="feed-count">Čeká na data</span></header><div data-solana="candidates" class="solana-candidates"></div></section><section class="solana-open-positions"><header><h3>Tvé zkušební obchody</h3><button type="button" class="solana-text-button" data-solana-open="ledger">Historie →</button></header><div data-solana="positions"></div><div class="solana-equity-history"><span>Vývoj účtu</span><div data-solana="chart"></div></div></section><section class="solana-live-activity"><header><div><h3>Právě se děje</h3><p>Poslední skutečné události</p></div><button type="button" class="solana-text-button" data-solana-open="activity">Vše →</button></header><div class="solana-live-tail"><div data-solana="tail"></div></div></section></div>
+      <section class="solana-story" aria-label="Co se právě děje"><div class="solana-progress-summary"><div><h3 data-solana="story-title">Připraveno na první příležitost</h3><p data-solana="story-text">Spusť sledování a podívej se, co se na trhu děje.</p></div><small data-solana="last-check">První kontrola čeká na spuštění</small></div><div class="solana-pipeline" aria-label="Průběh skutečných kontrol"></div><div class="solana-progress-meta"><div class="solana-progress-notes"><span data-solana="pipeline-caption">Postup vyhodnocení</span><span data-solana="cycle-summary" hidden></span></div><div class="solana-counters"><span title="Součet kontrol včetně opakovaného prověření stejných tokenů"><b data-solana="pools-count">0</b> kontrol celkem</span><span><b data-solana="risk-count">0</b> prověření rizik</span><span><b data-solana="cycles-count">0</b> kontrolních kol</span></div></div></section>
+      <div class="solana-stream-grid"><section class="solana-stream"><header><div><h3>Objevené tokeny</h3><p data-solana="watch-summary">Co jsme právě prověřovali</p></div><span data-solana="feed-count">Čeká na data</span></header><div data-solana="candidates" class="solana-candidates"></div></section><section class="solana-open-positions"><header><h3>Tvé zkušební obchody</h3><button type="button" class="solana-text-button" data-solana-open="ledger">Historie →</button></header><div data-solana="positions"></div><div class="solana-equity-history"><span>Vývoj účtu</span><div data-solana="chart"></div></div></section><section class="solana-live-activity"><header><div><h3>Právě se děje</h3><p>Poslední skutečné události</p></div><button type="button" class="solana-text-button" data-solana-open="activity">Vše →</button></header><div class="solana-live-tail"><div data-solana="tail"></div></div></section></div>
       <footer class="solana-bottom"><span>Virtuální peníze · skutečná tržní data</span><span data-solana="contact">Čekám na spojení</span></footer>
       <dialog class="solana-dialog" data-solana-dialog="candidate" aria-label="Podrobnosti tokenu"><header><h2 data-solana="candidate-title">Detail tokenu</h2><button type="button" data-solana-close aria-label="Zavřít">×</button></header><div class="solana-dialog-body" data-solana="candidate-detail"></div></dialog>
       <dialog class="solana-dialog" data-solana-dialog="rules" aria-label="Pravidla Solana pilotu"><header><h2>Pravidla sledování</h2><button type="button" data-solana-close aria-label="Zavřít">×</button></header><div class="solana-dialog-body"><p>Začínáš se 100 virtuálními USDC. <b>Spustit sledování</b> zapne kontroly přibližně každou minutu. Běží i po zavření prohlížeče.</p><p><b>Pozastavit</b> zastaví další hledání, přecenění i výstupy. Rozpracovaná kontrola může dokončit již zahájené ocenění či výstup; nové automatické nákupy se zablokují.</p><dl data-solana="rules-list"></dl><p>Token musí projít všemi pravidly a musí existovat nákupní i zpětná prodejní kotace. Neúplná data nebo nedostupná trasa znamenají vynechání. Při neověřené prodejní ceně zůstává obchod otevřený a aktuální výsledek se nezobrazuje.</p><p>Jde o simulaci. Zahrnuje rezervu na skluz a model síťových nákladů, které se mohou od skutečného obchodu lišit. Splnění kontrol ani report třetí strany nezaručují bezpečnost tokenu nebo výnos.</p><p>Zdroje: <a href="https://www.geckoterminal.com/" target="_blank" rel="noopener noreferrer">GeckoTerminal</a>, <a href="https://rugcheck.xyz/" target="_blank" rel="noopener noreferrer">RugCheck</a> a <a href="https://developers.jup.ag/docs/swap/order-and-execute" target="_blank" rel="noopener noreferrer">Jupiter</a>.</p></div></dialog>
@@ -112,14 +112,27 @@
     return 'Zatím nesplnil podmínky pro nákup.';
   }
 
+  function candidateReasons(candidate) {
+    const reasons=Array.isArray(candidate.reasons)?candidate.reasons.filter(reason=>typeof reason==='string'&&reason.trim()):[];
+    if(!reasons.length&&candidate.reason)reasons.push(candidate.reason);
+    return [...new Set(reasons)];
+  }
+
   function showCandidate(candidate) {
     $('[data-solana="candidate-title"]').textContent=candidate.symbol||'Detail tokenu';
     const detail=$('[data-solana="candidate-detail"]');detail.replaceChildren();
     detail.append(node('p',simpleReason(candidate),'solana-candidate-explanation'));
+    const reasons=candidateReasons(candidate);
+    if(reasons.length){
+      detail.append(node('h3',candidate.status==='blocked'?(Array.isArray(candidate.reasons)?'Všechny důvody vynechání':'Uložený důvod vynechání'):'Výsledek poslední kontroly'));
+      const list=node('ul',undefined,'solana-reasons');
+      for(const reason of reasons)list.append(node('li',reason));
+      detail.append(list);
+    }
     const values=node('dl');
-    for(const [label,value] of [['Prostředky na trhu',`${shortMoney(candidate.liquidityUsd)} USD`],['Objem obchodů za 5 minut',`${shortMoney(candidate.volume5mUsd)} USD`],['Načteno',time(candidate.observedAt)]]){const row=node('div');row.append(node('dt',label),node('dd',value));values.append(row);}
+    for(const [label,value] of [['Prostředky na trhu',`${shortMoney(candidate.liquidityUsd)} USD`],['Objem obchodů za 5 minut',`${shortMoney(candidate.volume5mUsd)} USD`],['Načteno',time(candidate.observedAt)],['Odkud token známe',candidate.source==='watchlist'?'Dříve nalezený trh, znovu prověřený':candidate.source==='discovery'?'Nově objevený trh':'Poslední uložená kontrola']]){const row=node('div');row.append(node('dt',label),node('dd',value));values.append(row);}
     detail.append(values);
-    const technical=node('details',undefined,'solana-evidence');technical.append(node('summary','Podrobné odůvodnění'),node('p',candidate.reason||'Čeká na dokončení kontroly.'),node('small',`Adresa tokenu: ${candidate.mint}`));detail.append(technical);
+    const technical=node('details',undefined,'solana-evidence');technical.append(node('summary','Technické údaje'),node('small',`Adresa tokenu: ${candidate.mint}`));detail.append(technical);
     $('[data-solana-dialog="candidate"]').showModal();
   }
 
@@ -133,11 +146,16 @@
     $('[data-solana="feed-count"]').textContent=candidates.length?`${candidates.length} posledních nálezů`:'Čeká na data';
     const signatures=new Map();
     for(const candidate of candidates.slice(0,20)){
-      const signature=[candidate.observedAt,candidate.status,candidate.reason].join('|');signatures.set(candidate.mint,signature);
+      const reasons=candidateReasons(candidate);
+      const signature=[candidate.observedAt,candidate.status,...reasons].join('|');signatures.set(candidate.mint,signature);
       const row=node('button',undefined,'solana-candidate');row.type='button';row.setAttribute('aria-label',`Podrobnosti tokenu ${candidate.symbol||candidate.mint.slice(0,8)}`);row.addEventListener('click',()=>showCandidate(candidate));
       if(candidateSignatures.size&&candidateSignatures.get(candidate.mint)!==signature)row.classList.add('is-new');
       const avatar=node('span',(candidate.symbol||'?').replace(/[^a-z0-9]/ig,'').slice(0,2).toUpperCase()||'◎','solana-token-avatar');avatar.setAttribute('aria-hidden','true');
       const identity=node('span',undefined,'solana-candidate-name');identity.append(node('b',candidate.symbol||candidate.mint.slice(0,8)),node('small',simpleReason(candidate)));
+      const context=[];
+      if(candidate.status==='blocked'&&reasons.length>1)context.push(`${reasons.length} ${reasons.length<5?'důvody':'důvodů'} vynechání`);
+      if(candidate.source==='watchlist')context.push('Znovu prověřeno');
+      if(context.length)identity.append(node('small',context.join(' · '),'solana-candidate-context'));
       const result=node('div',undefined,'solana-candidate-result');result.dataset.result=candidate.status;
       const resultNames={eligible:'Ve výběru',blocked:'Vynecháno',checking:'Prověřujeme',passed:'Prověřeno',bought:'Zkušební nákup'};
       result.append(node('span',resultNames[candidate.status]||'Zjištěno'),node('small','Podrobnosti ›'));
@@ -146,6 +164,22 @@
     candidateSignatures=signatures;
     if(!candidates.length)feed.append(node('p','Po první kontrole tu uvidíš objevené tokeny a výsledek jejich prověření.','solana-empty'));
     feed.scrollTop=scroll;
+  }
+
+  function renderDiagnostics() {
+    const diagnostics=data.diagnostics;
+    root.dataset.diagnostics=String(Boolean(diagnostics));
+    const summary=$('[data-solana="cycle-summary"]');summary.hidden=!diagnostics;
+    if(diagnostics){
+      summary.textContent=`${diagnostics.policyVersion==='legacy'?'Starší kolo':'Poslední kolo'}: ${diagnostics.inspectedTokens} různých tokenů · ${diagnostics.rejectedTokens} vynecháno`;
+      summary.title=(diagnostics.rejectionCounts||[]).map(entry=>`${entry.count}× ${entry.reason}`).join('\n');
+    }
+    const watch=$('[data-solana="watch-summary"]'),stats=data.watchlist;
+    watch.classList.toggle('solana-watch-summary',Boolean(stats));
+    const errorWord=stats?.refreshErrors===1?'chyba':stats?.refreshErrors<5?'chyby':'chyb';
+    watch.textContent=stats?`${stats.lastError?'Část dat chybí · ':''}Sledujeme ${stats.trackedPools} trhů · obnoveno ${stats.refreshedPools}${stats.refreshErrors?` · ${stats.refreshErrors} ${errorWord}`:''}`:'Co jsme právě prověřovali';
+    watch.dataset.error=String(Boolean(stats?.refreshErrors||stats?.lastError));
+    watch.title=stats?`${stats.trackedTokens} různých tokenů v průběžném sledování. Obnovení a chyby se vztahují k poslednímu kolu.${stats.lastError?` Poslední chyba: ${stats.lastError}`:''}`:'';
   }
 
   function renderPositions() {
@@ -161,6 +195,18 @@
 
   function renderActivity() {
     const container=$('[data-solana="activity"]');container.replaceChildren();
+    if(data.diagnostics){
+      const diagnostics=data.diagnostics;
+      const summary=node('section',undefined,'solana-cycle-diagnostics');summary.dataset.solana='cycle-rejections';
+      summary.append(node('h3','Důvody vynechání v posledním kole'),node('p',`${diagnostics.inspectedTokens} různých tokenů prověřeno · ${diagnostics.rejectedTokens} vynecháno.`));
+      if(diagnostics.policyVersion==='legacy')summary.append(node('p','Starší záznamy obsahují jen první uložený důvod. Nové kontroly uvádějí všechny.'));
+      if(diagnostics.rejectionCounts?.length){
+        const list=node('ul',undefined,'solana-reasons');
+        for(const entry of diagnostics.rejectionCounts)list.append(node('li',`${entry.count}× ${entry.reason}`));
+        summary.append(list,node('small','Jeden token může mít více důvodů. Tyto počty se proto mohou překrývat.'));
+      }
+      container.append(summary);
+    }
     if(!data.decisions?.length)container.append(node('p','Po prvním skenu zde budou skutečné události krok za krokem.','solana-empty'));
     for(const event of data.decisions||[]){const row=node('article',undefined,'solana-event');row.append(node('time',time(event.occurredAt)),node('b',labels[event.stage]||event.stage),node('p',event.reason));container.append(row);}
   }
@@ -193,7 +239,7 @@
 
   function render(dataPart) {
     if(data?.asOf&&dataPart.asOf&&Date.parse(dataPart.asOf)<Date.parse(data.asOf))return;
-    data={...data,...dataPart};
+    data={...data,...dataPart,diagnostics:dataPart.diagnostics,watchlist:dataPart.watchlist};
     $('[data-solana="equity"]').textContent=money(data.equityUsdc);
     $('[data-solana="equity"]').title=data.equityUsdc===null?'Chybí čerstvá prodejní kotace; zkus další sken.':'Konzervativní model prodejní hodnoty';
     $('[data-solana="cash"]').textContent=money(data.cashUsdc);
@@ -209,7 +255,7 @@
     }
     $('[data-solana="pipeline-caption"]').textContent=data.runtime?.running?'Právě probíhá':data.lastCycle?'Průběh poslední kontroly':'Postup vyhodnocení';
     for(const [target,key] of [['pools-count','poolsSeen'],['risk-count','riskChecked'],['cycles-count','cycles']])$(`[data-solana="${target}"]`).textContent=String(data.counters?.[key]||0);
-    renderCandidates();renderPositions();renderTail();renderChart();
+    renderCandidates();renderDiagnostics();renderPositions();renderTail();renderChart();
     if($('[data-solana-dialog="activity"]').open)renderActivity();
     clock();
   }
@@ -233,7 +279,7 @@
   function rules() {
     const list=$('[data-solana="rules-list"]');list.replaceChildren();if(!data)return;
     const l=data.limits;
-    const values=[['Virtuální začátek',`${money(data.initialUsdc)} USDC`],['Jedna pozice / vložený kapitál',`${money(l.maxPositionUsdc)} / ${money(l.maxExposureUsdc)} USDC`],['Likvidita / objem za 5 min',`${shortMoney(l.minLiquidityUsd)} / ${shortMoney(l.minVolume5mUsd)} USD`],['Stáří poolu','5 minut až 24 hodin'],['Mint / freeze authority','Odvolané'],['Největší držitel / uzamčení',`≤ ${l.maxHolderPct} % / ≥ ${l.minLiquidityLockedPct} %`],['Výstup při skenu',`−${l.stopLossPct} % / +${l.takeProfitPct} % / ${l.maxHoldingMinutes} min`],['Brzdy za posledních 24 h',`${l.maxDailyEntries} vstupů / ${l.maxDailyLossUsdc} USDC realizovaných ztrát`],['Model skluzu / síťového nákladu',`${l.slippageBps/100} % / ${money(l.networkFeeUsdc)} USDC na stranu`]];
+    const values=[['Virtuální začátek',`${money(data.initialUsdc)} USDC`],['Jedna pozice / vložený kapitál',`${money(l.maxPositionUsdc)} / ${money(l.maxExposureUsdc)} USDC`],['Likvidita / objem za 5 min',`${shortMoney(l.minLiquidityUsd)} / ${shortMoney(l.minVolume5mUsd)} USD`],['Stáří poolu','5 minut až 24 hodin'],['Mint / freeze authority','Odvolané'],['Největší držitel / uzamčení',`≤ ${l.maxHolderPct} % / ≥ ${l.minLiquidityLockedPct} %`],['Rezervy obchodního poolu','Z držitelů vyjímáme jen ověřené účty rezerv PumpSwap. Neověřené účty se započítávají.'],['Výstup při skenu',`−${l.stopLossPct} % / +${l.takeProfitPct} % / ${l.maxHoldingMinutes} min`],['Brzdy za posledních 24 h',`${l.maxDailyEntries} vstupů / ${l.maxDailyLossUsdc} USDC realizovaných ztrát`],['Model skluzu / síťového nákladu',`${l.slippageBps/100} % / ${money(l.networkFeeUsdc)} USDC na stranu`]];
     for(const [key,value] of values){const row=node('div');row.append(node('dt',key),node('dd',value));list.append(row);}
   }
 

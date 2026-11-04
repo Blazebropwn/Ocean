@@ -46,6 +46,7 @@ export type SolanaQuote = {
 
 export interface SolanaMarketProvider {
   scan(): Promise<SolanaCandidate[]>;
+  refreshPools?(poolAddresses: readonly string[]): Promise<SolanaCandidate[]>;
   risk(mint: string): Promise<SolanaRiskReport>;
   quote(inputMint: string, outputMint: string, amount: string): Promise<SolanaQuote>;
 }
@@ -75,4 +76,6 @@ export type SolanaCandidateSummary = {
   observedAt: string;
   status: "eligible" | "blocked" | "checking" | "passed" | "bought";
   reason: string;
+  reasons?: string[];
+  source?: "discovery" | "watchlist";
 };

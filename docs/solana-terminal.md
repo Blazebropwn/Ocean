@@ -19,11 +19,25 @@ z GeckoTerminal, vybere nejvýše pět kandidátů, zkontroluje report RugCheck,
 určí velikost a vyžádá Jupiter nákupní i zpětnou prodejní kotaci pro konkrétní
 raw množství. Pokud všechny podmínky projdou, atomicky zapíše virtuální nákup.
 Neúplná data nebo chyba služby vedou k odmítnutí a důvod zůstane v evidenci.
-Feed používá pevný vzorek stránek 1, 5 a 10, nejvýše 60 různých mintů;
-nejde o úplný seznam nových poolů. Starší stránky umožňují dodržet minimální
-stáří pěti minut. Před limitem pěti podrobných kontrol mají přednost tokeny,
-které splňují základní limity a dosud nebyly obchodované. Jejich pořadí
-zůstává podle nahlášené likvidity. Výpadek kterékoliv stránky zneplatní sken.
+Objevování používá pevný vzorek stránek 1, 5 a 10, nejvýše 60 různých mintů;
+nejde o úplný seznam nových poolů. Pooly s likviditou alespoň 10 000 USD si
+pilot pamatuje v trvalém seznamu nejvýše 120 poolů, přednostně nad 50 000 USD.
+Tento seznam přežije restart; platnost končí 24 hodin po vytvoření poolu,
+nikoli po posledním objevení. Přijímací hranice 10 000 USD nemění nákupní
+minimum 50 000 USD ani minimální stáří pěti minut.
+
+Každé kolo obnoví nejvýše 20 dříve objevených poolů, které nejsou v čerstvém
+výběru. Fronta střídá nejdéle nekontrolované pooly. Obnovení přes pevný
+GeckoTerminal endpoint `pools/multi` musí vrátit nová data se stejnou adresou,
+mintem, přesností a časem vytvoření. Chybějící či stará data se nepoužijí;
+uložený seznam není zdrojem cen. Posuzuje se nejvýše 80 různých tokenů.
+Pokud má mint více poolů, přednost dostane pool splňující základní limity,
+potom vyšší likvidita. Pět podrobných kontrol se střídá podle nejstaršího
+rizikového prověření, aby opakovaně odmítané tokeny neblokovaly ostatní.
+
+Výpadek kterékoliv objevovací stránky zneplatní celý nový výběr. Čerstvě
+obnovené sledované pooly lze přesto vyhodnotit; UI výslovně označí chybějící
+část dat. Pokud žádný zdroj nevrátí použitelná data a nastala chyba, kolo selže.
 
 Šest karet představuje deterministické kroky, nikoli šest LLM modelů:
 
@@ -43,6 +57,11 @@ a 30 obchodů; databáze uchovává i starší záznamy. Lehký živý přehled 
 posledních 20 událostí bez plné evidence a 20 souhrnů kandidátů. Počítadla
 ukazují skutečné zahájené skeny, kontroly záznamů poolů (nikoli unikátní
 tokeny), spuštěné rizikové kontroly a simulované obchody.
+Souhrn posledního kola navíc ukazuje různé minty, všechny zjištěné důvody
+odmítnutí a stav obnovení sledovaných poolů. Důvody jednoho tokenu se mohou
+překrývat. Neprovedené pozdější kontroly se nevydávají za vyhodnocené.
+Pravidla kola jsou označená `paper-2026-11-04-v2`; starší záznamy zůstávají
+označené jako starší, protože obsahují jen první tehdy uložený důvod.
 
 ## Pevná pravidla pilotu
 
@@ -60,7 +79,7 @@ Zdroj hodnot: `SOLANA_PAPER_LIMITS` v `src/solana/engine.ts`.
 | Likvidita / objem za 5 minut | alespoň 50 000 / 1 000 USD |
 | Mint a freeze authority | explicitně odvolané; chybějící pole není `null` |
 | Program tokenu | původní SPL Token program; Token-2022 je odmítnutý |
-| Největší nahlášený držitel | nejvýše 20 %, konzervativně včetně vaultů poolů |
+| Největší nahlášený držitel | nejvýše 20 %, bez rezerv PumpSwap prokázaných na blockchainu; ostatní účty zůstávají započítané |
 | Uzamčení likvidity | nejméně 95 %, minimum napříč nahlášenými trhy tokenu |
 | Rizika RugCheck | žádné varování, nebezpečí ani neznámá kontrola |
 | Kotace | nejvýše 30 sekund, správný směr a množství, neexpirovaná |
@@ -95,9 +114,18 @@ Při výpadku kotace zůstává pozice otevřená. Zobrazovaná aktuální hodno
 pozice i celková equity jsou `null`, poslední známý mark je uchovaný odděleně.
 Nikdy se nenahradí pořizovací cenou ani automatickým prodejem za nulu.
 
-RugCheck poskytuje report třetí strany, nikoli vlastní audit řetězce. Ukládá
+RugCheck poskytuje report třetí strany. Ukládá
 se čas načtení reportu; `detectedAt` je čas detekce tokenu, nikoli potvrzení
 čerstvosti bezpečnostní kontroly. Zámek likvidity ani report nejsou zárukou.
+
+Výjimka pro rezervy poolu se ověřuje samostatným read-only RPC
+`getMultipleAccounts` na `https://api.mainnet-beta.solana.com`. Nestačí štítek
+AMM: musí souhlasit SPL účet, mint, autorita poolu, původní tokenový program,
+stav účtu bez externího delegáta a binární data skutečného PumpSwap poolu
+(oficiální program, discriminator, minty a přesná adresa příslušné rezervy).
+Nejvýše 20 párů / 40 účtů na report. Výpadek RPC nebo neúplný důkaz rezervu
+nevyřadí. Zbývající procenta se nepřepočítávají; bez zbývajících držitelů je
+koncentrace neznámá. Reportové varování a uzamčení likvidity se tím neruší.
 
 ## Přístup a provoz
 
@@ -148,8 +176,9 @@ Sken ani uzavření nepřijímají obchodní parametry; ovládání přijímá v
 boolean `enabled`. Žádný POST nepřijímá cenu, mint, částku, vlastníka ani režim. Žádný
 endpoint neumí LIVE. Modul nemá peněženku, podpisový klíč, signer, RPC
 odesílání ani volání Jupiter `/execute`. Nepoužívá Binance credentials.
-Všechny vnější požadavky jsou GET na pevné domény, s časovým a velikostním
-limitem; Jupiter požadavky jsou sériové a alespoň 2,1 sekundy od sebe.
+Tržní požadavky jsou GET na pevné domény; jediný externí POST je read-only
+RPC `getMultipleAccounts` s pevnou metodou a adresou. Všechny mají časový
+a velikostní limit; Jupiter požadavky jsou sériové a alespoň 2,1 sekundy od sebe.
 
 Zámek cyklu a cooldown jsou v SQLite, takže přežijí restart a brání dvojímu
 zápisu i ze dvou karet. Přerušený cyklus má pětiminutový lease, po kterém
@@ -158,10 +187,12 @@ Zápisy hotovosti, pozice, obchodu a auditní události jsou jedna transakce.
 
 Migrace 12 přidává pět tabulek `solana_paper_*`. Migrace 13 přidává tabulku
 ovládání automatu a do cyklů souhrny kandidátů, počítadla a ocenění.
+Migrace 14 přidává sledované pooly, verzi a podrobnosti posledního vyhledávání
+a index pro střídání rizikových kontrol.
 Záloha SQLite je již zahrnuje.
 Smazání uživatele kaskádově odstraní jeho pilotní data; reset Binance účtu
-je neodstraňuje. Po migraci nebude fungovat starý image se schématem 11/12.
-Bezpečné vypnutí je vyprázdnit pilotní ID a ponechat image s migrací 13;
+je neodstraňuje. Po migraci nebude fungovat starý image se schématem 11/12/13.
+Bezpečné vypnutí je vyprázdnit pilotní ID a ponechat image s migrací 14;
 při obnově starého image je nutná odpovídající záloha celé databáze.
 
 ## Zdroje a ověření
@@ -177,15 +208,18 @@ je ověřená deterministickými testy, nikoli vydávaná za skutečný on-chain
 - [GeckoTerminal API](https://api.geckoterminal.com/docs/index.html)
 - [RugCheck OpenAPI](https://api.rugcheck.xyz/swagger/doc.json)
 - [Jupiter: order bez takera vrací pouze kotaci](https://developers.jup.ag/docs/swap/order-and-execute)
+- [Solana: read-only getMultipleAccounts](https://solana.com/docs/rpc/http/getmultipleaccounts)
+- [PumpSwap: oficiální IDL poolu](https://github.com/pump-fun/pump-public-docs/blob/main/idl/pump_amm.json)
 
 Automatické testy v `test/solana*.test.ts` ověřují datové adaptéry, odmítnutí
 neúplných reportů, neprodejných tokenů a starých kotací, nečekané poplatky,
 účtování, souběh, perzistenci limitů a přístup jiného účtu.
 `test/browser/solana.mjs` ověřuje mobilní i desktopové rozměry, bezpečné
 zobrazení cizích tokenových textů, neověřenou equity, přístup a ruční akce.
-Při ověření dashboardu prošlo 289 TypeScript testů, 190 Python testů,
-restore drill s 34 tabulkami a browserové scénáře Home/Solana včetně plného
-radaru dvaceti tokenů. Po zpřístupnění pilotního účtu zůstává automat
+Testy pokrývají také ověřené i podvržené rezervy, návrat sledovaného poolu
+po opuštění seznamu novinek, zastaralé odpovědi, chybějící data a spravedlivé
+střídání prověřovaných tokenů. Browserové scénáře Home/Solana zahrnují plný
+radar dvaceti tokenů i mobilní rozměr 375 × 640. Po zpřístupnění pilotního účtu zůstává automat
 pozastavený do jeho výslovného spuštění.
 
 Další milník: sběr delší historie odmítnutých i přijatých kandidátů, audit

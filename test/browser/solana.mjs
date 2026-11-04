@@ -8,6 +8,9 @@ const now=()=>new Date().toISOString();
 let allowed=true,deny=false,polls=0;
 const mutations=[],errors=[];
 const state={mode:'PAPER',initialUsdc:100,cashUsdc:100,equityUsdc:100,positions:[],trades:[],asOf:now(),nextCycleAt:null,lastCycle:{id:'cycle',startedAt:now(),completedAt:now(),status:'completed'},limits:{maxOpenPositions:3,maxPositionUsdc:5,maxExposureUsdc:15,minLiquidityUsd:50000,minVolume5mUsd:1000,maxHolderPct:20,minLiquidityLockedPct:95,stopLossPct:10,takeProfitPct:20,maxHoldingMinutes:30,maxDailyEntries:10,maxDailyLossUsdc:5,slippageBps:100,networkFeeUsdc:.01},automation:{enabled:false,status:'paused',intervalSeconds:60,nextRunAt:null,lastError:null},runtime:{running:false,stage:null,startedAt:null,updatedAt:null},counters:{cycles:2,poolsSeen:60,riskChecked:1,rejected:59,trades:0},stages:['scanner','rug-check','sizer','executor','logger','equity'].map(id=>({id,status:id==='scanner'?'blocked':'idle',detail:'Token nesplnil limity.'})),candidates:[{mint,symbol:'<img src=x onerror=alert(1)>',liquidityUsd:22000,volume5mUsd:200,observedAt:now(),status:'blocked',reason:'Likvidita je nižší než 50 000 USD.'}],decisions:[{sequence:1,stage:'scanner',status:'blocked',reason:'<script>alert(1)</script> Likvidita je nízká.',occurredAt:now(),evidence:{raw:'999999999999999999'}}],equityHistory:[{at:now(),valueUsdc:100},{at:now(),valueUsdc:100}]};
+state.watchlist={trackedPools:45,trackedTokens:38,refreshedPools:18,refreshErrors:2,lastError:'<img src=x onerror=alert(2)> Chybí nová cena.'};
+state.diagnostics={policyVersion:'paper-2026-11-04-v2',inspectedTokens:20,rejectedTokens:20,rejectionCounts:[{reason:'Likvidita je nižší než 50 000 USD.',count:20},{reason:'<script>alert(2)</script> Objem za 5 minut je příliš nízký.',count:17}]};
+state.candidates[0].reasons=[state.candidates[0].reason,'<script>alert(2)</script> Objem za 5 minut je příliš nízký.'];state.candidates[0].source='watchlist';
 const browser=await chromium.launch({headless:true,executablePath:process.env.OCEAN_CHROMIUM_PATH,args:['--no-sandbox']});
 state.candidates.push(...Array.from({length:19},(_,index)=>({...state.candidates[0],mint:mint.slice(0,-2)+String(index+10),symbol:`TOKEN${index+1}`})));
 const page=await browser.newPage({viewport:{width:1440,height:900}});page.setDefaultTimeout(10000);page.on('pageerror',error=>errors.push(String(error)));
@@ -39,6 +42,12 @@ try{
  await page.goto('http://ocean.test/#solana');await page.locator('[data-solana="cash"]').filter({hasText:'100,00'}).waitFor();
  assert.equal(mutations.length,0,'opening the panel does not start automation');
  assert.equal(await page.locator('.solana-candidates img,.solana-candidates script').count(),0);
+ assert.equal(await page.locator('[data-solana=cycle-summary]').innerText(),'Poslední kolo: 20 různých tokenů · 20 vynecháno','latest-cycle distinct tokens are not presented as cumulative repeated inspections');
+ assert.match(await page.locator('[data-solana=watch-summary]').innerText(),/Sledujeme 45 trhů · obnoveno 18 · 2 chyb/);
+ assert.match(await page.locator('.solana-candidate').first().innerText(),/2 důvody vynechání · Znovu prověřeno/);
+ state.watchlist.refreshErrors=0;await page.evaluate(()=>window.OceanSolanaPanel.refresh());
+ assert.match(await page.locator('[data-solana=watch-summary]').innerText(),/^Část dat chybí · Sledujeme 45 trhů · obnoveno 18$/,'a discovery outage remains visible even when all watched-pool refreshes succeeded');
+ assert.equal(await page.locator('[data-solana=watch-summary]').getAttribute('data-error'),'true');
  for(const [width,height]of [[1920,1080],[1440,900],[1280,720],[901,768],[900,768],[390,844],[390,680],[375,640],[320,568]]){
   await page.setViewportSize({width,height});await page.waitForTimeout(60);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`${width}x${height}: no horizontal overflow`);
@@ -47,6 +56,8 @@ try{
   assert.equal(await page.locator('.solana-live-tail').isVisible(),true,'recent actual events are visible directly on the dashboard');
   assert.equal(await page.locator('dialog .solana-pipeline,details .solana-pipeline,dialog .solana-live-tail,details .solana-live-tail').count(),0,'work is available without opening a detail');
   assert.equal(await page.locator('.solana-story').isVisible(),true);
+  assert.equal(await page.locator('[data-solana=watch-summary]').isVisible(),true,'ongoing observation and refresh counts remain visible on mobile');
+  assert.equal(await page.locator('[data-solana=watch-summary]').evaluate(el=>{const range=document.createRange();range.setStart(el.firstChild,0);range.setEnd(el.firstChild,'Část dat chybí'.length);const warning=range.getBoundingClientRect(),box=el.getBoundingClientRect();return warning.y>=box.y&&warning.bottom<=box.bottom&&warning.right<=box.right;}),true,'partial-data warning appears first and is never clipped away');
   assert.equal(await page.locator('.home-tabs').isVisible(),width<=900);
   const radar=await page.locator('.solana-stream').boundingBox(),positions=await page.locator('.solana-open-positions').boundingBox();
   assert.ok(width>900?positions.x>radar.x:positions.y>=radar.y+radar.height-1,'desktop has two columns; mobile stacks its sections');
@@ -71,7 +82,20 @@ try{
  assert.equal(await page.locator('[data-solana-dialog=candidate]').isVisible(),true);
  assert.equal(await page.locator('[data-solana=candidate-detail] script,[data-solana=candidate-detail] img').count(),0);
  assert.match(await page.locator('[data-solana=candidate-detail]').innerText(),/málo prostředků/);
+ assert.equal(await page.locator('[data-solana=candidate-detail] .solana-reasons li').count(),2,'every failed check is visible without expanding a technical detail');
+ assert.match(await page.locator('[data-solana=candidate-detail] .solana-reasons').innerText(),/<script>alert\(2\)<\/script>/,'untrusted reasons are plain text');
+ assert.equal(await page.locator('[data-solana=candidate-detail] details .solana-reasons').count(),0);
+ assert.match(await page.locator('[data-solana=candidate-detail]').innerText(),/Dříve nalezený trh, znovu prověřený/);
  await page.keyboard.press('Escape');
+ const modern={watchlist:state.watchlist,diagnostics:state.diagnostics,reasons:state.candidates[0].reasons,source:state.candidates[0].source};
+ delete state.watchlist;delete state.diagnostics;delete state.candidates[0].reasons;delete state.candidates[0].source;
+ await page.locator('[data-solana-open=rules]').focus();await page.evaluate(()=>window.OceanSolanaPanel.refresh());
+ assert.equal(await page.locator('[data-solana=cycle-summary]').isVisible(),false,'older snapshots do not invent diagnostics');
+ await page.locator('.solana-candidate').first().click();
+ assert.equal(await page.locator('[data-solana=candidate-detail] .solana-reasons li').count(),1,'older candidates preserve their first stored reason');
+ assert.match(await page.locator('[data-solana=candidate-detail]').innerText(),/Uložený důvod vynechání/);
+ await page.keyboard.press('Escape');Object.assign(state,{watchlist:modern.watchlist,diagnostics:modern.diagnostics});Object.assign(state.candidates[0],{reasons:modern.reasons,source:modern.source});
+ await page.locator('[data-solana-open=rules]').focus();await page.evaluate(()=>window.OceanSolanaPanel.refresh());
  await page.locator('[data-solana="toggle"]').click();await page.locator('[data-solana="toggle"]').filter({hasText:'Pozastavit'}).waitFor();
  assert.deepEqual(JSON.parse(mutations.at(-1).body),{enabled:true});
  assert.equal(await page.locator('.solana-step[data-stage=scanner]').getAttribute('data-status'),'running');
@@ -87,7 +111,7 @@ try{
  assert.equal(await page.locator('[data-solana="pipeline-caption"]').innerText(),'Průběh poslední kontroly','paused stages describe the previous check');
  assert.equal(await page.locator('.solana-tail-row').first().isVisible(),true,'previous actual events remain visible when paused');
  await Promise.all([page.waitForResponse(response=>new URL(response.url()).pathname==='/api/solana/cycle'&&response.request().method()==='POST'),page.locator('[data-solana="scan"]').click()]);assert.equal(mutations.at(-1).path,'/api/solana/cycle','manual check is available directly on the dashboard');
- await page.locator('[data-solana-open=activity]').click();assert.equal(await page.locator('[data-solana=activity] script').count(),0);await page.keyboard.press('Escape');
+ await page.locator('[data-solana-open=activity]').click();assert.equal(await page.locator('[data-solana=activity] script').count(),0);assert.equal(await page.locator('[data-solana=cycle-rejections] li').count(),2);assert.match(await page.locator('[data-solana=cycle-rejections]').innerText(),/mohou překrývat/);await page.keyboard.press('Escape');
  await page.locator('[data-solana-open=ledger]').click();await page.locator('[data-solana=decisions] .solana-evidence').click();assert.match(await page.locator('[data-solana=decisions] .solana-evidence pre').innerText(),/999999999999999999/);await page.keyboard.press('Escape');
  state.positions=[{id:'solp_01234567890123456789012345678901',mint,symbol:'TEST',costUsdc:5,entryFeeUsdc:.01,markUsdc:null,markError:'Kotace chybí',markedAt:now()}];state.equityUsdc=null;
  await page.locator('[data-solana=pnl]').filter({hasText:'Neověřeno'}).waitFor();
@@ -95,5 +119,5 @@ try{
  await page.locator('#trading-tab').click();const before=polls;await page.waitForTimeout(2300);assert.equal(polls,before,'hidden panel stops polling');
  await page.goto('http://ocean.test/solana.html');await page.waitForURL('**/#solana');await page.locator('[data-solana=cash]').filter({hasText:'100,00'}).waitFor();
  allowed=false;await page.goto('http://ocean.test/?no-pilot#solana');await page.locator('#dashboard').waitFor({state:'visible'});assert.equal(await page.locator('#solana-tab').isVisible(),false);assert.equal(await page.locator('#solana-workspace').isVisible(),false);
- assert.deepEqual(errors,[]);console.log('PASS integrated Solana: mobile tabs, visible six-stage work and actual events, responsive fit, real progress polling, direct manual check, start/pause, XSS, precise evidence, stale marks, hidden polling and legacy redirect.');
+ assert.deepEqual(errors,[]);console.log('PASS integrated Solana: mobile tabs, visible six-stage work and actual events, all rejection reasons, repeat versus distinct counts, watched-pool updates, responsive fit, real progress polling, direct manual check, start/pause, XSS, precise evidence, stale marks, hidden polling and legacy redirect.');
 }finally{await browser.close();}
