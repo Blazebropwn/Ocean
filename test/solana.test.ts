@@ -362,7 +362,9 @@ test("missing or stale watched data cannot debit cash or reach a risk check", as
     assert.equal(snapshot.watchlist.refreshErrors, 1);
     assert.equal(snapshot.cashUsdc, 100);
     assert.equal(snapshot.counters.trades, 0);
-    assert.equal(snapshot.candidates.length, 0);
+    assert.equal(snapshot.candidates.length, 1);
+    assert.equal(snapshot.candidateFeed.stale, true);
+    assert.equal(snapshot.candidates[0]!.stale, true);
     db.close();
   }
 });

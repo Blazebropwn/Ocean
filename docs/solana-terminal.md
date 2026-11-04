@@ -39,6 +39,24 @@ Výpadek kterékoliv objevovací stránky zneplatní celý nový výběr. Čerst
 obnovené sledované pooly lze přesto vyhodnotit; UI výslovně označí chybějící
 část dat. Pokud žádný zdroj nevrátí použitelná data a nastala chyba, kolo selže.
 
+Všechny požadavky na GeckoTerminal sdílejí jednu frontu s rozestupem nejméně
+7 sekund. Veřejné API uvádí proměnlivý limit přibližně 10 požadavků za minutu;
+ani tento rozestup nezaručuje dostupnost služby. HTTP 429 přenáší absolutní
+termín z `Retry-After` (sekundy i HTTP datum). Bez použitelné hlavičky čekání
+roste od 60 sekund do 15 minut; delší pokyn serveru se nezkrátí. Po 429 se
+v témže kole další požadavek na GeckoTerminal neprovede.
+
+Čekací lhůta je globální stav poskytovatele v SQLite a přežije restart,
+ruční sken i Pozastavit → Spustit. Ruční sken vrací HTTP 429 se zbývajícím
+čekáním. HTTP timeout běží až od skutečného požadavku, nikoli během čekání
+ve frontě. Dostupné Jupiter kotace dál umožňují pravidelné ocenění a výstupy
+otevřených pozic, i když objevování tokenů čeká na GeckoTerminal.
+
+Neúspěšné kolo nesmaže poslední známé nálezy z přehledu. API je označí
+`candidateFeed.stale` a `candidate.stale`; UI uvede starší data i čas načtení.
+Statistika posledního kola dál patří aktuálnímu kolu, nikoli historickému feedu.
+Tato historie se nikdy nevrací do obchodní smyčky jako náhrada nových dat.
+
 Šest karet představuje deterministické kroky, nikoli šest LLM modelů:
 
 | Krok | Vstupy a výsledek |
@@ -189,10 +207,12 @@ Migrace 12 přidává pět tabulek `solana_paper_*`. Migrace 13 přidává tabul
 ovládání automatu a do cyklů souhrny kandidátů, počítadla a ocenění.
 Migrace 14 přidává sledované pooly, verzi a podrobnosti posledního vyhledávání
 a index pro střídání rizikových kontrol.
+Migrace 15 ukládá rozestupy a omezení GeckoTerminalu nezávisle na uživatelském
+ovládání. Při upgradu převezme i dosud platné čekání na 429 ze staršího automatu.
 Záloha SQLite je již zahrnuje.
 Smazání uživatele kaskádově odstraní jeho pilotní data; reset Binance účtu
-je neodstraňuje. Po migraci nebude fungovat starý image se schématem 11/12/13.
-Bezpečné vypnutí je vyprázdnit pilotní ID a ponechat image s migrací 14;
+je neodstraňuje. Po migraci nebude fungovat starý image se schématem 11/12/13/14.
+Bezpečné vypnutí je vyprázdnit pilotní ID a ponechat image s migrací 15;
 při obnově starého image je nutná odpovídající záloha celé databáze.
 
 ## Zdroje a ověření
@@ -221,6 +241,10 @@ po opuštění seznamu novinek, zastaralé odpovědi, chybějící data a sprave
 střídání prověřovaných tokenů. Browserové scénáře Home/Solana zahrnují plný
 radar dvaceti tokenů i mobilní rozměr 375 × 640. Po zpřístupnění pilotního účtu zůstává automat
 pozastavený do jeho výslovného spuštění.
+Další testy ověřují rozestupy požadavků, dlouhý `Retry-After`, zachování čekání
+přes restart i ruční ovládání, obnovu historického feedu a Jupiter výstupy během
+omezení GeckoTerminalu. Obnovení dostupnosti externího zdroje se musí ověřit
+skutečným dokončeným produkčním kolem, nikoli pouze fixture testy.
 
 Další milník: sběr delší historie odmítnutých i přijatých kandidátů, audit
 Token-2022 a měření přesnějších nákladů. Helius stream a oddělený LIVE signer

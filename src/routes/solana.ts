@@ -7,9 +7,12 @@ import { PublicSolanaMarketProvider } from "../solana/providers.js";
 import { PaperBusyError } from "../solana/store.js";
 import type { SolanaMarketProvider } from "../solana/types.js";
 import { SolanaPaperAutomation, type SolanaAutomationOptions } from "../solana/automation.js";
+import { SolanaProviderStateStore } from "../solana/provider-state.js";
+import { SolanaProviderRateLimitError } from "../solana/provider-cadence.js";
 
 export function registerSolanaRoutes(app: FastifyInstance, db: OceanDatabase, config: Config, provider?: SolanaMarketProvider, options: SolanaAutomationOptions = {}) {
-  const engine = new SolanaPaperEngine(db, provider ?? new PublicSolanaMarketProvider({ jupiterApiKey: config.solanaJupiterApiKey }), options.now);
+  const providerState = new SolanaProviderStateStore(db);
+  const engine = new SolanaPaperEngine(db, provider ?? new PublicSolanaMarketProvider({ jupiterApiKey: config.solanaJupiterApiKey, geckoPersistence: { read: () => providerState.read("geckoterminal"), write: (state) => providerState.write("geckoterminal", state) } }), options.now);
   const automation = new SolanaPaperAutomation(engine, config, options);
   app.addHook("onReady", async () => automation.start());
   function owner(request: FastifyRequest, reply: FastifyReply) {
@@ -50,6 +53,10 @@ export function registerSolanaRoutes(app: FastifyInstance, db: OceanDatabase, co
       return await automation.runManual(user.id, authorize, positionId);
     } catch (error) {
       if (!authorize()) return reply.code(403).send({ error: "Přístup k terminálu už není platný." });
+      if (error instanceof SolanaProviderRateLimitError) {
+        reply.header("retry-after", Math.max(1, Math.ceil((error.retryAt - (options.now ?? Date.now)()) / 1000)));
+        return reply.code(429).send({ error: error.message, retryAt: new Date(error.retryAt).toISOString(), snapshot: automation.snapshot(user.id) });
+      }
       if (error instanceof PaperBusyError) {
         reply.header("retry-after", Math.max(1, Math.ceil((error.retryAt - Date.now()) / 1000)));
         return reply.code(error.reason === "running" ? 409 : 429).send({ error: error.reason === "running" ? "PAPER cyklus už běží." : "Mezi PAPER cykly musí uplynout alespoň 60 sekund.", retryAt: new Date(error.retryAt).toISOString() });

@@ -62,7 +62,7 @@ function quoteFixture() {
 }
 
 function provider(body: unknown, extra: Partial<ConstructorParameters<typeof PublicSolanaMarketProvider>[0]> = {}) {
-  return new PublicSolanaMarketProvider({ now: () => new Date(NOW), jupiterIntervalMs: 0,
+  return new PublicSolanaMarketProvider({ now: () => new Date(NOW), jupiterIntervalMs: 0, geckoIntervalMs: 0,
     fetcher: async () => new Response(JSON.stringify(body), { headers: { date: new Date(NOW).toUTCString() } }), ...extra });
 }
 
