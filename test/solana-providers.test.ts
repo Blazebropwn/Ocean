@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { isSolanaAddress, PublicSolanaMarketProvider } from "../src/solana/providers.js";
 import { SOLANA_TOKEN_PROGRAM, SOLANA_USDC_MINT } from "../src/solana/types.js";
+import { SolanaProviderRateLimitError } from "../src/solana/provider-cadence.js";
 
 const MINT = "vUG3bCjNo3Zf9mPBxU8RJTgjK3ut654QKz4ntvipump";
 const POOL = "Fzf5x26QwDpu62w2Js3XTZaDHRzdWB5CRYDt3AKXoaqv";
@@ -83,20 +84,24 @@ test("new pool polling normalizes actual metadata and preserves indexed-pool pro
     return Response.json(poolFixture());
   } });
   const [candidate] = await market.scan();
-  assert.deepEqual(requestedUrls, [1, 5, 10].map((page) => `https://api.geckoterminal.com/api/v2/networks/solana/new_pools?include=base_token,quote_token&page=${page}`));
+  assert.deepEqual(requestedUrls, [`https://api.geckoterminal.com/api/v2/networks/solana/new_pools?include=base_token,quote_token&page=1`]);
   assert.equal(candidate?.mint, MINT);
   assert.equal(candidate?.decimals, 6);
   assert.equal(candidate?.liquidityUsd, 29023.8473);
   assert.equal(candidate?.volume5mUsd, 1225.55);
   assert.equal(candidate?.poolCreatedAt, "2026-11-04T10:53:16.000Z");
   assert.equal(candidate?.evidence.discovery, "newly_indexed_pools_poll");
-  assert.deepEqual(candidate?.evidence.sampledPages, [1, 5, 10]);
+  assert.equal(candidate?.evidence.page, 1);
+  assert.deepEqual(candidate?.evidence.sampledPages, [1]);
+  assert.deepEqual(candidate?.evidence.pageRotation, [1, 5, 10]);
 });
 
-test("scanner samples three bounded pages, deduplicates mints and keeps the highest-liquidity pool", async () => {
+test("scanner fetches one rotating page per scan without reusing results from earlier pages", async () => {
+  const requestedPages: number[] = [];
   const otherMint = "9gipZT8Ewp4AjDo6CxW8THTobJJ5X2KuStWndxzNuv6Y";
   const market = provider({}, { fetcher: async (url) => {
     const page = Number(new URL(String(url)).searchParams.get("page"));
+    requestedPages.push(page);
     const fixture = poolFixture();
     fixture.data[0]!.attributes.reserve_in_usd = String(page * 10_000);
     if (page === 5) {
@@ -106,23 +111,113 @@ test("scanner samples three bounded pages, deduplicates mints and keeps the high
     }
     return Response.json(fixture);
   } });
+  for (const [index, page] of [1, 5, 10, 1].entries()) {
+    const candidates = await market.scan();
+    assert.equal(requestedPages.length, index + 1, "each scan issues exactly one discovery GET");
+    assert.equal(candidates.length, 1);
+    assert.equal(candidates[0]?.mint, page === 5 ? otherMint : MINT);
+    assert.equal(candidates[0]?.liquidityUsd, page * 10_000);
+    assert.equal(candidates[0]?.evidence.page, page);
+    assert.deepEqual(candidates[0]?.evidence.sampledPages, [page]);
+  }
+  assert.deepEqual(requestedPages, [1, 5, 10, 1]);
+});
+
+test("one sampled page deduplicates mints and keeps the highest-liquidity pool", async () => {
+  const otherMint = "9gipZT8Ewp4AjDo6CxW8THTobJJ5X2KuStWndxzNuv6Y";
+  const fixture = poolFixture();
+  const higher = poolFixtureAt(SOLANA_TOKEN_PROGRAM).data[0]!;
+  higher.attributes.reserve_in_usd = "40000";
+  const other = poolFixtureAt(SOL).data[0]!;
+  other.relationships.base_token.data.id = `solana_${otherMint}`;
+  other.attributes.reserve_in_usd = "30000";
+  fixture.data.push(higher, other);
+  fixture.included.push({ ...fixture.included[0]!, id: `solana_${otherMint}`, attributes: { ...fixture.included[0]!.attributes, address: otherMint } });
+  const market = provider(fixture);
   const candidates = await market.scan();
   assert.equal(candidates.length, 2);
   assert.equal(candidates[0]?.mint, MINT);
-  assert.equal(candidates[0]?.liquidityUsd, 100_000);
-  assert.equal(candidates[0]?.evidence.page, 10);
+  assert.equal(candidates[0]?.poolAddress, SOLANA_TOKEN_PROGRAM);
+  assert.equal(candidates[0]?.liquidityUsd, 40_000);
+  assert.equal(candidates[0]?.evidence.page, 1);
   assert.equal(candidates[1]?.mint, otherMint);
 });
 
-test("a failed later pool page does not silently return a successful partial scan", async () => {
+test("an unavailable sampled page fails rather than replaying an earlier page and retries the same page", async () => {
+  const requestedPages: number[] = [];
+  let failed = false;
+  const market = provider({}, { fetcher: async (url) => {
+    const page = Number(new URL(String(url)).searchParams.get("page"));
+    requestedPages.push(page);
+    if (page === 5 && !failed) { failed = true; return new Response("provider unavailable", { status: 503 }); }
+    return Response.json(poolFixture());
+  } });
+  assert.equal((await market.scan())[0]?.evidence.page, 1);
+  await assert.rejects(market.scan(), /HTTP 503/);
+  assert.deepEqual(requestedPages, [1, 5]);
+  assert.equal((await market.scan())[0]?.evidence.page, 5);
+  assert.equal((await market.scan())[0]?.evidence.page, 10);
+  assert.deepEqual(requestedPages, [1, 5, 5, 10]);
+});
+
+test("concurrent scans serialize page selection and valid empty pages advance the rotation", async () => {
   const requestedPages: number[] = [];
   const market = provider({}, { fetcher: async (url) => {
     const page = Number(new URL(String(url)).searchParams.get("page"));
     requestedPages.push(page);
-    return page === 5 ? new Response("provider unavailable", { status: 503 }) : Response.json(poolFixture());
+    return Response.json(page === 5 ? { data: [], included: [] } : poolFixture());
   } });
-  await assert.rejects(market.scan(), /HTTP 503/);
+  const scans = await Promise.all([market.scan(), market.scan(), market.scan(), market.scan()]);
+  assert.deepEqual(requestedPages, [1, 5, 10, 1]);
+  assert.deepEqual(scans.map(candidates => candidates[0]?.evidence.page ?? null), [1, null, 10, 1]);
+});
+
+test("a rate-limited discovery page retains its rotation slot and performs no requests during Retry-After", async () => {
+  let time = Date.parse(NOW), failed = false;
+  const requestedPages: number[] = [];
+  const market = provider({}, { now: () => new Date(time), fetcher: async (url) => {
+    const page = Number(new URL(String(url)).searchParams.get("page"));
+    requestedPages.push(page);
+    if (page === 5 && !failed) { failed = true; return new Response("untrusted upstream body", { status: 429, headers: { "retry-after": "120" } }); }
+    return Response.json(poolFixture(), { headers: { date: new Date(time).toUTCString() } });
+  } });
+  await market.scan();
+  await assert.rejects(market.scan(), (error) => error instanceof SolanaProviderRateLimitError && error.retryAt === time + 120_000);
+  await assert.rejects(market.scan(), SolanaProviderRateLimitError);
   assert.deepEqual(requestedPages, [1, 5]);
+  assert.equal(market.marketDataStatus().rateLimited, true);
+  time += 120_000;
+  assert.equal((await market.scan())[0]?.evidence.page, 5);
+  assert.equal(market.marketDataStatus().rateLimited, false);
+  assert.equal((await market.scan())[0]?.evidence.page, 10);
+  assert.deepEqual(requestedPages, [1, 5, 5, 10]);
+});
+
+test("invalid discovery metadata does not advance the page rotation", async () => {
+  const requestedPages: number[] = [];
+  const market = provider({}, { fetcher: async (url) => {
+    requestedPages.push(Number(new URL(String(url)).searchParams.get("page")));
+    return Response.json(requestedPages.length === 1 ? { data: [], included: null } : poolFixture());
+  } });
+  await assert.rejects(market.scan(), /neplatný seznam/);
+  assert.equal((await market.scan())[0]?.evidence.page, 1);
+  assert.equal((await market.scan())[0]?.evidence.page, 5);
+  assert.deepEqual(requestedPages, [1, 1, 5]);
+});
+
+test("watchlist refresh and rotating discovery share the production seven-second request cadence", async () => {
+  let time = Date.parse(NOW);
+  const requests: { at: number; path: string; page: string | null }[] = [];
+  const market = new PublicSolanaMarketProvider({ now: () => new Date(time), sleep: async (ms) => { time += ms; }, fetcher: async (url, init) => {
+    const parsed = new URL(String(url));
+    requests.push({ at: time, path: parsed.pathname, page: parsed.searchParams.get("page") });
+    assert.equal(new Headers(init?.headers).get("accept"), "application/json;version=20230203");
+    return Response.json(poolFixture(), { headers: { date: new Date(time).toUTCString() } });
+  } });
+  await market.refreshPools([POOL]); await market.scan(); await market.scan();
+  assert.deepEqual(requests.map(request => request.at - Date.parse(NOW)), [0, 7_000, 14_000]);
+  assert.deepEqual(requests.map(request => request.page), [null, "1", "5"]);
+  assert.equal(requests[0]?.path, `/api/v2/networks/solana/pools/multi/${POOL}`);
 });
 
 test("scanner rejects absent decimals, invalid mint binding, missing liquidity and future pools", async () => {

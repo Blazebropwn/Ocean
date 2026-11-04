@@ -10,6 +10,7 @@ import { hashToken } from "../src/security.js";
 import { loadConfig } from "../src/config.js";
 import { candidateRejection, candidateRejections, conservativeQuoteAmount, rawAmount, riskRejection, riskRejections, SOLANA_PAPER_POLICY_VERSION, SolanaPaperEngine } from "../src/solana/engine.js";
 import { PaperBusyError } from "../src/solana/store.js";
+import { SolanaProviderRateLimitError } from "../src/solana/provider-cadence.js";
 import { SOLANA_TOKEN_PROGRAM, SOLANA_USDC_MINT, type SolanaCandidate, type SolanaMarketProvider, type SolanaQuote, type SolanaRiskReport } from "../src/solana/types.js";
 
 const OWNER = "usr_solana_pilot";
@@ -249,7 +250,7 @@ test("exposure and daily loss brakes block fresh tokens without preventing mark 
   const db = openDatabase(":memory:"); insertUser(db);
   const f = fixture();
   const mints = [MINT, "So11111111111111111111111111111111111111113", "So11111111111111111111111111111111111111114", "So11111111111111111111111111111111111111115"];
-  const provider: SolanaMarketProvider = { ...f.provider, async scan() { return mints.map((mint) => ({ ...f.candidate(), mint })); }, async risk(mint) { return { ...f.risk(), mint }; } };
+  const provider: SolanaMarketProvider = { ...f.provider, async scan() { return mints.map((mint) => ({ ...f.candidate(), mint, poolAddress: mint })); }, async risk(mint) { return { ...f.risk(), mint }; } };
   const engine = new SolanaPaperEngine(db, provider, () => START);
   const snapshot = await engine.cycle(OWNER, () => true);
   assert.equal(snapshot.positions.length, 3);
@@ -282,8 +283,8 @@ test("scanner prefilter reaches eligible sixth pool and duplicates cannot starve
   const provider: SolanaMarketProvider = {
     ...f.provider,
     async scan() {
-      if (repeated) return [...Array.from({ length: 5 }, () => f.candidate()), { ...f.candidate(), mint: secondMint }];
-      const underage = Array.from({ length: 5 }, (_, index) => ({ ...f.candidate(), mint: `So1111111111111111111111111111111111111111${index + 3}`, poolCreatedAt: new Date(now - 60_000).toISOString() }));
+      if (repeated) return [...Array.from({ length: 5 }, () => f.candidate()), { ...f.candidate(), mint: secondMint, poolAddress: secondMint }];
+      const underage = Array.from({ length: 5 }, (_, index) => ({ ...f.candidate(), mint: `So1111111111111111111111111111111111111111${index + 3}`, poolAddress: `So1111111111111111111111111111111111111111${index + 3}`, poolCreatedAt: new Date(now - 60_000).toISOString() }));
       return [...underage, f.candidate()];
     },
     async risk(mint) { riskCalls.push(mint); return { ...f.risk(), mint }; },
@@ -385,13 +386,118 @@ test("fresh watched data remains usable during a discovery outage and reports in
   db.close();
 });
 
+test("watched refresh runs before discovery and a refresh 429 stops discovery in the same cycle", async () => {
+  let now = START;
+  const db = openDatabase(":memory:"); insertUser(db);
+  const f = fixture(() => now); const calls: string[] = [];
+  const young = { ...f.candidate(), poolCreatedAt: new Date(START - 60_000).toISOString() };
+  const retryAt = START + 40 * 60_000;
+  let riskCalls = 0;
+  const provider: SolanaMarketProvider = { ...f.provider,
+    async scan() { calls.push("scan"); return [young]; },
+    async refreshPools() { calls.push("refresh"); throw new SolanaProviderRateLimitError("GeckoTerminal", retryAt); },
+    async risk() { riskCalls++; return f.risk(); },
+  };
+  const engine = new SolanaPaperEngine(db, provider, () => now);
+  try {
+    await engine.cycle(OWNER, () => true); now += 5 * 60_000;
+    await assert.rejects(engine.cycle(OWNER, () => true), error => error instanceof SolanaProviderRateLimitError && error.retryAt === retryAt);
+    assert.deepEqual(calls, ["scan", "refresh"]);
+    const state = engine.snapshot(OWNER);
+    assert.equal(state.watchlist.refreshErrors, 1); assert.equal(state.diagnostics.inspectedTokens, 0);
+    assert.equal(state.candidateFeed.stale, true); assert.equal(state.candidates[0]!.stale, true);
+    assert.equal(state.cashUsdc, 100); assert.equal(state.counters.trades, 0); assert.equal(riskCalls, 0);
+  } finally { db.close(); }
+});
+
+test("fresh watched candidates still reach risk checks and PAPER buy when the following discovery request returns 429", async () => {
+  let now = START, limited = false;
+  const db = openDatabase(":memory:"); insertUser(db);
+  const f = fixture(() => now); const calls: string[] = [];
+  const created = new Date(START - 60_000).toISOString();
+  const retryAt = START + 40 * 60_000;
+  const provider: SolanaMarketProvider = { ...f.provider,
+    async scan() {
+      calls.push("scan");
+      if (now !== START) { limited = true; throw new SolanaProviderRateLimitError("GeckoTerminal", retryAt); }
+      return [{ ...f.candidate(), poolCreatedAt: created }];
+    },
+    async refreshPools() { calls.push("refresh"); return [{ ...f.candidate(), poolCreatedAt: created }]; },
+    marketDataStatus() { return { provider: "GeckoTerminal", rateLimited: limited, retryAt: limited ? new Date(retryAt).toISOString() : null }; },
+  };
+  const engine = new SolanaPaperEngine(db, provider, () => now);
+  try {
+    await engine.cycle(OWNER, () => true); now += 5 * 60_000;
+    const state = await engine.cycle(OWNER, () => true);
+    assert.deepEqual(calls, ["scan", "refresh", "scan"]);
+    assert.equal(state.watchlist.refreshedPools, 1); assert.match(state.watchlist.lastError!, /HTTP 429/);
+    assert.equal(state.marketData.rateLimited, true); assert.equal(state.marketData.retryAt, new Date(retryAt).toISOString());
+    assert.equal(state.candidateFeed.stale, false); assert.equal(state.candidates[0]!.source, "watchlist");
+    assert.equal(state.candidates[0]!.observedAt, new Date(now).toISOString());
+    assert.equal(state.counters.riskChecked, 1); assert.equal(state.counters.trades, 1);
+    assert.equal(state.positions.length, 1); assert.equal(state.cashUsdc, 94.99);
+  } finally { db.close(); }
+});
+
+test("discovery 429 with missing, stale or failed refreshes propagates the typed error and never trades cached watchlist data", async () => {
+  for (const outcome of ["missing", "stale", "failed"]) {
+    let now = START, riskCalls = 0;
+    const db = openDatabase(":memory:"); insertUser(db);
+    const f = fixture(() => now); const calls: string[] = [];
+    const young = { ...f.candidate(), poolCreatedAt: new Date(START - 60_000).toISOString() };
+    const retryAt = START + 40 * 60_000;
+    const provider: SolanaMarketProvider = { ...f.provider,
+      async scan() { calls.push("scan"); if (now !== START) throw new SolanaProviderRateLimitError("GeckoTerminal", retryAt); return [young]; },
+      async refreshPools() { calls.push("refresh"); if (outcome === "failed") throw new Error("Sledované pooly nejsou dostupné."); return outcome === "stale" ? [young] : []; },
+      async risk() { riskCalls++; return f.risk(); },
+    };
+    const engine = new SolanaPaperEngine(db, provider, () => now);
+    try {
+      await engine.cycle(OWNER, () => true); now += 5 * 60_000;
+      await assert.rejects(engine.cycle(OWNER, () => true), error => error instanceof SolanaProviderRateLimitError && error.retryAt === retryAt);
+      assert.deepEqual(calls, ["scan", "refresh", "scan"]);
+      const state = engine.snapshot(OWNER);
+      assert.equal(state.diagnostics.inspectedTokens, 0); assert.equal(state.candidateFeed.stale, true);
+      assert.equal(state.cashUsdc, 100); assert.equal(state.positions.length, 0);
+      assert.equal(state.counters.trades, 0); assert.equal(riskCalls, 0);
+    } finally { db.close(); }
+  }
+});
+
+test("a newer discovery observation of the same pool supersedes an eligible refresh after liquidity falls", async () => {
+  let now = START, riskCalls = 0;
+  const db = openDatabase(":memory:"); insertUser(db);
+  const f = fixture(() => now); const created = new Date(START - 60_000).toISOString();
+  const provider: SolanaMarketProvider = { ...f.provider,
+    async refreshPools() { return [{ ...f.candidate(), poolCreatedAt: created, liquidityUsd: 100_000 }]; },
+    async scan() {
+      if (now === START) return [{ ...f.candidate(), poolCreatedAt: created }];
+      now += 7_000;
+      return [{ ...f.candidate(), poolCreatedAt: created, liquidityUsd: 49_999 }];
+    },
+    async risk() { riskCalls++; return f.risk(); },
+  };
+  const engine = new SolanaPaperEngine(db, provider, () => now);
+  try {
+    await engine.cycle(OWNER, () => true); now += 5 * 60_000;
+    const state = await engine.cycle(OWNER, () => true);
+    assert.equal(state.watchlist.refreshedPools, 1);
+    assert.equal(state.candidates.length, 1); assert.equal(state.candidates[0]!.source, "discovery");
+    assert.equal(state.candidates[0]!.observedAt, new Date(now).toISOString());
+    assert.equal(state.candidates[0]!.liquidityUsd, 49_999);
+    assert.match(state.candidates[0]!.reason, /Likvidita/);
+    assert.equal(state.cashUsdc, 100); assert.equal(state.positions.length, 0);
+    assert.equal(state.counters.trades, 0); assert.equal(riskCalls, 0);
+  } finally { db.close(); }
+});
+
 test("risk budget rotates to unchecked tokens and an eligible pool wins over a younger deeper pool", async () => {
   let now = START;
   const db = openDatabase(":memory:"); insertUser(db);
   const f = fixture(() => now);
   const mints = [..."3456789"].map(char => `So1111111111111111111111111111111111111111${char}`);
   const calls: string[] = [];
-  const provider: SolanaMarketProvider = { ...f.provider, async scan() { return mints.map((mint, index) => ({ ...f.candidate(), mint, liquidityUsd: 100_000 - index * 1000 })); }, async risk(mint) { calls.push(mint); return { ...f.risk(), mint, risks: [{ name: "Observed risk", level: "warn" }] }; } };
+  const provider: SolanaMarketProvider = { ...f.provider, async scan() { return mints.map((mint, index) => ({ ...f.candidate(), mint, poolAddress: mint, liquidityUsd: 100_000 - index * 1000 })); }, async risk(mint) { calls.push(mint); return { ...f.risk(), mint, risks: [{ name: "Observed risk", level: "warn" }] }; } };
   const engine = new SolanaPaperEngine(db, provider, () => now);
   await engine.cycle(OWNER, () => true);
   assert.deepEqual(calls, mints.slice(0, 5));

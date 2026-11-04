@@ -66,9 +66,9 @@
     const providerRetry=Math.max(0,Math.ceil((Date.parse(data.marketData?.retryAt||'')-Date.now())/1000))||0;
     const wait=Math.max(0,Math.ceil((Date.parse(automation.nextRunAt||'')-Date.now())/1000))||0;
     const retry=Math.max(providerRetry,automation.enabled?wait:0);
-    root.dataset.engine=limited?'limited':running?'running':automation.enabled?'waiting':'paused';
-    $('[data-solana="engine-status"]').textContent=!connected?'Spojení se obnovuje':limited?'Zdroj dat má omezení':automation.lastError?'Čekáme na data':running?'Prověřujeme trh':automation.enabled?'Sledování běží':'Pozastaveno';
-    $('[data-solana="countdown"]').textContent=limited?retry>0?`Obnovení dat za ${retry} s`:'Čekáme na obnovení zdroje':running?`${labels[data.runtime.stage]||'Kontrola'} · ${Math.max(0,Math.floor((Date.now()-Date.parse(data.runtime.startedAt))/1000))} s`:automation.enabled?`Další sken ${wait>0?`za ${wait} s`:'se připravuje'}`:'Automatický sken každých 60 s';
+    root.dataset.engine=running?'running':limited?'limited':automation.enabled?'waiting':'paused';
+    $('[data-solana="engine-status"]').textContent=!connected?'Spojení se obnovuje':running?'Prověřujeme trh':limited?'Zdroj dat má omezení':automation.lastError?'Čekáme na data':automation.enabled?'Sledování běží':'Pozastaveno';
+    $('[data-solana="countdown"]').textContent=running?`${labels[data.runtime.stage]||'Kontrola'} · ${Math.max(0,Math.floor((Date.now()-Date.parse(data.runtime.startedAt))/1000))} s`:limited?retry>0?`Obnovení dat za ${retry} s`:'Čekáme na obnovení zdroje':automation.enabled?`Další sken ${wait>0?`za ${wait} s`:'se připravuje'}`:'Automatický sken každých 60 s';
     const toggle=$('[data-solana="toggle"]');toggle.textContent=automation.enabled?'Pozastavit':'Spustit sledování';toggle.classList.toggle('is-enabled',automation.enabled);toggle.disabled=!eligible||command||!connected;
     const cooldown=Math.max(0,Math.ceil((Date.parse(data.nextCycleAt||'')-Date.now())/1000))||0;
     $('[data-solana="scan"]').disabled=!eligible||command||running||cooldown>0||limited||!connected;
@@ -83,10 +83,10 @@
     const running=Boolean(data.runtime?.running);
     let title='Sledování je pozastavené',text='Spusť ho, až budeš chtít znovu hledat příležitosti.',tone='calm';
     if(!connected){title='Obnovujeme spojení';text='Zobrazené hodnoty mohou být starší. Až se spojení obnoví, přehled se doplní.';tone='attention';}
+    else if(running){title='Prověřujeme nové příležitosti';text=data.runtime.detail||'Načítáme trh a ověřujeme podmínky pro případný obchod.';tone='active';}
     else if(data.marketData?.rateLimited){title='Zdroj dat omezuje požadavky';text=automation.enabled?'Další pokus spustí automat po odpočtu.':'Sledování je pozastavené; po spuštění vyčká na data.';tone='attention';}
     else if(automation.lastError){title='Čekáme na nová data';text='Poslední kontrola se nezdařila. Automat ji zkusí znovu v uvedeném čase.';tone='attention';}
     else if(data.equityUsdc===null){title='Část hodnoty účtu čeká na ověření';text='U některého obchodu chybí čerstvá prodejní cena. Výsledek doplníme po úspěšné kontrole.';tone='attention';}
-    else if(running){title='Prověřujeme nové příležitosti';text=data.runtime.detail||'Načítáme trh a ověřujeme podmínky pro případný obchod.';tone='active';}
     else if(automation.enabled&&data.positions?.length){title='Sledujeme tvé obchody';text='Průběžně ověřujeme jejich hodnotu a podmínky pro uzavření.';tone='active';}
     else if(data.candidateFeed?.stale){title='Čekáme na čerstvé údaje';text='Nálezy níže pocházejí z předchozí kontroly. Jejich podmínky pro nový nákup teď nejsou ověřené.';tone='attention';}
     else if(automation.enabled&&data.candidates?.length&&data.candidates.every(candidate=>candidate.status==='blocked')){title='Hledáme dál';text='Tokeny v posledním výběru nesplnily pravidla pro nákup. Sledování pokračuje.';tone='active';}

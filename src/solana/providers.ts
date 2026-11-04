@@ -7,8 +7,9 @@ const WRAPPED_SOL = "So11111111111111111111111111111111111111112";
 const MAX_BODY_BYTES = 2_000_000;
 const MAX_RAW = (1n << 64n) - 1n;
 const BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-// Public new-pool pagination is bounded to pages 1..10. Sample recent and older
-// indexed pools so the engine's minimum-age gate can inspect mature candidates.
+// Public new-pool pagination is bounded to pages 1..10. Fetch one rotating page
+// per scan so discovery leaves request capacity for refreshing watched pools.
+// The page is a bounded sample, not complete coverage of all new pools.
 // https://api.geckoterminal.com/docs/index.html
 const NEW_POOL_PAGES = [1, 5, 10] as const;
 type ObjectValue = Record<string, unknown>;
@@ -99,6 +100,8 @@ export class PublicSolanaMarketProvider implements SolanaMarketProvider {
   private jupiterQueue: Promise<void> = Promise.resolve();
   private nextJupiterAt = 0;
   private readonly geckoCadence: SolanaProviderCadence;
+  private scanQueue: Promise<void> = Promise.resolve();
+  private nextPoolPageIndex = 0;
 
   constructor(private readonly options: ProviderOptions = {}) {
     this.fetcher = options.fetcher ?? fetch;
@@ -164,19 +167,26 @@ export class PublicSolanaMarketProvider implements SolanaMarketProvider {
   }
 
   async scan(): Promise<SolanaCandidate[]> {
-    const candidates = new Map<string, SolanaCandidate>();
-    for (const page of NEW_POOL_PAGES) {
-      // A failed page invalidates the scan; do not silently label partial coverage complete.
+    const previous = this.scanQueue;
+    let release!: () => void;
+    this.scanQueue = new Promise<void>((resolve) => { release = resolve; });
+    await previous;
+    try {
+      const page = NEW_POOL_PAGES[this.nextPoolPageIndex]!;
+      const candidates = new Map<string, SolanaCandidate>();
       for (const candidate of await this.scanPage(page)) {
         if ((candidates.get(candidate.mint)?.liquidityUsd ?? -1) < candidate.liquidityUsd) candidates.set(candidate.mint, candidate);
       }
-    }
-    return [...candidates.values()].sort((a, b) => b.liquidityUsd - a.liquidityUsd).slice(0, 60);
+      // Advance only after a valid response, including a valid empty page. A 429,
+      // transport error or invalid schema leaves the same page due for retry.
+      this.nextPoolPageIndex = (this.nextPoolPageIndex + 1) % NEW_POOL_PAGES.length;
+      return [...candidates.values()].sort((a, b) => b.liquidityUsd - a.liquidityUsd).slice(0, 20);
+    } finally { release(); }
   }
 
   private async scanPage(page: number): Promise<SolanaCandidate[]> {
     const { body, receivedAt, sourceDate } = await this.read("GeckoTerminal", `https://api.geckoterminal.com/api/v2/networks/solana/new_pools?include=base_token,quote_token&page=${page}`);
-    return this.decodePools(body, receivedAt, sourceDate, { discovery: "newly_indexed_pools_poll", page, sampledPages: [...NEW_POOL_PAGES] }).slice(0, 20);
+    return this.decodePools(body, receivedAt, sourceDate, { discovery: "newly_indexed_pools_poll", page, sampledPages: [page], pageRotation: [...NEW_POOL_PAGES] }).slice(0, 20);
   }
 
   async refreshPools(poolAddresses: readonly string[]): Promise<SolanaCandidate[]> {
