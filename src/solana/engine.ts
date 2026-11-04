@@ -4,6 +4,7 @@ import { hasApprovedAccess } from "../routes/shared.js";
 import { SolanaPaperStore, NETWORK_FEE_MICROS, CYCLE_COOLDOWN_MS, type PaperPosition } from "./store.js";
 import { SOLANA_TOKEN_PROGRAM, SOLANA_USDC_MINT, type Evidence, type SolanaCandidate, type SolanaCandidateSummary, type SolanaMarketProvider, type SolanaQuote, type SolanaRiskReport, type SolanaRuntime, type SolanaStage } from "./types.js";
 import { SolanaWatchlist } from "./watchlist.js";
+import { SolanaProviderRateLimitError } from "./provider-cadence.js";
 
 export const SOLANA_PAPER_POLICY_VERSION = "paper-2026-11-04-v2";
 
@@ -110,6 +111,13 @@ export class SolanaPaperEngine {
     return this.runtimes.get(userId) ?? { running: false, cycleId: null, stage: null, mint: null, symbol: null, detail: "Žádný cyklus právě neběží.", startedAt: null, updatedAt: null };
   }
 
+  marketDataStatus() { return this.provider.marketDataStatus?.() ?? { provider: "GeckoTerminal", rateLimited: false, retryAt: null }; }
+
+  sourceRetryAt() {
+    const status = this.marketDataStatus();
+    return status.rateLimited && status.retryAt ? Date.parse(status.retryAt) : 0;
+  }
+
   snapshot(userId: string, compact = false) {
     const now = this.now();
     const account = this.store.ensureAccount(userId, now);
@@ -137,6 +145,7 @@ export class SolanaPaperEngine {
     const trades = compact ? [] : db.prepare("SELECT id,position_id,side,token_amount,gross_micros,network_fee_micros,occurred_at FROM solana_paper_trades WHERE user_id=? ORDER BY occurred_at DESC,id DESC LIMIT 30").all(userId) as { id: string; position_id: string; side: string; token_amount: string; gross_micros: number; network_fee_micros: number; occurred_at: number }[];
     const cycle = db.prepare("SELECT id,started_at,completed_at,status FROM solana_paper_cycles WHERE user_id=? ORDER BY started_at DESC,id DESC LIMIT 1").get(userId) as { id: string; started_at: number; completed_at: number | null; status: string } | undefined;
     const candidates = this.store.candidates(userId);
+    const feed = this.store.candidateFeed(userId, now);
     const details = this.store.scanDetails(userId);
     const watched = this.watchlist.stats(userId, now);
     const rejectionCounts = new Map<string, number>();
@@ -149,9 +158,10 @@ export class SolanaPaperEngine {
       realizedPnlUsdc: money(realized.pnl), unrealizedPnlUsdc: allPriced ? money(markedTotalMicros - positions.reduce((sum, position) => sum + position.cost_micros + position.entry_fee_micros, 0)) : null,
       limits: SOLANA_PAPER_LIMITS, stages, positions: marked,
       runtime: this.runtime(userId), counters: this.store.counters(userId), equityHistory: this.store.equityHistory(userId),
+      marketData: this.marketDataStatus(), candidateFeed: { stale: feed.stale, observedAt: feed.observedAt },
       diagnostics: { policyVersion: typeof details.policyVersion === "string" ? details.policyVersion : cycle ? "legacy" : SOLANA_PAPER_POLICY_VERSION, inspectedTokens: candidates.length, rejectedTokens: candidates.filter((candidate) => candidate.status === "blocked").length, rejectionCounts: [...rejectionCounts].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason)) },
       watchlist: { trackedPools: watched.poolCount, trackedTokens: watched.mintCount, refreshedPools: typeof details.refreshedPools === "number" ? details.refreshedPools : 0, refreshErrors: typeof details.refreshErrors === "number" ? details.refreshErrors : 0, lastError: typeof details.lastError === "string" ? details.lastError : null },
-      candidates: candidates.sort((a, b) => {
+      candidates: feed.candidates.sort((a, b) => {
         const rank = { checking: 0, bought: 1, passed: 2, eligible: 3, blocked: 4 };
         return rank[a.status] - rank[b.status];
       }).slice(0, 20),
@@ -204,17 +214,26 @@ export class SolanaPaperEngine {
   private async scanCandidates(userId: string, cycleId: string, authorize: () => boolean) {
     const details: Evidence = { policyVersion: SOLANA_PAPER_POLICY_VERSION, discoveredPools: 0, requestedPools: 0, refreshedPools: 0, refreshErrors: 0, lastError: null };
     this.store.recordScanDetails(userId, cycleId, details);
+    const pausedUntil = this.sourceRetryAt();
+    if (pausedUntil > this.now()) {
+      const reason = new SolanaProviderRateLimitError("GeckoTerminal", pausedUntil).message;
+      this.store.recordScanDetails(userId, cycleId, { ...details, lastError: reason });
+      this.event(userId, cycleId, "scanner", "blocked", null, reason, { retryAt: pausedUntil, monitoringPositionsOnly: true }, authorize);
+      return [];
+    }
     this.progress(userId, cycleId, "scanner", "Hledám nové pooly a připravuji obnovu těch sledovaných.", authorize);
     let discovered: SolanaCandidate[] = [];
     let discoveryError: string | null = null;
+    let discoveryFailure: unknown;
     try { discovered = (await this.provider.scan()).slice(0, 60); }
-    catch (error) { discoveryError = error instanceof Error ? error.message : "Nové pooly nejsou dostupné."; }
+    catch (error) { discoveryFailure = error; discoveryError = error instanceof Error ? error.message : "Nové pooly nejsou dostupné."; }
     this.assertAuthorized(authorize, userId, cycleId);
     this.watchlist.remember(userId, discovered, this.now());
-    const due = this.provider.refreshPools ? this.watchlist.due(userId, this.now(), discovered.map((candidate) => candidate.poolAddress), 20) : [];
+    const due = this.provider.refreshPools && !(discoveryFailure instanceof SolanaProviderRateLimitError) ? this.watchlist.due(userId, this.now(), discovered.map((candidate) => candidate.poolAddress), 20) : [];
     const requested = due.map((pool) => pool.poolAddress);
     let refreshed: SolanaCandidate[] = [];
     let refreshError: string | null = null;
+    let refreshFailure: unknown;
     details.discoveredPools = discovered.length;
     details.requestedPools = requested.length;
     this.store.recordScanDetails(userId, cycleId, details);
@@ -228,6 +247,7 @@ export class SolanaPaperEngine {
       } catch (error) {
         this.assertAuthorized(authorize, userId, cycleId);
         this.watchlist.refreshed(userId, requested, [], this.now());
+        refreshFailure = error;
         refreshError = error instanceof Error ? error.message : "Sledované pooly se nepodařilo obnovit.";
       }
     }
@@ -236,7 +256,11 @@ export class SolanaPaperEngine {
     details.lastError = [discoveryError, refreshError].filter(Boolean).join(" ") || null;
     this.store.recordScanDetails(userId, cycleId, details);
     if (details.lastError) this.event(userId, cycleId, "scanner", "error", null, String(details.lastError), { scan: details }, authorize);
-    if (!discovered.length && !refreshed.length && (discoveryError || refreshError)) throw new Error(discoveryError || refreshError!);
+    if (!discovered.length && !refreshed.length && (discoveryError || refreshError)) {
+      if (discoveryFailure instanceof SolanaProviderRateLimitError) throw discoveryFailure;
+      if (refreshFailure instanceof SolanaProviderRateLimitError) throw refreshFailure;
+      throw new Error(discoveryError || refreshError!);
+    }
     const byMint = new Map<string, SolanaCandidate>();
     for (const candidate of [...discovered, ...refreshed]) {
       const previous = byMint.get(candidate.mint);
@@ -249,6 +273,9 @@ export class SolanaPaperEngine {
 
   async cycle(userId: string, authorize: () => boolean, closePositionId?: string, options: { allowEntry?: () => boolean } = {}) {
     if (!authorize()) throw new Error("Přístup už není platný.");
+    const pausedUntil = this.sourceRetryAt();
+    // Existing positions still receive fresh Jupiter marks and exits; the discovery limit blocks entries only.
+    if (!closePositionId && pausedUntil > this.now() && this.store.positions(userId).length === 0) throw new SolanaProviderRateLimitError("GeckoTerminal", pausedUntil);
     const cycleId = this.store.acquire(userId, this.now());
     try {
       const positions = this.store.positions(userId);

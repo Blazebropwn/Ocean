@@ -13,7 +13,7 @@ const expectedTables = [
   "account_reset_archives",
   "admin_audit_log", "agent_ledger_entries", "agent_runs", "agents", "email_verification_tokens", "genesis_codes", "genesis_redemptions", "genesis_waves", "invitations",
   "kryptotron_credentials", "kryptotron_instances", "kryptotron_trade_costs", "mail_outbox", "password_reset_tokens",
-  "schema_migrations", "security_events", "sessions", "slot_spins", "solana_paper_accounts", "solana_paper_automation", "solana_paper_cycles", "solana_paper_events", "solana_paper_positions", "solana_paper_trades", "solana_paper_watchlist", "sonar_records", "sonar_runs", "telegram_bot_state",
+  "schema_migrations", "security_events", "sessions", "slot_spins", "solana_paper_accounts", "solana_paper_automation", "solana_paper_cycles", "solana_paper_events", "solana_paper_positions", "solana_paper_provider_state", "solana_paper_trades", "solana_paper_watchlist", "sonar_records", "sonar_runs", "telegram_bot_state",
   "telegram_confirmations", "telegram_connections", "telegram_pairings", "tide_ledger", "users", "worker_notifications",
 ];
 
@@ -36,6 +36,7 @@ test("a new database receives the versioned Ocean schema exactly once", () => {
     { version: 12, name: "solana_paper" },
     { version: 13, name: "solana_automation" },
     { version: 14, name: "solana_watchlist" },
+    { version: 15, name: "solana_provider_state" },
   ]);
   assert.equal((db.pragma("foreign_keys", { simple: true }) as number), 1);
   db.close();
@@ -50,7 +51,7 @@ test("reopening a database is idempotent and preserves rows", () => {
 
   db = openDatabase(path);
   assert.equal((db.prepare("SELECT COUNT(*) AS count FROM users WHERE id = 'usr_preserved'").get() as { count: number }).count, 1);
-  assert.equal((db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get() as { count: number }).count, 14);
+  assert.equal((db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get() as { count: number }).count, 15);
   assert.equal(String(db.pragma("journal_mode", { simple: true })).toLowerCase(), "wal");
   db.close();
   rmSync(directory, { recursive: true, force: true });

@@ -82,6 +82,16 @@ export class SolanaPaperStore {
     return cycle ? JSON.parse(cycle.candidates_json) as SolanaCandidateSummary[] : [];
   }
 
+  candidateFeed(userId: string, now: number) {
+    const latest = this.db.prepare("SELECT id,status,candidates_json FROM solana_paper_cycles WHERE user_id=? ORDER BY started_at DESC,id DESC LIMIT 1").get(userId) as { id: string; status: string; candidates_json: string } | undefined;
+    const row = latest && latest.candidates_json !== "[]" ? latest : this.db.prepare("SELECT id,status,candidates_json FROM solana_paper_cycles WHERE user_id=? AND candidates_json<>'[]' ORDER BY started_at DESC,id DESC LIMIT 1").get(userId) as typeof latest;
+    const candidates = row ? JSON.parse(row.candidates_json) as SolanaCandidateSummary[] : [];
+    const times = candidates.map(candidate => Date.parse(candidate.observedAt)).filter(Number.isFinite);
+    const observedAt = times.length ? Math.max(...times) : null;
+    const stale = Boolean(candidates.length && (row?.id !== latest?.id || row?.status === "failed" || observedAt === null || times.length !== candidates.length || times.some(time => now - time > 120_000)));
+    return { candidates: candidates.map(candidate => ({ ...candidate, stale })), stale, observedAt: observedAt === null ? null : new Date(observedAt).toISOString() };
+  }
+
   counters(userId: string) {
     const cycles = this.db.prepare("SELECT count(*) AS cycles,COALESCE(SUM(candidate_count),0) AS poolsSeen,COALESCE(SUM(risk_checked_count),0) AS riskChecked,COALESCE(SUM(rejected_count),0) AS rejected FROM solana_paper_cycles WHERE user_id=?").get(userId) as { cycles: number; poolsSeen: number; riskChecked: number; rejected: number };
     const trades = this.db.prepare("SELECT count(*) AS trades FROM solana_paper_trades WHERE user_id=?").get(userId) as { trades: number };

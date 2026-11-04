@@ -2,6 +2,7 @@ import type { Config } from "../config.js";
 import type { UserRecord } from "../db.js";
 import { hasSolanaPilotAccess, SolanaPaperEngine } from "./engine.js";
 import { CYCLE_COOLDOWN_MS, PaperBusyError } from "./store.js";
+import { SolanaProviderRateLimitError } from "./provider-cadence.js";
 
 export type SolanaAutomationOptions = { now?: () => number; schedulingEnabled?: boolean };
 
@@ -35,8 +36,13 @@ export class SolanaPaperAutomation {
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;
     if (this.closed || this.options.schedulingEnabled === false) return;
-    this.timer = setTimeout(() => { this.timer = undefined; void this.tick(); }, Math.max(0, at - this.now()));
+    this.timer = setTimeout(() => { this.timer = undefined; void this.tick(); }, Math.min(2_147_483_647, Math.max(0, at - this.now())));
     this.timer.unref();
+  }
+
+  private nextAt(userId: string, at: number) {
+    // Jupiter marks/exits keep their cadence even while Gecko discovery must wait.
+    return this.engine.store.positions(userId).length ? at : Math.max(at, this.engine.sourceRetryAt());
   }
 
   start() {
@@ -45,7 +51,7 @@ export class SolanaPaperAutomation {
     if (!this.authorized(userId)) { this.stopRevoked(userId); return; }
     const control = this.engine.store.automation(userId, this.now());
     // Only a saved explicit run intent resumes. A new pilot stays paused.
-    if (control.enabled) this.schedule(control.next_run_at ?? this.now());
+    if (control.enabled) this.schedule(this.nextAt(userId, control.next_run_at ?? this.now()));
   }
 
   snapshot(userId: string, compact = false) {
@@ -66,7 +72,11 @@ export class SolanaPaperAutomation {
     const control = this.engine.store.setAutomation(userId, enabled, this.now());
     if (Boolean(before.enabled) !== enabled) this.engine.store.event(userId, null, "logger", "ok", null,
       enabled ? "PAPER automat spuštěný uživatelem; cykly pokračují i po zavření prohlížeče a po restartu serveru." : "PAPER automat pozastavený uživatelem; žádné další automatické vstupy ani nové cykly přecenění a výstupů.", {}, this.now());
-    if (enabled) this.schedule(control.next_run_at ?? this.now());
+    if (enabled) {
+      const next = this.nextAt(userId, control.next_run_at ?? this.now());
+      this.engine.store.scheduleAutomation(userId, control.generation, next, control.last_error, control.failure_count, this.now());
+      this.schedule(next);
+    }
     else if (this.timer) { clearTimeout(this.timer); this.timer = undefined; }
     return this.snapshot(userId);
   }
@@ -86,7 +96,11 @@ export class SolanaPaperAutomation {
     if (!this.authorized(userId)) { this.stopRevoked(userId); return; }
     const control = this.engine.store.automation(userId, this.now());
     if (!control.enabled) return;
-    if (control.next_run_at !== null && control.next_run_at > this.now()) { this.schedule(control.next_run_at); return; }
+    const due = this.nextAt(userId, control.next_run_at ?? this.now());
+    if (due > this.now()) {
+      this.engine.store.scheduleAutomation(userId, control.generation, due, control.last_error, control.failure_count, this.now());
+      this.schedule(due); return;
+    }
     const generation = control.generation;
     const allowEntry = () => {
       if (this.closed || !this.authorized(userId)) return false;
@@ -99,14 +113,17 @@ export class SolanaPaperAutomation {
     try {
       await job;
       const account = this.engine.store.account(userId);
-      if (account) this.engine.store.scheduleAutomation(userId, generation, Math.max(this.now(), (account.last_cycle_at ?? this.now()) + CYCLE_COOLDOWN_MS), null, 0, this.now());
+      if (account) this.engine.store.scheduleAutomation(userId, generation, this.nextAt(userId, Math.max(this.now(), (account.last_cycle_at ?? this.now()) + CYCLE_COOLDOWN_MS)), null, 0, this.now());
     } catch (error) {
       if (!this.authorized(userId)) this.stopRevoked(userId);
       else if (error instanceof PaperBusyError) this.engine.store.scheduleAutomation(userId, generation, error.retryAt, control.last_error, control.failure_count, this.now());
       else {
         const failures = control.failure_count + 1;
         const backoff = Math.min(15 * 60_000, CYCLE_COOLDOWN_MS * 2 ** Math.min(failures, 4));
-        this.engine.store.scheduleAutomation(userId, generation, this.now() + backoff, error instanceof Error ? error.message : "Tržní data nejsou dostupná.", failures, this.now());
+        const next = error instanceof SolanaProviderRateLimitError
+          ? this.engine.store.positions(userId).length ? this.now() + CYCLE_COOLDOWN_MS : Math.max(this.now() + backoff, error.retryAt)
+          : this.nextAt(userId, this.now() + backoff);
+        this.engine.store.scheduleAutomation(userId, generation, next, error instanceof Error ? error.message : "Tržní data nejsou dostupná.", failures, this.now());
       }
     } finally {
       this.jobs.delete(job);
@@ -117,7 +134,7 @@ export class SolanaPaperAutomation {
           // A pause/start invalidates the old entry permit, even if it happened in one API await.
           if (current.generation !== generation) {
             const account = this.engine.store.account(userId);
-            this.engine.store.scheduleAutomation(userId, current.generation, Math.max(this.now(), (account.last_cycle_at ?? this.now()) + CYCLE_COOLDOWN_MS), null, 0, this.now());
+            this.engine.store.scheduleAutomation(userId, current.generation, this.nextAt(userId, Math.max(this.now(), (account.last_cycle_at ?? this.now()) + CYCLE_COOLDOWN_MS)), null, 0, this.now());
           }
           this.schedule(this.engine.store.automation(userId, this.now()).next_run_at ?? this.now() + CYCLE_COOLDOWN_MS);
         }

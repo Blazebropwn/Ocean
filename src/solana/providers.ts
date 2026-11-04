@@ -1,6 +1,7 @@
 import type { Evidence, SolanaCandidate, SolanaMarketProvider, SolanaQuote, SolanaRiskReport } from "./types.js";
 import { SOLANA_USDC_MINT } from "./types.js";
 import { computeHolderConcentration } from "./holders.js";
+import { parseRetryAfter, SolanaProviderCadence, SolanaProviderRateLimitError, type ProviderCadencePersistence } from "./provider-cadence.js";
 
 const WRAPPED_SOL = "So11111111111111111111111111111111111111112";
 const MAX_BODY_BYTES = 2_000_000;
@@ -84,6 +85,8 @@ type ProviderOptions = {
   now?: () => Date;
   sleep?: (milliseconds: number) => Promise<void>;
   jupiterIntervalMs?: number;
+  geckoIntervalMs?: number;
+  geckoPersistence?: ProviderCadencePersistence;
   timeoutMs?: number;
 };
 
@@ -95,25 +98,41 @@ export class PublicSolanaMarketProvider implements SolanaMarketProvider {
   private readonly intervalMs: number;
   private jupiterQueue: Promise<void> = Promise.resolve();
   private nextJupiterAt = 0;
+  private readonly geckoCadence: SolanaProviderCadence;
 
   constructor(private readonly options: ProviderOptions = {}) {
     this.fetcher = options.fetcher ?? fetch;
     this.now = options.now ?? (() => new Date());
     this.sleep = options.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
     this.intervalMs = options.jupiterIntervalMs ?? 2_100;
+    this.geckoCadence = new SolanaProviderCadence({ now: () => this.now().getTime(), sleep: this.sleep, intervalMs: options.geckoIntervalMs, persistence: options.geckoPersistence });
+  }
+
+  marketDataStatus() {
+    const { cooldownUntil } = this.geckoCadence.snapshot();
+    return { provider: "GeckoTerminal", rateLimited: cooldownUntil !== null, retryAt: cooldownUntil === null ? null : new Date(cooldownUntil).toISOString() };
   }
 
   private async read(provider: string, url: string, extraHeaders: Record<string, string> = {}, rpcBody?: ObjectValue): Promise<{ body: ObjectValue; receivedAt: string; sourceDate: string | null }> {
+    const request = () => this.readHttp(provider, url, extraHeaders, rpcBody);
+    return provider === "GeckoTerminal" ? this.geckoCadence.run(request) : request();
+  }
+
+  private async readHttp(provider: string, url: string, extraHeaders: Record<string, string> = {}, rpcBody?: ObjectValue): Promise<{ body: ObjectValue; receivedAt: string; sourceDate: string | null }> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs ?? 8_000);
     timeout.unref();
     try {
       const response = await this.fetcher(url, {
         method: rpcBody ? "POST" : "GET", redirect: "error", signal: controller.signal,
-        headers: { accept: "application/json", "user-agent": "Ocean-Solana-Paper/1.0", ...(rpcBody ? { "content-type": "application/json" } : {}), ...extraHeaders },
+        headers: { accept: provider === "GeckoTerminal" ? "application/json;version=20230203" : "application/json", "user-agent": "Ocean-Solana-Paper/1.0", ...(rpcBody ? { "content-type": "application/json" } : {}), ...extraHeaders },
         ...(rpcBody ? { body: JSON.stringify(rpcBody) } : {}),
       });
-      if (!response.ok) throw new SolanaProviderError(provider, `HTTP ${response.status}`);
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => undefined);
+        if (provider === "GeckoTerminal" && response.status === 429) throw new SolanaProviderRateLimitError(provider, parseRetryAfter(response.headers.get("retry-after"), this.now().getTime()) ?? 0);
+        throw new SolanaProviderError(provider, `HTTP ${response.status}`);
+      }
       const contentLength = response.headers.get("content-length");
       if (contentLength !== null && Number(contentLength) > MAX_BODY_BYTES) throw new SolanaProviderError(provider, "odpověď překročila limit");
       if (!response.body) throw new SolanaProviderError(provider, "prázdná odpověď");
@@ -138,7 +157,7 @@ export class PublicSolanaMarketProvider implements SolanaMarketProvider {
       const dateMs = date ? Date.parse(date) : NaN;
       return { body: parsed, receivedAt: this.now().toISOString(), sourceDate: Number.isFinite(dateMs) ? new Date(dateMs).toISOString() : null };
     } catch (error) {
-      if (error instanceof SolanaProviderError) throw error;
+      if (error instanceof SolanaProviderError || error instanceof SolanaProviderRateLimitError) throw error;
       // Do not expose provider bodies, URLs containing credentials, or network error internals.
       throw new SolanaProviderError(provider, controller.signal.aborted ? "vypršel časový limit" : "data nejsou dostupná nebo jsou neplatná");
     } finally { clearTimeout(timeout); }
