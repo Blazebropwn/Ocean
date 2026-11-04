@@ -16,14 +16,13 @@
     if(!root)return false;
     root.className='solana-console';
     root.innerHTML=`
-      <header class="solana-head"><div><h2>Solana <span class="solana-paper">Zkušební režim</span></h2><p>Hledání příležitostí s klidem a přehledem</p></div><button class="solana-rules-button" type="button" data-solana-open="rules">Pravidla <span aria-hidden="true">↗</span></button></header>
+      <header class="solana-head"><div><h2>Solana <span class="solana-paper">Zkušební režim</span></h2><p>Hledání příležitostí s klidem a přehledem</p></div><div class="solana-head-actions"><button type="button" class="solana-one-shot" data-solana="scan" title="Jednorázové vyhodnocení">Zkontrolovat teď</button><button class="solana-rules-button" type="button" data-solana-open="rules">Pravidla <span aria-hidden="true">↗</span></button></div></header>
       <div class="solana-wallet" aria-label="Zkušební účet v USDC"><div><span>Hodnota účtu</span><strong data-solana="equity">—</strong><small>virtuální USDC</small></div><div><span>K dispozici</span><strong data-solana="cash">—</strong><small data-solana="positions-count">0 otevřených obchodů</small></div><div><span>Celkový výsledek</span><strong data-solana="pnl">—</strong><small data-solana="trades-count">0 zkušebních obchodů</small></div></div>
       <div class="solana-controls"><div class="solana-engine-state"><span class="solana-signal" aria-hidden="true"></span><div><strong data-solana="engine-status">Načítám</strong><small data-solana="countdown">Čekám na spojení</small></div></div><button type="button" class="solana-start" data-solana="toggle" disabled>Spustit sledování</button></div>
       <p class="solana-feedback" data-solana="feedback" role="status"></p>
-      <section class="solana-story" aria-label="Co se právě děje"><span class="solana-story-icon" aria-hidden="true"><svg viewBox="0 0 40 40" fill="none"><circle cx="20" cy="20" r="13"/><circle cx="20" cy="20" r="6"/><path d="M20 7V3m0 34v-4M7 20H3m34 0h-4M20 20l8-8"/></svg></span><div><h3 data-solana="story-title">Připraveno na první příležitost</h3><p data-solana="story-text">Spusť sledování a podívej se, co se na trhu děje.</p><small data-solana="last-check">První kontrola čeká na spuštění</small></div></section>
-      <div class="solana-stream-grid"><section class="solana-stream"><header><div><h3>Objevené tokeny</h3><p>Co jsme právě prověřovali</p></div><span data-solana="feed-count">Čeká na data</span></header><div data-solana="candidates" class="solana-candidates"></div></section><section class="solana-open-positions"><header><h3>Tvé zkušební obchody</h3><button type="button" class="solana-text-button" data-solana-open="ledger">Historie →</button></header><div data-solana="positions"></div><div class="solana-equity-history"><span>Vývoj účtu</span><div data-solana="chart"></div></div></section></div>
-      <footer class="solana-bottom"><span>Virtuální peníze · skutečná tržní data</span><button type="button" class="solana-text-button" data-solana-open="technical">Jak to pracuje <span aria-hidden="true">↗</span></button></footer>
-      <dialog class="solana-dialog" data-solana-dialog="technical" aria-label="Jak Solana pracuje"><header><h2>Jak to pracuje</h2><button type="button" data-solana-close aria-label="Zavřít">×</button></header><div class="solana-dialog-body"><p>Každý token projde postupně kontrolami. Když podmínky nesplní, hledáme dál. Kontroly samy o sobě nezaručují bezpečnost ani výnos.</p><details class="solana-technical-details" open><summary>Postup vyhodnocení</summary><div class="solana-pipeline" aria-label="Průběh skutečných kontrol"></div></details><div class="solana-work-line"><span data-solana="work">Čekám na první kontrolu.</span><small data-solana="contact">—</small></div><div class="solana-counters"><span><b data-solana="pools-count">0</b> kontrol trhu</span><span><b data-solana="risk-count">0</b> prověření rizik</span><span><b data-solana="cycles-count">0</b> kontrolních kol</span></div><details class="solana-technical-details"><summary>Podrobný průběh</summary><div class="solana-live-tail"><div data-solana="tail"></div></div></details><div class="solana-detail-actions"><button type="button" class="solana-one-shot" data-solana="scan" title="Jednorázové vyhodnocení">Zkontrolovat teď</button><button type="button" class="solana-text-button" data-solana-open="activity">Všechny poslední události →</button></div></div></dialog>
+      <section class="solana-story" aria-label="Co se právě děje"><div class="solana-progress-summary"><div><h3 data-solana="story-title">Připraveno na první příležitost</h3><p data-solana="story-text">Spusť sledování a podívej se, co se na trhu děje.</p></div><small data-solana="last-check">První kontrola čeká na spuštění</small></div><div class="solana-pipeline" aria-label="Průběh skutečných kontrol"></div><div class="solana-progress-meta"><span data-solana="pipeline-caption">Postup vyhodnocení</span><div class="solana-counters"><span><b data-solana="pools-count">0</b> kontrol trhu</span><span><b data-solana="risk-count">0</b> prověření rizik</span><span><b data-solana="cycles-count">0</b> kontrolních kol</span></div></div></section>
+      <div class="solana-stream-grid"><section class="solana-stream"><header><div><h3>Objevené tokeny</h3><p>Co jsme právě prověřovali</p></div><span data-solana="feed-count">Čeká na data</span></header><div data-solana="candidates" class="solana-candidates"></div></section><section class="solana-open-positions"><header><h3>Tvé zkušební obchody</h3><button type="button" class="solana-text-button" data-solana-open="ledger">Historie →</button></header><div data-solana="positions"></div><div class="solana-equity-history"><span>Vývoj účtu</span><div data-solana="chart"></div></div></section><section class="solana-live-activity"><header><div><h3>Právě se děje</h3><p>Poslední skutečné události</p></div><button type="button" class="solana-text-button" data-solana-open="activity">Vše →</button></header><div class="solana-live-tail"><div data-solana="tail"></div></div></section></div>
+      <footer class="solana-bottom"><span>Virtuální peníze · skutečná tržní data</span><span data-solana="contact">Čekám na spojení</span></footer>
       <dialog class="solana-dialog" data-solana-dialog="candidate" aria-label="Podrobnosti tokenu"><header><h2 data-solana="candidate-title">Detail tokenu</h2><button type="button" data-solana-close aria-label="Zavřít">×</button></header><div class="solana-dialog-body" data-solana="candidate-detail"></div></dialog>
       <dialog class="solana-dialog" data-solana-dialog="rules" aria-label="Pravidla Solana pilotu"><header><h2>Pravidla sledování</h2><button type="button" data-solana-close aria-label="Zavřít">×</button></header><div class="solana-dialog-body"><p>Začínáš se 100 virtuálními USDC. <b>Spustit sledování</b> zapne kontroly přibližně každou minutu. Běží i po zavření prohlížeče.</p><p><b>Pozastavit</b> zastaví další hledání, přecenění i výstupy. Rozpracovaná kontrola může dokončit již zahájené ocenění či výstup; nové automatické nákupy se zablokují.</p><dl data-solana="rules-list"></dl><p>Token musí projít všemi pravidly a musí existovat nákupní i zpětná prodejní kotace. Neúplná data nebo nedostupná trasa znamenají vynechání. Při neověřené prodejní ceně zůstává obchod otevřený a aktuální výsledek se nezobrazuje.</p><p>Jde o simulaci. Zahrnuje rezervu na skluz a model síťových nákladů, které se mohou od skutečného obchodu lišit. Splnění kontrol ani report třetí strany nezaručují bezpečnost tokenu nebo výnos.</p><p>Zdroje: <a href="https://www.geckoterminal.com/" target="_blank" rel="noopener noreferrer">GeckoTerminal</a>, <a href="https://rugcheck.xyz/" target="_blank" rel="noopener noreferrer">RugCheck</a> a <a href="https://developers.jup.ag/docs/swap/order-and-execute" target="_blank" rel="noopener noreferrer">Jupiter</a>.</p></div></dialog>
       <dialog class="solana-dialog" data-solana-dialog="activity" aria-label="Průběh kontrol"><header><h2>Poslední události</h2><button type="button" data-solana-close aria-label="Zavřít">×</button></header><div class="solana-dialog-body" data-solana="activity"></div></dialog>
@@ -32,7 +31,7 @@
     for(const [index,id] of stages.entries()){
       const step=node('button',undefined,'solana-step');step.type='button';step.dataset.stage=id;
       const head=node('span',undefined,'solana-step-head');head.append(node('small',String(index+1).padStart(2,'0')),node('b',labels[id]));
-      step.append(head,node('span','Čeká','solana-step-state'),node('small',({scanner:'Nové pooly a aktivita','rug-check':'Authority, držitelé a likvidita',sizer:'Velikost pozice a limity',executor:'Kotace a PAPER obchody',logger:'Každé rozhodnutí má důvod',equity:'Ocenění a výsledek účtu'})[id],'solana-step-detail'));step.addEventListener('click',()=>openDialog('activity'));pipeline.append(step);
+      step.append(head,node('span','Čeká','solana-step-state'),node('small',({scanner:'Nové tokeny a aktivita','rug-check':'Oprávnění, držitelé a likvidita',sizer:'Velikost obchodu a limity',executor:'Podmínky nákupu i prodeje',logger:'Každé rozhodnutí má důvod',equity:'Hodnota a výsledek účtu'})[id],'solana-step-detail'));step.addEventListener('click',()=>openDialog('activity'));pipeline.append(step);
     }
     $('[data-solana="toggle"]').addEventListener('click',()=>mutate('/api/solana/automation',{enabled:!data?.automation?.enabled},true));
     $('[data-solana="scan"]').addEventListener('click',()=>mutate('/api/solana/cycle'));
@@ -83,7 +82,7 @@
     if(!connected){title='Obnovujeme spojení';text='Zobrazené hodnoty mohou být starší. Až se spojení obnoví, přehled se doplní.';tone='attention';}
     else if(automation.lastError){title='Čekáme na nová data';text='Poslední kontrola se nezdařila. Automat ji zkusí znovu v uvedeném čase.';tone='attention';}
     else if(data.equityUsdc===null){title='Část hodnoty účtu čeká na ověření';text='U některého obchodu chybí čerstvá prodejní cena. Výsledek doplníme po úspěšné kontrole.';tone='attention';}
-    else if(running){title='Prověřujeme nové příležitosti';text=data.runtime.symbol?`Právě se věnujeme tokenu ${data.runtime.symbol}. Výsledek najdeš v přehledu níže.`:'Načítáme trh a ověřujeme podmínky pro případný obchod.';tone='active';}
+    else if(running){title='Prověřujeme nové příležitosti';text=data.runtime.detail||'Načítáme trh a ověřujeme podmínky pro případný obchod.';tone='active';}
     else if(automation.enabled&&data.positions?.length){title='Sledujeme tvé obchody';text='Průběžně ověřujeme jejich hodnotu a podmínky pro uzavření.';tone='active';}
     else if(automation.enabled&&data.candidates?.length&&data.candidates.every(candidate=>candidate.status==='blocked')){title='Hledáme dál';text='Tokeny v posledním výběru nesplnily pravidla pro nákup. Sledování pokračuje.';tone='active';}
     else if(automation.enabled){title='Rozhlížíme se po trhu';text='Čekáme na dokončení prověřování. Jakmile bude výsledek, uvidíš ho tady.';tone='active';}
@@ -167,7 +166,7 @@
   }
 
   function renderTail() {
-    const tail=$('[data-solana="tail"]');tail.replaceChildren();
+    const tail=$('[data-solana="tail"]');const viewport=tail.parentElement;const scroll=viewport.scrollTop;tail.replaceChildren();
     for(const event of (data.decisions||[]).slice(0,20)){
       const row=node('article',undefined,'solana-tail-row');
       row.dataset.status=event.status;
@@ -175,6 +174,7 @@
       row.title=event.reason;tail.append(row);
     }
     if(!data.decisions?.length)tail.append(node('p','Čekám na první skutečnou událost.','solana-empty'));
+    viewport.scrollTop=scroll;
   }
 
   function renderChart() {
@@ -205,9 +205,9 @@
       const card=$(`[data-stage="${id}"]`);const stage=data.stages?.find(item=>item.id===id);
       const active=data.runtime?.running&&data.runtime.stage===id;
       const status=active?'running':stage?.status||'idle';card.dataset.status=status;card.title=active?data.runtime.detail:stage?.detail||'V tomto skenu se tento krok zatím neprovedl.';
-      card.querySelector('.solana-step-state').textContent=states[status]||'Čeká';
+      card.querySelector('.solana-step-state').textContent=status==='ok'?({logger:'Zapsáno',equity:'Spočítáno',executor:'Vyhodnoceno'})[id]||states.ok:states[status]||'Čeká';
     }
-    $('[data-solana="work"]').textContent=data.runtime?.running?data.runtime.detail||'Ověřuji tržní data…':data.automation?.lastError||data.lastCycle?data.automation?.lastError||`Poslední sken ${time(data.lastCycle.completedAt||data.lastCycle.startedAt)} · důvody jsou v radaru a evidenci.`:'Připraveno. Spusť PAPER sledování.';
+    $('[data-solana="pipeline-caption"]').textContent=data.runtime?.running?'Právě probíhá':data.lastCycle?'Průběh poslední kontroly':'Postup vyhodnocení';
     for(const [target,key] of [['pools-count','poolsSeen'],['risk-count','riskChecked'],['cycles-count','cycles']])$(`[data-solana="${target}"]`).textContent=String(data.counters?.[key]||0);
     renderCandidates();renderPositions();renderTail();renderChart();
     if($('[data-solana-dialog="activity"]').open)renderActivity();

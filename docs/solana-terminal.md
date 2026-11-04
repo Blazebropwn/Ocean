@@ -3,8 +3,11 @@
 Pilot pro účet Blazebro. Samostatný TypeScript modul v `src/solana`,
 API v `src/routes/solana.ts`, UI integrované v dashboardu na `/#solana`.
 Na mobilu je čtvrtou záložkou Home vedle Trading/DCA. Desktop má vlastní
-boční vstup a přehled tokenů, obchodů a vývoje účtu. Technické kroky
-a podrobný log jsou dostupné až v detailu Jak to pracuje. Původní `/solana.html` přesměrovává.
+boční vstup a přehled tokenů, obchodů a vývoje účtu. Všech šest kroků a poslední
+skutečné události jsou stále viditelné přímo v přehledu. Na mobilu jsou kroky
+ve dvou řádcích po třech, tokeny a události mají vlastní posouvání. Běžící krok
+se zvýrazňuje podle serveru; mimo běh karty označují průběh poslední kontroly.
+Podrobné důkazy a pravidla zůstávají dostupné v detailu. Původní `/solana.html` přesměrovává.
 Binance worker, jeho konfigurace, klíče, zůstatky a strategie zůstávají oddělené.
 Rozpracovaný audit strategie na PR #20 není součástí této větve.
 
