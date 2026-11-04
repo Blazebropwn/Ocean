@@ -42,30 +42,41 @@ try{
  for(const [width,height]of [[1920,1080],[1440,900],[1280,720],[901,768],[900,768],[390,844],[390,680],[375,640],[320,568]]){
   await page.setViewportSize({width,height});await page.waitForTimeout(60);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`${width}x${height}: no horizontal overflow`);
-  const cards=await page.locator('.solana-step').evaluateAll(els=>els.map(el=>{const r=el.getBoundingClientRect();return{x:r.x,y:r.y,bottom:r.bottom};}));
-  assert.equal(cards.length,6);
-  if(width>900){assert.ok(cards.every(card=>Math.abs(card.x-cards[0].x)<1),'desktop agents form a vertical rail');assert.equal(await page.locator('.home-tabs').isVisible(),false);assert.equal(await page.locator('.solana-live-tail').isVisible(),true);}
-  else{assert.ok(cards[1].x>cards[0].x&&cards[3].y>cards[0].y,'mobile pipeline is compact');assert.equal(await page.locator('.home-tabs').isVisible(),true);}
+  assert.equal(await page.locator('.solana-step').count(),6);
+  assert.equal(await page.locator('.solana-pipeline').isVisible(),false,'technical steps are tucked into a detail');
+  assert.equal(await page.locator('.solana-live-tail').isVisible(),false,'logs do not dominate the main screen');
+  assert.equal(await page.locator('.solana-story').isVisible(),true);
+  assert.equal(await page.locator('.home-tabs').isVisible(),width<=900);
+  const radar=await page.locator('.solana-stream').boundingBox(),positions=await page.locator('.solana-open-positions').boundingBox();
+  assert.ok(width>900?positions.x>radar.x:positions.y>=radar.y+radar.height-1,'desktop has two columns; mobile stacks its sections');
   if(width>=375&&height>=640){const fit=await page.locator('.workspace').evaluate(el=>({height:el.clientHeight,scroll:el.scrollHeight,panel:[...document.querySelector('#solana-panel').children].map(child=>[child.className,Math.round(child.getBoundingClientRect().height)])}));assert.ok(fit.scroll<=fit.height+2,`panel fits ${width}x${height}: ${JSON.stringify(fit)}`);}
   if(width===1440||width===390)await page.screenshot({path:`/tmp/ocean-solana-integrated-${width}.png`,fullPage:true});
  }
  await page.setViewportSize({width:390,height:844});
+ await page.locator('.solana-candidate').first().click();
+ assert.equal(await page.locator('[data-solana-dialog=candidate]').isVisible(),true);
+ assert.equal(await page.locator('[data-solana=candidate-detail] script,[data-solana=candidate-detail] img').count(),0);
+ assert.match(await page.locator('[data-solana=candidate-detail]').innerText(),/málo prostředků/);
+ await page.keyboard.press('Escape');
  await page.locator('[data-solana="toggle"]').click();await page.locator('[data-solana="toggle"]').filter({hasText:'Pozastavit'}).waitFor();
  assert.deepEqual(JSON.parse(mutations.at(-1).body),{enabled:true});
+ await page.locator('[data-solana-open=technical]').click();
+ assert.equal(await page.locator('.solana-pipeline').isVisible(),true,'six steps remain available on demand');
  assert.equal(await page.locator('.solana-step[data-stage=scanner]').getAttribute('data-status'),'running');
  assert.equal(await page.locator('[data-solana="toggle"]').isDisabled(),false,'pause stays available during actual automatic work');
  state.runtime.stage='rug-check';state.runtime.detail='Ověřuji report konkrétního tokenu.';state.candidates[0].status='checking';
  await page.locator('.solana-step[data-stage="rug-check"][data-status=running]').waitFor();
  assert.ok(polls>0,'live updates poll server state');
+ await page.keyboard.press('Escape');
  await page.locator('[data-solana="toggle"]').click();await page.locator('[data-solana="engine-status"]').filter({hasText:'Pozastaveno'}).waitFor();
  assert.deepEqual(JSON.parse(mutations.at(-1).body),{enabled:false});
- await page.locator('[data-solana-open=activity]').click();assert.equal(await page.locator('[data-solana=activity] script').count(),0);await page.keyboard.press('Escape');
- await page.locator('[data-solana-open=ledger]').click();await page.locator('.solana-evidence').click();assert.match(await page.locator('.solana-evidence pre').innerText(),/999999999999999999/);await page.keyboard.press('Escape');
+ await page.locator('[data-solana-open=technical]').click();await page.locator('[data-solana-open=activity]').click();assert.equal(await page.locator('[data-solana=activity] script').count(),0);await page.keyboard.press('Escape');
+ await page.locator('[data-solana-open=ledger]').click();await page.locator('[data-solana=decisions] .solana-evidence').click();assert.match(await page.locator('[data-solana=decisions] .solana-evidence pre').innerText(),/999999999999999999/);await page.keyboard.press('Escape');
  state.positions=[{id:'solp_01234567890123456789012345678901',mint,symbol:'TEST',costUsdc:5,entryFeeUsdc:.01,markUsdc:null,markError:'Kotace chybí',markedAt:now()}];state.equityUsdc=null;
  await page.locator('[data-solana=pnl]').filter({hasText:'Neověřeno'}).waitFor();
- await page.locator('[data-solana-close-position]').click();await page.locator('[data-solana=positions] .solana-empty').waitFor();assert.match(mutations.at(-1).path,/\/positions\/.*\/close$/);
+ await page.locator('[data-solana-close-position]').click();await page.locator('[data-solana=positions] .solana-no-trades').waitFor();assert.match(mutations.at(-1).path,/\/positions\/.*\/close$/);
  await page.locator('#trading-tab').click();const before=polls;await page.waitForTimeout(2300);assert.equal(polls,before,'hidden panel stops polling');
  await page.goto('http://ocean.test/solana.html');await page.waitForURL('**/#solana');await page.locator('[data-solana=cash]').filter({hasText:'100,00'}).waitFor();
  allowed=false;await page.goto('http://ocean.test/?no-pilot#solana');await page.locator('#dashboard').waitFor({state:'visible'});assert.equal(await page.locator('#solana-tab').isVisible(),false);assert.equal(await page.locator('#solana-workspace').isVisible(),false);
- assert.deepEqual(errors,[]);console.log('PASS integrated Solana: mobile tabs, desktop agent rail/log, real progress polling, start/pause, XSS, precise evidence, stale marks, hidden polling and legacy redirect.');
+ assert.deepEqual(errors,[]);console.log('PASS integrated Solana: mobile tabs, friendly desktop overview, expandable technical details, real progress polling, start/pause, XSS, precise evidence, stale marks, hidden polling and legacy redirect.');
 }finally{await browser.close();}

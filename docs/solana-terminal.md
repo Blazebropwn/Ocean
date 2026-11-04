@@ -3,14 +3,14 @@
 Pilot pro účet Blazebro. Samostatný TypeScript modul v `src/solana`,
 API v `src/routes/solana.ts`, UI integrované v dashboardu na `/#solana`.
 Na mobilu je čtvrtou záložkou Home vedle Trading/DCA. Desktop má vlastní
-boční vstup, šest kroků ve svislém sloupci a pracovní plochu radaru,
-pozic, historie equity a živého logu. Původní `/solana.html` přesměrovává.
+boční vstup a přehled tokenů, obchodů a vývoje účtu. Technické kroky
+a podrobný log jsou dostupné až v detailu Jak to pracuje. Původní `/solana.html` přesměrovává.
 Binance worker, jeho konfigurace, klíče, zůstatky a strategie zůstávají oddělené.
 Rozpracovaný audit strategie na PR #20 není součástí této větve.
 
 ## Co skutečně funguje
 
-Uživatel tlačítkem Spustit PAPER výslovně zapne automat, nebo spustí jeden
+Uživatel tlačítkem Spustit sledování výslovně zapne automat, nebo spustí jeden
 ruční sken. Server načte skutečné nově indexované Solana pooly
 z GeckoTerminal, vybere nejvýše pět kandidátů, zkontroluje report RugCheck,
 určí velikost a vyžádá Jupiter nákupní i zpětnou prodejní kotaci pro konkrétní
@@ -182,8 +182,8 @@ neúplných reportů, neprodejných tokenů a starých kotací, nečekané popla
 zobrazení cizích tokenových textů, neověřenou equity, přístup a ruční akce.
 Při ověření dashboardu prošlo 289 TypeScript testů, 190 Python testů,
 restore drill s 34 tabulkami a browserové scénáře Home/Solana včetně plného
-radaru dvaceti tokenů. Produkční pilot zatím
-není zapnutý; změna je připravená na samostatné větvi k revizi.
+radaru dvaceti tokenů. Po zpřístupnění pilotního účtu zůstává automat
+pozastavený do jeho výslovného spuštění.
 
 Další milník: sběr delší historie odmítnutých i přijatých kandidátů, audit
 Token-2022 a měření přesnějších nákladů. Helius stream a oddělený LIVE signer

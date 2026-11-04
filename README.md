@@ -60,7 +60,7 @@ Experimentální [Solana Terminal](docs/solana-terminal.md) má vlastní virtuá
 účet a data. Pilot je pouze PAPER a server ho zpřístupní jedinému ověřenému
 `users.id` v `OCEAN_SOLANA_PILOT_USER_ID`; bez nastavení je vypnutý. Najdeš
 ho na mobilu v Home → **Solana**, na desktopu pod **Solana** v boční navigaci.
-Tlačítkem **Spustit PAPER** zapneš minutové sledování na serveru.
+Tlačítkem **Spustit sledování** zapneš minutové sledování na serveru.
 Nevytváří peněženku
 ani nepoužívá Binance klíče.
 
