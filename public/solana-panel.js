@@ -63,8 +63,9 @@
     const running=Boolean(data.runtime?.running);
     const connected=lastContact!==null&&Date.now()-lastContact<10000;
     const limited=Boolean(data.marketData?.rateLimited);
-    const retry=Math.max(0,Math.ceil((Date.parse(data.marketData?.retryAt||'')-Date.now())/1000))||0;
+    const providerRetry=Math.max(0,Math.ceil((Date.parse(data.marketData?.retryAt||'')-Date.now())/1000))||0;
     const wait=Math.max(0,Math.ceil((Date.parse(automation.nextRunAt||'')-Date.now())/1000))||0;
+    const retry=Math.max(providerRetry,automation.enabled?wait:0);
     root.dataset.engine=limited?'limited':running?'running':automation.enabled?'waiting':'paused';
     $('[data-solana="engine-status"]').textContent=!connected?'Spojení se obnovuje':limited?'Zdroj dat má omezení':automation.lastError?'Čekáme na data':running?'Prověřujeme trh':automation.enabled?'Sledování běží':'Pozastaveno';
     $('[data-solana="countdown"]').textContent=limited?retry>0?`Obnovení dat za ${retry} s`:'Čekáme na obnovení zdroje':running?`${labels[data.runtime.stage]||'Kontrola'} · ${Math.max(0,Math.floor((Date.now()-Date.parse(data.runtime.startedAt))/1000))} s`:automation.enabled?`Další sken ${wait>0?`za ${wait} s`:'se připravuje'}`:'Automatický sken každých 60 s';

@@ -90,6 +90,7 @@ try{
  const modern={watchlist:state.watchlist,diagnostics:state.diagnostics,reasons:state.candidates[0].reasons,source:state.candidates[0].source};
  delete state.watchlist;delete state.diagnostics;delete state.candidates[0].reasons;delete state.candidates[0].source;
  await page.locator('[data-solana-open=rules]').focus();await page.evaluate(()=>window.OceanSolanaPanel.refresh());
+ await page.locator('[data-solana=cycle-summary]').waitFor({state:'hidden'});
  assert.equal(await page.locator('[data-solana=cycle-summary]').isVisible(),false,'older snapshots do not invent diagnostics');
  await page.locator('.solana-candidate').first().click();
  assert.equal(await page.locator('[data-solana=candidate-detail] .solana-reasons li').count(),1,'older candidates preserve their first stored reason');
@@ -104,6 +105,7 @@ try{
  state.automation={...state.automation,enabled:true,status:'error',lastError:'GeckoTerminal: HTTP 429',nextRunAt:state.marketData.retryAt};
  state.candidates=state.candidates.map((candidate,index)=>({...candidate,observedAt:oldObservation,stale:true,status:['checking','eligible','passed'][index]||candidate.status}));
  await page.evaluate(()=>window.OceanSolanaPanel.refresh());
+ await page.locator('[data-solana=candidate-detail] .solana-stale-notice').waitFor();
  assert.match(await page.locator('[data-solana=candidate-detail]').innerText(),/Starší data · poslední načtení/,'an already open detail also switches to historical labeling when the feed becomes stale');
  assert.match(await page.locator('[data-solana=candidate-detail]').innerText(),/předchozí kontrole, aktuální podmínky nejsou ověřené/);
  assert.match(await page.locator('[data-solana=candidate-detail] .solana-reasons').innerText(),/<script>alert\(2\)<\/script>/,'historical rejection evidence remains available as plain text');
@@ -117,6 +119,17 @@ try{
  await page.waitForFunction(previous=>{const text=document.querySelector('[data-solana=countdown]').textContent;return Number(text.match(/za (\d+) s/)?.[1])<previous;},initialRetry,{timeout:4000});
  const nextRetry=Number((await countdown()).match(/za (\d+) s/)[1]);
  assert.ok(initialRetry<=120&&initialRetry>=110&&nextRetry<initialRetry&&nextRetry>=105,'provider countdown uses the actual retry timestamp and keeps decreasing');
+ state.automation.nextRunAt=new Date(Date.now()+240000).toISOString();
+ await page.evaluate(()=>window.OceanSolanaPanel.refresh());
+ await page.waitForFunction(()=>Number(document.querySelector('[data-solana=countdown]').textContent.match(/za (\d+) s/)?.[1])>230);
+ const automaticRetry=Number((await countdown()).match(/za (\d+) s/)[1]);
+ assert.ok(automaticRetry<=240&&automaticRetry>=235,'enabled automation shows its later actual retry, rather than only the earlier provider cooldown');
+ assert.equal(await page.locator('[data-solana=scan]').isDisabled(),true,'source cooldown continues blocking manual checks during the later automatic backoff');
+ state.automation.nextRunAt=null;await page.evaluate(()=>window.OceanSolanaPanel.refresh());
+ await page.waitForFunction(()=>Number(document.querySelector('[data-solana=countdown]').textContent.match(/za (\d+) s/)?.[1])<125);
+ const providerFallback=Number((await countdown()).match(/za (\d+) s/)[1]);
+ assert.ok(providerFallback<=120&&providerFallback>=105,'missing automatic retry falls back to the provider cooldown');
+ state.automation.nextRunAt=new Date(Date.now()+240000).toISOString();
  assert.equal(await page.locator('[data-solana=feed-title]').innerText(),'Poslední známé nálezy');
  assert.match(await page.locator('[data-solana=watch-summary]').innerText(),/^Starší data · načteno \d/);
  assert.equal(await page.locator('.solana-candidate[data-stale=true]').count(),20,'last known candidates remain visible during the outage');
@@ -128,12 +141,12 @@ try{
   assert.doesNotMatch(await candidate.locator('.solana-candidate-name').innerText(),/Právě ověřujeme|Ve výběru pro další prověření|Dosavadní prověření prošlo|Znovu prověřeno/,'historical candidates do not appear currently active or freshly eligible');
  }
  for(const [width,height]of [[1440,900],[390,844],[375,640]]){
-  await page.setViewportSize({width,height});
+  await page.setViewportSize({width,height});await page.waitForTimeout(60);
   const fit=await page.locator('.workspace').evaluate(el=>({height:el.clientHeight,scroll:el.scrollHeight,boxes:[...document.querySelectorAll('#solana-panel>*,.solana-story>*,.solana-stream-grid>section')].map(child=>({class:child.className,height:child.getBoundingClientRect().height,y:child.getBoundingClientRect().y}))}));
   assert.ok(fit.scroll<=fit.height+2,`rate-limit and historical-data notices fit ${width}x${height}: ${JSON.stringify(fit)}`);
   assert.equal(await page.locator('[data-solana=watch-summary]').isVisible(),true,'stale label remains visible on mobile');
   assert.equal(await page.locator('.solana-step').count(),6);
-  const event=await page.locator('.solana-tail-row').first().boundingBox(),activity=await page.locator('.solana-live-tail').boundingBox();
+  const {event,activity}=await page.evaluate(()=>{const box=selector=>{const rect=document.querySelector(selector)?.getBoundingClientRect();return rect?{y:rect.y,height:rect.height}:null;};return {event:box('.solana-tail-row'),activity:box('.solana-live-tail')};});
   assert.ok(event&&event.y>=activity.y-1&&event.y+event.height<=activity.y+activity.height+1,`latest actual event remains visible during rate limiting at ${width}x${height}`);
  }
  state.positions=[{id:'solp_01234567890123456789012345678901',mint,symbol:'TEST',costUsdc:5,entryFeeUsdc:.01,markUsdc:5,markedAt:now()}];
@@ -144,6 +157,8 @@ try{
  await page.locator('[data-solana=toggle]').filter({hasText:'Spustit sledování'}).waitFor();
  assert.equal(await page.locator('[data-solana=toggle]').isDisabled(),false,'start remains available while the source cooldown persists');
  assert.match(await page.locator('[data-solana=story-text]').innerText(),/Sledování je pozastavené/);
+ const pausedRetry=Number((await countdown()).match(/za (\d+) s/)[1]);
+ assert.ok(pausedRetry<=120&&pausedRetry>=90,'paused monitoring shows the earliest provider retry instead of the previous automatic backoff');
  state.marketData={provider:'GeckoTerminal',rateLimited:false,retryAt:null};state.candidateFeed={stale:false,observedAt:now()};
  Object.assign(state,{candidates:beforeLimit.candidates,automation:beforeLimit.automation});
  await page.evaluate(()=>window.OceanSolanaPanel.refresh());
