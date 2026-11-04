@@ -8,7 +8,7 @@ import { buildApp } from "../src/app.js";
 import type { Config } from "../src/config.js";
 import { hashToken } from "../src/security.js";
 import { loadConfig } from "../src/config.js";
-import { candidateRejection, conservativeQuoteAmount, rawAmount, riskRejection, SolanaPaperEngine } from "../src/solana/engine.js";
+import { candidateRejection, candidateRejections, conservativeQuoteAmount, rawAmount, riskRejection, riskRejections, SOLANA_PAPER_POLICY_VERSION, SolanaPaperEngine } from "../src/solana/engine.js";
 import { PaperBusyError } from "../src/solana/store.js";
 import { SOLANA_TOKEN_PROGRAM, SOLANA_USDC_MINT, type SolanaCandidate, type SolanaMarketProvider, type SolanaQuote, type SolanaRiskReport } from "../src/solana/types.js";
 
@@ -300,5 +300,107 @@ test("scanner prefilter reaches eligible sixth pool and duplicates cannot starve
   assert.deepEqual(riskCalls, [MINT, secondMint]);
   assert.equal(second.positions.length, 2);
   assert.equal(second.cashUsdc, 89.98);
+  db.close();
+});
+
+test("all observed rejection checks are stored without implying unperformed later checks", async () => {
+  const db = openDatabase(":memory:"); insertUser(db);
+  const f = fixture();
+  const invalid = { ...f.candidate(), poolCreatedAt: new Date(START - 60_000).toISOString(), liquidityUsd: 1, volume5mUsd: 1 };
+  assert.equal(candidateRejections(invalid, START).length, 3);
+  const badRisk = { ...f.risk(), tokenProgram: "Token2022", topHolderPct: 80, liquidityLockedPct: 0, risks: [{ name: "Unlocked liquidity", level: "danger" }] };
+  assert.equal(riskRejections(badRisk, MINT, START).length, 4);
+  const engine = new SolanaPaperEngine(db, { ...f.provider, async risk() { return badRisk; } }, () => START);
+  const snapshot = await engine.cycle(OWNER, () => true);
+  assert.equal(snapshot.candidates[0]!.reasons!.length, 4);
+  assert.equal(snapshot.diagnostics.inspectedTokens, 1);
+  assert.equal(snapshot.diagnostics.rejectedTokens, 1);
+  assert.equal(snapshot.diagnostics.rejectionCounts.length, 4);
+  assert.equal(snapshot.diagnostics.policyVersion, SOLANA_PAPER_POLICY_VERSION);
+  assert.equal(snapshot.counters.trades, 0);
+  assert.equal(snapshot.decisions.some(event => event.stage === "executor"), false);
+  db.close();
+});
+
+test("a discovered young pool can leave the pages, survive restart, mature and PAPER-buy only after fresh refresh", async () => {
+  let now = START;
+  const db = openDatabase(":memory:"); insertUser(db);
+  const f = fixture(() => now);
+  const created = new Date(START - 60_000).toISOString();
+  const young = { ...f.candidate(), poolCreatedAt: created };
+  const requests: string[][] = [];
+  const provider: SolanaMarketProvider = { ...f.provider, async scan() { return now === START ? [young] : []; }, async refreshPools(addresses) { requests.push([...addresses]); return [{ ...f.candidate(), poolCreatedAt: created }]; } };
+  const first = await new SolanaPaperEngine(db, provider, () => now).cycle(OWNER, () => true);
+  assert.equal(first.watchlist.trackedPools, 1);
+  assert.equal(first.counters.trades, 0);
+  now += 5 * 60_000;
+  const engine = new SolanaPaperEngine(db, provider, () => now);
+  const second = await engine.cycle(OWNER, () => true);
+  assert.deepEqual(requests, [[young.poolAddress]]);
+  assert.equal(second.candidates[0]!.source, "watchlist");
+  assert.equal(second.watchlist.refreshedPools, 1);
+  assert.equal(second.positions.length, 1);
+  assert.equal(second.counters.trades, 1);
+  assert.equal(second.cashUsdc, 94.99);
+  db.close();
+});
+
+test("missing or stale watched data cannot debit cash or reach a risk check", async () => {
+  for (const stale of [false, true]) {
+    let now = START;
+    const db = openDatabase(":memory:"); insertUser(db);
+    const f = fixture(() => now);
+    const young = { ...f.candidate(), poolCreatedAt: new Date(START - 60_000).toISOString() };
+    let riskCalls = 0;
+    const provider: SolanaMarketProvider = { ...f.provider, async scan() { return now === START ? [young] : []; }, async refreshPools() { return stale ? [young] : []; }, async risk() { riskCalls++; return f.risk(); } };
+    const engine = new SolanaPaperEngine(db, provider, () => now);
+    await engine.cycle(OWNER, () => true);
+    now += 5 * 60_000;
+    await assert.rejects(engine.cycle(OWNER, () => true), /chybí čerstvá/);
+    const snapshot = engine.snapshot(OWNER);
+    assert.equal(riskCalls, 0);
+    assert.equal(snapshot.watchlist.refreshErrors, 1);
+    assert.equal(snapshot.cashUsdc, 100);
+    assert.equal(snapshot.counters.trades, 0);
+    assert.equal(snapshot.candidates.length, 0);
+    db.close();
+  }
+});
+
+test("fresh watched data remains usable during a discovery outage and reports incomplete coverage", async () => {
+  let now = START;
+  const db = openDatabase(":memory:"); insertUser(db);
+  const f = fixture(() => now);
+  const created = new Date(START - 60_000).toISOString();
+  const provider: SolanaMarketProvider = { ...f.provider, async scan() { if (now !== START) throw new Error("Nové pooly nejsou dostupné."); return [{ ...f.candidate(), poolCreatedAt: created }]; }, async refreshPools() { return [{ ...f.candidate(), poolCreatedAt: created }]; } };
+  const engine = new SolanaPaperEngine(db, provider, () => now);
+  await engine.cycle(OWNER, () => true);
+  now += 5 * 60_000;
+  const snapshot = await engine.cycle(OWNER, () => true);
+  assert.equal(snapshot.watchlist.lastError, "Nové pooly nejsou dostupné.");
+  assert.equal(snapshot.watchlist.refreshedPools, 1);
+  assert.equal(snapshot.counters.trades, 1);
+  db.close();
+});
+
+test("risk budget rotates to unchecked tokens and an eligible pool wins over a younger deeper pool", async () => {
+  let now = START;
+  const db = openDatabase(":memory:"); insertUser(db);
+  const f = fixture(() => now);
+  const mints = [..."3456789"].map(char => `So1111111111111111111111111111111111111111${char}`);
+  const calls: string[] = [];
+  const provider: SolanaMarketProvider = { ...f.provider, async scan() { return mints.map((mint, index) => ({ ...f.candidate(), mint, liquidityUsd: 100_000 - index * 1000 })); }, async risk(mint) { calls.push(mint); return { ...f.risk(), mint, risks: [{ name: "Observed risk", level: "warn" }] }; } };
+  const engine = new SolanaPaperEngine(db, provider, () => now);
+  await engine.cycle(OWNER, () => true);
+  assert.deepEqual(calls, mints.slice(0, 5));
+  now += 61_000;
+  await engine.cycle(OWNER, () => true);
+  assert.deepEqual(calls.slice(5, 7), mints.slice(5));
+  assert.equal(new Set(calls).size, 7);
+  const mature = f.candidate();
+  const withBothPools = new SolanaPaperEngine(db, { ...f.provider, async scan() { return [{ ...mature, poolAddress: SOLANA_USDC_MINT, liquidityUsd: 200_000, poolCreatedAt: new Date(now - 60_000).toISOString() }, mature]; } }, () => now);
+  now += 61_000;
+  const snapshot = await withBothPools.cycle(OWNER, () => true);
+  assert.equal(snapshot.counters.trades, 1);
   db.close();
 });

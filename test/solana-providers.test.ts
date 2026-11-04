@@ -27,6 +27,13 @@ function poolFixture() {
   };
 }
 
+function poolFixtureAt(address: string) {
+  const fixture = poolFixture();
+  fixture.data[0]!.id = `solana_${address}`;
+  fixture.data[0]!.attributes.address = address;
+  return fixture;
+}
+
 function riskFixture() {
   return {
     mint: MINT, tokenProgram: SOLANA_TOKEN_PROGRAM,
@@ -128,6 +135,91 @@ test("scanner rejects absent decimals, invalid mint binding, missing liquidity a
   await assert.rejects(provider({ data: [], included: undefined }).scan(), /neplatný seznam/);
 });
 
+test("watched pool refresh uses one fixed multi-pool GET for at most 20 public addresses", async () => {
+  const addresses = Array.from({ length: 20 }, (_, index) => "1".repeat(31) + "23456789ABCDEFGHJKLMN"[index]);
+  for (const address of addresses) assert.equal(isSolanaAddress(address), true);
+  const fixture = poolFixture();
+  fixture.data = addresses.map((address) => poolFixtureAt(address).data[0]!);
+  const calls: string[] = [];
+  const market = provider({}, { jupiterApiKey: "jupiter-only-secret", fetcher: async (url, init) => {
+    calls.push(String(url));
+    const parsed = new URL(String(url));
+    assert.equal(parsed.origin, "https://api.geckoterminal.com");
+    assert.equal(parsed.pathname, `/api/v2/networks/solana/pools/multi/${addresses.join(",")}`);
+    assert.deepEqual([...parsed.searchParams.entries()], [["include", "base_token,quote_token"]]);
+    assert.equal(init?.method, "GET");
+    assert.equal(init?.body, undefined);
+    assert.equal(new Headers(init?.headers).has("x-api-key"), false, "Jupiter credentials never reach GeckoTerminal");
+    assert.equal(new Headers(init?.headers).has("authorization"), false);
+    return Response.json(fixture, { headers: { date: new Date(NOW).toUTCString() } });
+  } });
+  const refreshed = await market.refreshPools(addresses);
+  assert.equal(calls.length, 1);
+  assert.equal(refreshed.length, 20);
+  assert.deepEqual(refreshed.map((candidate) => candidate.poolAddress), addresses);
+  for (const candidate of refreshed) {
+    assert.equal(candidate.mint, MINT);
+    assert.equal(candidate.observedAt, NOW);
+    assert.equal(candidate.evidence.discovery, "watched_pool_refresh");
+    assert.equal(candidate.evidence.sourceDate, NOW);
+    assert.equal(JSON.stringify(candidate).includes("jupiter-only-secret"), false);
+  }
+});
+
+test("watched refresh deduplicates requested addresses and never substitutes an unexpected or missing pool", async () => {
+  const missing = "11111111111111111111111111111112";
+  const unexpected = "11111111111111111111111111111113";
+  const fixture = poolFixture();
+  fixture.data.push(poolFixtureAt(unexpected).data[0]!);
+  let calls = 0;
+  const market = provider({}, { fetcher: async (url) => {
+    calls += 1;
+    assert.equal(new URL(String(url)).pathname, `/api/v2/networks/solana/pools/multi/${POOL},${missing}`);
+    return Response.json(fixture);
+  } });
+  const refreshed = await market.refreshPools([POOL, missing, POOL]);
+  assert.equal(calls, 1);
+  assert.deepEqual(refreshed.map((candidate) => candidate.poolAddress), [POOL]);
+  assert.equal(refreshed.some((candidate) => candidate.poolAddress === missing || candidate.poolAddress === unexpected), false);
+  assert.deepEqual(await provider(poolFixtureAt(unexpected)).refreshPools([POOL]), []);
+});
+
+test("watched refresh rejects invalid identities and overflow before issuing any request", async () => {
+  let calls = 0;
+  const market = provider({}, { fetcher: async () => { calls += 1; return Response.json(poolFixture()); } });
+  assert.deepEqual(await market.refreshPools([]), []);
+  for (const address of ["", "0".repeat(44), `${POOL}/transactions`, `${POOL}?taker=wallet`, "https://elsewhere.example/pool"]) {
+    await assert.rejects(market.refreshPools([address]), /neplatný seznam sledovaných poolů/);
+  }
+  await assert.rejects(market.refreshPools(Array(21).fill(POOL) as string[]), /neplatný seznam sledovaných poolů/);
+  assert.equal(calls, 0);
+});
+
+test("watched refresh validates pool ID/address binding rather than trusting requested paths", async () => {
+  const wrongIdentity = poolFixture();
+  wrongIdentity.data[0]!.id = `solana_${SOL}`;
+  await assert.rejects(provider(wrongIdentity).refreshPools([POOL]), /žádný pool/);
+  const wrongAddress = poolFixture();
+  wrongAddress.data[0]!.attributes.address = SOL;
+  await assert.rejects(provider(wrongAddress).refreshPools([POOL]), /žádný pool/);
+});
+
+test("known stale HTTP dates invalidate discovery and watched-pool prices", async () => {
+  for (const date of ["2026-11-04T10:57:59Z", "2026-11-04T11:00:11Z"]) {
+    const market = provider({}, { fetcher: async () => Response.json(poolFixture(), { headers: { date: new Date(date).toUTCString() } }) });
+    await assert.rejects(market.scan(), /GeckoTerminal:.*časově nekonzistentní/);
+    await assert.rejects(market.refreshPools([POOL]), /GeckoTerminal:.*časově nekonzistentní/);
+  }
+  const fresh = provider({}, { fetcher: async () => Response.json(poolFixture(), { headers: { date: "Wed, 04 Nov 2026 10:58:00 GMT" } }) });
+  assert.equal((await fresh.refreshPools([POOL]))[0]?.poolAddress, POOL, "120 seconds is the maximum accepted known HTTP age");
+});
+
+test("a valid empty watched-pool result needs no included metadata and never revives cached prices", async () => {
+  assert.deepEqual(await provider({ data: [] }).refreshPools([POOL]), []);
+  assert.deepEqual(await provider({ data: [], included: [] }).refreshPools([POOL]), []);
+  await assert.rejects(provider({ included: [] }).refreshPools([POOL]), /neplatný seznam poolů/);
+});
+
 test("risk checks explicit nested revocation with conservative holder and lock metrics", async () => {
   const report = await provider(riskFixture()).risk(MINT);
   assert.equal(report.mintAuthorityRevoked, true);
@@ -172,7 +264,7 @@ test("unknown holder, liquidity, risk state remains unknown; report identity is 
   await assert.rejects(provider(fixture).risk(MINT), /neodpovídá mintu/);
 });
 
-test("risk uses minimum reported pool lock and maximum holder including pools", async () => {
+test("risk uses minimum reported pool lock and unverified pool accounts remain counted as holders", async () => {
   const fixture = riskFixture();
   fixture.topHolders.push({ pct: 55 });
   fixture.markets.push({ mintA: MINT, mintB: SOL, lp: { lpLockedPct: 25 } });

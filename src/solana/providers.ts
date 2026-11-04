@@ -1,5 +1,6 @@
 import type { Evidence, SolanaCandidate, SolanaMarketProvider, SolanaQuote, SolanaRiskReport } from "./types.js";
 import { SOLANA_USDC_MINT } from "./types.js";
+import { computeHolderConcentration } from "./holders.js";
 
 const WRAPPED_SOL = "So11111111111111111111111111111111111111112";
 const MAX_BODY_BYTES = 2_000_000;
@@ -86,7 +87,7 @@ type ProviderOptions = {
   timeoutMs?: number;
 };
 
-/** Only fixed, public GET endpoints. This adapter never accepts a wallet or sends a transaction. */
+/** Fixed public market endpoints and read-only account RPC. No wallet or transaction submission. */
 export class PublicSolanaMarketProvider implements SolanaMarketProvider {
   private readonly fetcher: typeof fetch;
   private readonly now: () => Date;
@@ -102,14 +103,15 @@ export class PublicSolanaMarketProvider implements SolanaMarketProvider {
     this.intervalMs = options.jupiterIntervalMs ?? 2_100;
   }
 
-  private async read(provider: string, url: string, extraHeaders: Record<string, string> = {}): Promise<{ body: ObjectValue; receivedAt: string; sourceDate: string | null }> {
+  private async read(provider: string, url: string, extraHeaders: Record<string, string> = {}, rpcBody?: ObjectValue): Promise<{ body: ObjectValue; receivedAt: string; sourceDate: string | null }> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs ?? 8_000);
     timeout.unref();
     try {
       const response = await this.fetcher(url, {
-        method: "GET", redirect: "error", signal: controller.signal,
-        headers: { accept: "application/json", "user-agent": "Ocean-Solana-Paper/1.0", ...extraHeaders },
+        method: rpcBody ? "POST" : "GET", redirect: "error", signal: controller.signal,
+        headers: { accept: "application/json", "user-agent": "Ocean-Solana-Paper/1.0", ...(rpcBody ? { "content-type": "application/json" } : {}), ...extraHeaders },
+        ...(rpcBody ? { body: JSON.stringify(rpcBody) } : {}),
       });
       if (!response.ok) throw new SolanaProviderError(provider, `HTTP ${response.status}`);
       const contentLength = response.headers.get("content-length");
@@ -155,6 +157,22 @@ export class PublicSolanaMarketProvider implements SolanaMarketProvider {
 
   private async scanPage(page: number): Promise<SolanaCandidate[]> {
     const { body, receivedAt, sourceDate } = await this.read("GeckoTerminal", `https://api.geckoterminal.com/api/v2/networks/solana/new_pools?include=base_token,quote_token&page=${page}`);
+    return this.decodePools(body, receivedAt, sourceDate, { discovery: "newly_indexed_pools_poll", page, sampledPages: [...NEW_POOL_PAGES] }).slice(0, 20);
+  }
+
+  async refreshPools(poolAddresses: readonly string[]): Promise<SolanaCandidate[]> {
+    if (poolAddresses.length === 0) return [];
+    if (poolAddresses.length > 20 || poolAddresses.some((address) => !isSolanaAddress(address))) throw new SolanaProviderError("GeckoTerminal", "neplatný seznam sledovaných poolů");
+    const addresses = [...new Set(poolAddresses)];
+    const { body, receivedAt, sourceDate } = await this.read("GeckoTerminal", `https://api.geckoterminal.com/api/v2/networks/solana/pools/multi/${addresses.join(",")}?include=base_token,quote_token`);
+    // Missing addresses are intentionally absent; an old cached candidate is never a substitute.
+    if (Array.isArray(body.data) && body.data.length === 0) return [];
+    return this.decodePools(body, receivedAt, sourceDate, { discovery: "watched_pool_refresh" })
+      .filter((candidate) => addresses.includes(candidate.poolAddress));
+  }
+
+  private decodePools(body: ObjectValue, receivedAt: string, sourceDate: string | null, provenance: Evidence): SolanaCandidate[] {
+    if (sourceDate !== null && (Date.parse(receivedAt) - Date.parse(sourceDate) > 120_000 || Date.parse(sourceDate) - Date.parse(receivedAt) > 10_000)) throw new SolanaProviderError("GeckoTerminal", "zastaralá nebo časově nekonzistentní odpověď");
     if (!Array.isArray(body.data) || !Array.isArray(body.included) || body.data.length > 100 || body.included.length > 250) {
       throw new SolanaProviderError("GeckoTerminal", "neplatný seznam poolů");
     }
@@ -186,16 +204,16 @@ export class PublicSolanaMarketProvider implements SolanaMarketProvider {
         mint, poolAddress: attributes.address, symbol: text(token?.symbol, 24) ?? mint.slice(0, 8),
         name: text(token?.name, 100) ?? mint, decimals: Number(decimals), poolCreatedAt: createdAt,
         observedAt: receivedAt, liquidityUsd: liquidity, volume5mUsd: volume,
-        evidence: { provider: "geckoterminal", discovery: "newly_indexed_pools_poll", page, sampledPages: [...NEW_POOL_PAGES], receivedAt, sourceDate,
+        evidence: { provider: "geckoterminal", ...provenance, receivedAt, sourceDate,
           poolCreatedAt: createdAt, quoteMint, reserveUsd: attributes.reserve_in_usd,
           volume5mUsd: object(attributes.volume_usd)?.m5, transactions5m: object(object(attributes.transactions)?.m5),
           dex: text(object(object(relationships?.dex)?.data)?.id, 60) },
       };
-      if ((candidates.get(mint)?.liquidityUsd ?? -1) < liquidity) candidates.set(mint, candidate);
+      if ((candidates.get(candidate.poolAddress)?.liquidityUsd ?? -1) < liquidity) candidates.set(candidate.poolAddress, candidate);
     }
     // A nonempty but entirely unrecognisable schema is an error, not an empty successful scan.
     if (body.data.length > 0 && candidates.size === 0) throw new SolanaProviderError("GeckoTerminal", "žádný pool nemá úplná ověřitelná data");
-    return [...candidates.values()].sort((a, b) => b.liquidityUsd - a.liquidityUsd).slice(0, 20);
+    return [...candidates.values()].sort((a, b) => b.liquidityUsd - a.liquidityUsd);
   }
 
   async risk(mint: string): Promise<SolanaRiskReport> {
@@ -203,9 +221,16 @@ export class PublicSolanaMarketProvider implements SolanaMarketProvider {
     const { body, receivedAt, sourceDate } = await this.read("RugCheck", `https://api.rugcheck.xyz/v1/tokens/${mint}/report`);
     if (body.mint !== mint) throw new SolanaProviderError("RugCheck", "report neodpovídá mintu");
     const token = object(body.token);
-    const holders = Array.isArray(body.topHolders) && body.topHolders.length > 0 && body.topHolders.length <= 100
-      ? body.topHolders.map((holder) => percent(object(holder)?.pct)) : [];
-    const topHolderPct = holders.length > 0 && holders.every((value) => value !== null) ? Math.max(...holders as number[]) : null;
+    const holders = await computeHolderConcentration(body, mint, async (addresses) => {
+      if (!addresses.length || addresses.length > 40 || addresses.some((address) => !isSolanaAddress(address))) throw new SolanaProviderError("Solana RPC", "neplatný seznam účtů");
+      const { body: rpc } = await this.read("Solana RPC", "https://api.mainnet-beta.solana.com", {}, {
+        jsonrpc: "2.0", id: "ocean-holder-check", method: "getMultipleAccounts",
+        params: [addresses, { encoding: "jsonParsed", commitment: "confirmed" }],
+      });
+      if (rpc.error || rpc.id !== "ocean-holder-check") throw new SolanaProviderError("Solana RPC", "účty nelze ověřit");
+      return rpc.result;
+    });
+    const topHolderPct = holders.topHolderPct;
     const markets = Array.isArray(body.markets) && body.markets.length <= 100 ? body.markets.map(object) : [];
     const completeMarkets = markets.length > 0 && markets.every((market) => market !== null
       && isSolanaAddress(market.mintA) && isSolanaAddress(market.mintB));
@@ -233,7 +258,8 @@ export class PublicSolanaMarketProvider implements SolanaMarketProvider {
         tokenDecimals: nonnegative(token?.decimals), tokenProgram: text(body.tokenProgram),
         rugged: typeof body.rugged === "boolean" ? body.rugged : null,
         totalMarketLiquidity: nonnegative(body.totalMarketLiquidity), topHolderPct, liquidityLockedPct,
-        concentrationMethod: "max_reported_holder_including_pool_vaults", lockMethod: "minimum_reported_lock_across_token_markets",
+        holderConcentration: holders.evidence,
+        concentrationMethod: "max_reported_holder_excluding_chain_verified_pumpswap_vaults", lockMethod: "minimum_reported_lock_across_token_markets",
         risks, marketCount: relevantMarkets.length, reportIsSafetyGuarantee: false },
     };
   }

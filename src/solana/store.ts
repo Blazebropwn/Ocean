@@ -56,11 +56,25 @@ export class SolanaPaperStore {
 
   recordCandidates(userId: string, cycleId: string, candidates: SolanaCandidateSummary[]) {
     this.db.prepare("UPDATE solana_paper_cycles SET candidate_count=?,rejected_count=?,candidates_json=? WHERE id=? AND user_id=?")
-      .run(candidates.length, candidates.filter((candidate) => candidate.status === "blocked").length, JSON.stringify(candidates.slice(0, 60)), cycleId, userId);
+      .run(candidates.length, candidates.filter((candidate) => candidate.status === "blocked").length, JSON.stringify(candidates.slice(0, 80)), cycleId, userId);
+  }
+
+  recordScanDetails(userId: string, cycleId: string, details: Evidence) {
+    this.db.prepare("UPDATE solana_paper_cycles SET scan_details_json=? WHERE id=? AND user_id=?").run(JSON.stringify(details), cycleId, userId);
+  }
+
+  scanDetails(userId: string): Evidence {
+    const cycle = this.db.prepare("SELECT scan_details_json FROM solana_paper_cycles WHERE user_id=? ORDER BY started_at DESC,id DESC LIMIT 1").get(userId) as { scan_details_json: string } | undefined;
+    return cycle ? JSON.parse(cycle.scan_details_json) as Evidence : {};
   }
 
   recordRiskCheck(userId: string, cycleId: string) {
     this.db.prepare("UPDATE solana_paper_cycles SET risk_checked_count=risk_checked_count+1 WHERE id=? AND user_id=?").run(cycleId, userId);
+  }
+
+  lastRiskChecks(userId: string) {
+    const rows = this.db.prepare("SELECT mint,MAX(occurred_at) AS checked_at FROM solana_paper_events WHERE user_id=? AND stage='rug-check' AND status='running' AND mint IS NOT NULL GROUP BY mint").all(userId) as { mint: string; checked_at: number }[];
+    return new Map(rows.map((row) => [row.mint, row.checked_at]));
   }
 
   candidates(userId: string) {

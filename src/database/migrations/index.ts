@@ -13,5 +13,6 @@ import { accountResetArchives } from "./010_account_reset_archives.js";
 import { tradeCosts } from "./011_trade_costs.js";
 import { solanaPaper } from "./012_solana_paper.js";
 import { solanaAutomation } from "./013_solana_automation.js";
+import { solanaWatchlist } from "./014_solana_watchlist.js";
 
-export const databaseMigrations = [existingOceanSchema, agent001Foundation, adminAuditLog, workerNotifications, tideEconomy, genesisWaves, accountSuspension, sonarLeaderboard, sonarRecordVersions, accountResetArchives, tradeCosts, solanaPaper, solanaAutomation];
+export const databaseMigrations = [existingOceanSchema, agent001Foundation, adminAuditLog, workerNotifications, tideEconomy, genesisWaves, accountSuspension, sonarLeaderboard, sonarRecordVersions, accountResetArchives, tradeCosts, solanaPaper, solanaAutomation, solanaWatchlist];

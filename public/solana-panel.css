@@ -44,6 +44,7 @@
 .solana-story p{font-size:12px;color:#b1c0c5;line-height:1.5;margin-top:4px}
 .solana-progress-summary>small{font-size:10px;color:var(--solana-muted);white-space:nowrap;margin-top:3px}
 .solana-progress-meta{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-top:9px;font-size:10px;color:var(--solana-muted)}
+.solana-progress-notes{display:flex;flex-direction:column;gap:3px;min-width:0}.solana-progress-notes>[data-solana=cycle-summary]{color:#b4c9c1;font-size:10px}
 .solana-story[data-tone=attention]{border-color:#665838;background:#2a271d55}
 .solana-stream-grid{grid-area:stream;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(270px,1fr);grid-template-rows:minmax(100px,1fr) minmax(90px,1fr);grid-template-areas:"candidates positions" "candidates activity";gap:12px;min-height:0}
 .solana-stream{grid-area:candidates}.solana-open-positions{grid-area:positions}.solana-live-activity{grid-area:activity}
@@ -51,6 +52,7 @@
 .solana-stream-grid header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 17px;min-height:56px;flex-shrink:0}
 .solana-stream-grid h3{font-size:14px;font-weight:600}
 .solana-stream-grid header p{font-size:11px;color:var(--solana-muted);margin-top:4px}
+.solana-stream-grid header .solana-watch-summary[data-error=true]{color:#dfc38c}
 .solana-stream-grid header>span{font-size:10px;color:var(--solana-muted);white-space:nowrap}
 .solana-candidates,.solana-open-positions>[data-solana=positions]{overflow:auto;min-height:0;padding:0 17px;overscroll-behavior:contain}
 .solana-candidates{padding-bottom:6px}
@@ -59,6 +61,7 @@
 .solana-token-avatar{display:grid;place-items:center;width:34px;height:34px;border:1px solid #37504a;border-radius:11px;background:#24413b66;color:#9bd5c6;font-size:11px;font-weight:650}
 .solana-candidate b{font-size:13px;font-weight:600}.solana-candidate :is(b,small){display:block;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
 .solana-candidate small{font-size:11px;color:var(--solana-muted);margin-top:4px}.solana-candidate-name{min-width:0}
+.solana-candidate small.solana-candidate-context{color:#c7c6a3;font-size:10px}
 .solana-candidate-result{min-width:0;text-align:right}.solana-candidate-result>span{font-size:10px;border-radius:20px;padding:3px 7px;background:#34403870;color:#c2cbbf}
 .solana-candidate-result[data-result=bought]>span,.solana-candidate-result[data-result=passed]>span,.solana-candidate-result[data-result=checking]>span{color:var(--cyan);background:#24473d}
 .solana-candidate-result small{font-size:9px;color:#829b94}.solana-candidate.is-new{animation:solana-arrival .6s ease-out}
@@ -80,6 +83,7 @@
 .solana-dialog-body{overflow:auto;max-height:calc(86dvh - 70px);padding:20px;font-size:13px;line-height:1.65;overscroll-behavior:contain;overflow-wrap:anywhere}
 .solana-dialog-body p+p{margin-top:12px}.solana-dialog-body h3{font-size:14px;margin:14px 0}.solana-dialog-body a{color:var(--cyan)}
 .solana-dialog-body dl{margin:16px 0}.solana-dialog-body dl>div{display:flex;justify-content:space-between;gap:16px;padding:8px 0;border-bottom:1px solid var(--line);font-size:12px}.solana-dialog-body dt{color:var(--muted)}.solana-dialog-body dd{margin:0;text-align:right}
+.solana-reasons{padding-left:20px;margin:8px 0 16px;color:#d8dfda}.solana-reasons li{padding-left:3px;margin:7px 0;overflow-wrap:anywhere}.solana-reasons li::marker{color:#dfc38c}
 .solana-event,.solana-evidence{padding:11px 0;border-bottom:1px solid var(--line)}.solana-event time{display:block;font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}.solana-event b{font-size:12px}.solana-event p{font-size:12px;color:var(--muted);margin-top:4px}
 .solana-evidence summary{cursor:pointer;font-size:12px;color:#c8d7d2}.solana-evidence pre{padding:12px;margin-top:8px;max-height:300px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#0e161b;border-radius:8px;font-size:11px;line-height:1.5}.solana-evidence small{display:block;margin-top:12px;color:var(--muted);overflow-wrap:anywhere}
 .solana-pipeline{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-top:11px}.solana-pipeline .solana-step{display:flex;flex-direction:column;gap:5px;text-align:left;border:1px solid var(--line);background:#17282c;border-radius:10px;padding:10px;min-width:0;min-height:70px;color:var(--ink)}
@@ -115,15 +119,18 @@
   .solana-pipeline{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-top:8px}.solana-pipeline .solana-step{padding:6px 8px;gap:3px;min-height:41px;border-radius:8px}
   .solana-step-head{gap:5px}.solana-step-head b{font-size:11px}.solana-step-head small{font-size:9px}.solana-step-state{font-size:9px}.solana-step-detail{display:none}
   .solana-progress-meta{margin-top:7px;gap:6px;font-size:9px}.solana-counters{gap:10px;font-size:9px}.solana-counters>span:last-child{display:none}
+  .solana-progress-notes>[data-solana=cycle-summary]{font-size:8px}.solana-progress-meta .solana-counters{justify-content:flex-end;gap:3px 8px}.solana-progress-meta .solana-counters>span{white-space:nowrap}
+  .solana-console[data-diagnostics=true] .solana-progress-notes>[data-solana=pipeline-caption]{display:none}
   .solana-start{min-height:37px;min-width:141px;padding:8px 12px;font-size:12px!important}.solana-engine-state strong{font-size:12px}.solana-engine-state small{font-size:10px}
   .solana-stream-grid{grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);grid-template-rows:minmax(78px,1fr) auto;grid-template-areas:"candidates activity" "positions positions";gap:8px}
   .solana-stream-grid header{min-height:32px;padding:7px 10px;gap:5px}.solana-stream-grid h3{font-size:11px}.solana-stream-grid header p,.solana-stream-grid header>span{display:none}
+  .solana-stream-grid header p.solana-watch-summary{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font-size:9px;line-height:1.3;margin-top:3px}
   .solana-stream-grid .solana-text-button{font-size:10px!important;min-height:24px;padding:3px 0}
   .solana-candidates,.solana-open-positions>[data-solana=positions]{padding-inline:10px}.solana-candidate{padding:8px 0;gap:5px 7px;grid-template-columns:24px minmax(0,1fr)}
   .solana-token-avatar{width:24px;height:24px;border-radius:8px;font-size:9px}.solana-candidate b{font-size:11px}.solana-candidate small{font-size:10px;margin-top:3px}
   .solana-candidate-result{grid-column:2;text-align:left}.solana-candidate-result>span{font-size:9px;padding:2px 5px}.solana-candidate-result small{display:none}
-  .solana-live-tail{padding:0 10px 5px}.solana-tail-row{grid-template-columns:auto minmax(0,1fr);gap:3px 7px;padding:6px 0;font-size:10px;line-height:1.35}
-  .solana-tail-row time,.solana-tail-row b{font-size:9px}.solana-tail-row>span{grid-column:1/-1;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+  .solana-live-tail{padding:0 10px 5px}.solana-tail-row{grid-template-columns:auto minmax(0,1fr);gap:3px 7px;padding:4px 0;font-size:10px;line-height:1.35}
+  .solana-tail-row time,.solana-tail-row b{font-size:9px}.solana-tail-row>span{grid-column:1/-1;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;overflow:hidden}
   .solana-no-trades{padding:3px 0 7px;text-align:left;display:flex;align-items:center;gap:8px}.solana-no-trades .solana-empty-icon{display:none}.solana-no-trades strong{font-size:11px;font-weight:400;color:var(--solana-muted)}.solana-no-trades p{display:none}
   .solana-equity-history{display:none}.solana-open-positions>[data-solana=positions]{max-height:75px}.solana-position{padding:6px 0}.solana-position b{font-size:12px}.solana-position small{font-size:9px}.solana-position>strong{font-size:11px}.solana-position button{font-size:10px;min-height:30px;padding:5px 7px}
   .solana-bottom{font-size:9px}.solana-feedback{font-size:9px;max-width:95%;bottom:22px}.solana-dialog-body{padding:15px}
@@ -132,6 +139,7 @@
   .solana-wallet>div{padding:9px}.solana-wallet strong{font-size:22px}.solana-wallet span{font-size:9px}.solana-wallet small{font-size:8px}.solana-engine-state small{font-size:9px}
   .solana-head h2{font-size:18px}.solana-head-actions{gap:8px}.solana-rules-button{font-size:10px!important}.solana-head-actions .solana-one-shot{font-size:9px!important;padding:4px 5px}
   .solana-step-head b{font-size:10px}.solana-step-head small{font-size:8px}.solana-pipeline .solana-step{padding:6px}.solana-counters{gap:6px;font-size:8px}
+  .solana-console[data-diagnostics=true] .solana-counters>span:nth-child(2){display:none}.solana-progress-notes>[data-solana=cycle-summary]{white-space:nowrap}
 }
 @media(max-height:720px) and (max-width:900px){
   .solana-console{gap:6px;grid-template-rows:auto auto auto auto minmax(129px,1fr) auto}.solana-wallet>div{padding:4px 9px}.solana-wallet strong{font-size:21px;margin:1px 0}
