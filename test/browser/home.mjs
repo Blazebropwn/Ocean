@@ -17,14 +17,16 @@ const page=await browser.newPage({viewport:{width:1440,height:1050},deviceScaleF
 page.setDefaultTimeout(10000);
 const errors=[];page.on('pageerror',error=>errors.push(String(error)));
 const mutations=[];
-let failPlanSave=false, connectionStatus='connected', legacy=false, rejectDisconnect=false, failSnapshot=false;
+let failPlanSave=false, connectionStatus='connected', legacy=false, rejectDisconnect=false, failSnapshot=false, solanaPilot=false;
 await page.route('**/*',async route=>{
  const url=new URL(route.request().url());
  if(url.hostname!=='ocean.test') return route.abort();
  const path=url.pathname;
+ // Verify dashboard navigation independently of market fixtures in the Solana component's own browser checks.
+ if(path==='/solana-panel.js') return route.fulfill({contentType:'text/javascript',body:`window.OceanSolanaPanel={setUser(user){window.__solanaPanelUser=user;},setVisible(visible){window.__solanaPanelVisible=visible;document.querySelector('#solana-panel').textContent=visible?'Solana PAPER pilot':'';},refresh(){}};`});
  if(path.startsWith('/api/')) {
    let body={}; let status=200;
-   if(path==='/api/me') body={user:{username:'deepHunter',displayId:'0001',email:'preview@example.com',emailVerified:true,accessApproved:true,role:'member'}};
+   if(path==='/api/me') body={user:{username:solanaPilot?'Blazebro':'deepHunter',displayId:'0001',email:'preview@example.com',emailVerified:true,accessApproved:true,role:'member',features:{solanaTerminal:solanaPilot}}};
    else if(path==='/api/agent') body={agent:{killSwitchActive:false,status:'active',lastRun:agentRun}};
    else if(path==='/api/agent/runs') {if(route.request().method()==='POST'){mutations.push({path,method:'POST'});body={run:agentRun};}else body={runs:[agentRun]};}
    else if(path==='/api/agent/runs/preview-run') body={run:agentRun};
@@ -49,6 +51,9 @@ await page.route('**/*',async route=>{
 try {
 await page.goto('http://ocean.test/#home');
 await page.waitForFunction(()=>document.querySelector('#trading-toggle-status').textContent==='Zapnuto');
+assert.equal(await page.locator('#solana-tab').isVisible(),false,'nonpilot has the original three tabs');
+assert.equal(await page.locator('#solana-terminal-link').isVisible(),false);
+assert.equal(await page.locator('#solana-side-link').isVisible(),false);
 const fit = async label => {
  const overflow=await page.evaluate(()=>[document.documentElement,...document.querySelectorAll('.workspace,.portfolio-surface,.home-pane:not([hidden]),.workspace-dialog[open],.agent-dialog[open]')].some(el=>el.scrollWidth>el.clientWidth+1));
  assert.equal(overflow,false,`${label}: horizontal overflow`);
@@ -272,6 +277,57 @@ assert.equal(await page.locator('#streak-control').isDisabled(),false);
 rejectDisconnect=false;page.once('dialog',dialog=>dialog.accept());await page.locator('#disconnect-binance').click();
 await page.locator('#connection-form').waitFor({state:'visible'});
 assert.equal(connectionStatus,'unconfigured');assert.equal(await page.locator('#trading-control').isDisabled(),true);
+// Pilot access adds Solana inside Home, including direct links and keyboard navigation.
+solanaPilot=true;
+await page.goto('http://ocean.test/?pilot-navigation-check#solana');
+await page.locator('#solana-tab').waitFor({state:'visible'});
+assert.equal(await page.locator('#solana-terminal-link').getAttribute('href'),'/#solana');
+for(const [width,height] of [[390,680],[900,768],[901,768],[1440,900]]){
+ await page.setViewportSize({width,height});
+ const desktop=width>900;
+ assert.equal(await page.locator('#solana-workspace').isVisible(),true);
+ assert.equal(await page.locator('#solana-tab').getAttribute('aria-selected'),'true');
+ assert.equal(await page.evaluate(()=>window.__solanaPanelVisible),true);
+ for(const name of ['home','trading','dca'])assert.equal(await page.locator('#'+name+'-workspace').isVisible(),false);
+ assert.equal(await page.locator('.side-link[data-view="overview"]').getAttribute('aria-current'),desktop?null:'page');
+ assert.equal(await page.locator('#solana-side-link').getAttribute('aria-current'),desktop?'page':null);
+ assert.equal(await page.locator('#solana-side-link').isVisible(),desktop);
+ assert.equal(await page.locator('.home-tabs').isVisible(),!desktop);
+ await fit(`${width}x${height}/integrated Solana`);
+ if(desktop)await page.locator('.side-link[data-view="overview"]').click();
+ else {
+  await page.locator('#solana-tab').press('ArrowRight');
+  assert.equal(await page.locator('#home-tab').getAttribute('aria-selected'),'true');
+  assert.equal(await page.locator('#home-tab').evaluate(el=>el===document.activeElement),true);
+ }
+ assert.equal(await page.evaluate(()=>window.__solanaPanelVisible),false);
+ assert.equal(new URL(page.url()).hash,'#home');
+ if(desktop){
+  for(const name of ['home','trading','dca'])assert.equal(await page.locator('#'+name+'-workspace').isVisible(),true,'pilot desktop keeps the original dashboard panels');
+  assert.equal(await page.locator('.home-tabs').isVisible(),false);
+  await page.locator('#solana-side-link').click();
+ } else await page.locator('#home-tab').press('End');
+ assert.equal(await page.locator('#solana-tab').getAttribute('aria-selected'),'true');
+ assert.equal(new URL(page.url()).hash,'#solana');
+}
+await page.locator('.side-link[data-view="vault"]').click();
+assert.equal(await page.evaluate(()=>window.__solanaPanelVisible),false,'leaving Home stops component polling');
+await page.locator('#profile-button').click();await page.locator('#solana-terminal-link').click();
+assert.equal(await page.locator('#solana-workspace').isVisible(),true);
+assert.equal(await page.locator('#profile-menu').isVisible(),false);
+await page.evaluate(()=>showUser({...signedInUser,suspended:true,accessApproved:false}));
+assert.equal(await page.locator('#solana-tab').isVisible(),false);
+assert.equal(await page.locator('#solana-side-link').isVisible(),false);
+assert.equal(await page.evaluate(()=>window.__solanaPanelVisible),false,'suspension hides the pilot panel');
+solanaPilot=false;
+await page.evaluate(()=>showUser({...signedInUser,suspended:false,accessApproved:true,features:{solanaTerminal:false}}));
+assert.equal(await page.locator('#solana-workspace').isVisible(),false);
+assert.equal(await page.locator('#solana-tab').isVisible(),false);
+assert.equal(await page.locator('.home-tabs').isVisible(),false,'revocation restores the original desktop');
+assert.equal(await page.locator('#home-workspace').isVisible(),true);
+await page.setViewportSize({width:390,height:680});
+await page.locator('#home-tab').press('ArrowLeft');
+assert.equal(await page.locator('#dca-tab').getAttribute('aria-selected'),'true','keyboard skips the hidden Solana tab');
 assert.deepEqual(errors,[]);
-console.log('PASS: compact mobile DCA without scrolling, one-screen Vault with asset detail and optional analysis, Vault filtering/pagination/empty state, desktop panels, four-row balances, preserved draft/controls and Binance connection states.');
+console.log('PASS: compact Home/DCA/Vault, desktop panels, balances and Binance controls; integrated pilot Solana direct links, tabs, keyboard navigation and access revocation.');
 } finally {await browser.close();}

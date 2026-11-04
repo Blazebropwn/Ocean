@@ -1,82 +1,71 @@
-// Read-only browser fixtures. Never contacts market APIs or sends real transactions.
-const { chromium } = await import(process.env.OCEAN_PLAYWRIGHT_MODULE || 'playwright');
+// Integrated UI fixtures: no market calls, wallet, or real transactions.
+const { chromium }=await import(process.env.OCEAN_PLAYWRIGHT_MODULE||'playwright');
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
-const root = new URL('../../public', import.meta.url).pathname;
-const now = new Date().toISOString();
-const mint = 'So11111111111111111111111111111111111111112';
-const state = {
- mode:'PAPER',initialUsdc:100,cashUsdc:94.99,equityUsdc:99.82,realizedPnlUsdc:0,unrealizedPnlUsdc:-.18,
- limits:{maxPositionUsdc:5,maxOpenPositions:3,maxExposureUsdc:15,minLiquidityUsd:50000,minVolume5mUsd:1000,maxHolderPct:20,minLiquidityLockedPct:95,slippageBps:100,networkFeeUsdc:.01},
- stages:['scanner','rug-check','sizer','executor','logger','equity'].map(id=>({id,status:'ok',detail:'Ověřeno skutečnými vstupy; důvody jsou uložené v evidenci.'})),
- positions:[{id:'solp_01234567890123456789012345678901',mint,symbol:'<img src=x onerror=alert(1)>',tokenAmount:'999999999999999999',costUsdc:5,entryFeeUsdc:.01,openedAt:now,markUsdc:4.83,markedAt:now,markError:null}],
- trades:[{id:'trade1',positionId:'position1',side:'BUY',tokenAmount:'999999999999999999',grossUsdc:5,networkFeeUsdc:.01,occurredAt:now}],
- decisions:[{sequence:1,stage:'executor',status:'ok',mint,reason:'PAPER nákup <script>alert(1)</script>',evidence:{rawAmount:'999999999999999999',malicious:'<img src=x onerror=alert(1)>'},occurredAt:now}],
- lastCycle:{id:'cycle',startedAt:now,completedAt:now,status:'completed'},nextCycleAt:null,asOf:now
-};
+const root=new URL('../../public',import.meta.url).pathname;
+const mint='So11111111111111111111111111111111111111112';
+const now=()=>new Date().toISOString();
+let allowed=true,deny=false,polls=0;
+const mutations=[],errors=[];
+const state={mode:'PAPER',initialUsdc:100,cashUsdc:100,equityUsdc:100,positions:[],trades:[],asOf:now(),nextCycleAt:null,lastCycle:{id:'cycle',startedAt:now(),completedAt:now(),status:'completed'},limits:{maxOpenPositions:3,maxPositionUsdc:5,maxExposureUsdc:15,minLiquidityUsd:50000,minVolume5mUsd:1000,maxHolderPct:20,minLiquidityLockedPct:95,stopLossPct:10,takeProfitPct:20,maxHoldingMinutes:30,maxDailyEntries:10,maxDailyLossUsdc:5,slippageBps:100,networkFeeUsdc:.01},automation:{enabled:false,status:'paused',intervalSeconds:60,nextRunAt:null,lastError:null},runtime:{running:false,stage:null,startedAt:null,updatedAt:null},counters:{cycles:2,poolsSeen:60,riskChecked:1,rejected:59,trades:0},stages:['scanner','rug-check','sizer','executor','logger','equity'].map(id=>({id,status:id==='scanner'?'blocked':'idle',detail:'Token nesplnil limity.'})),candidates:[{mint,symbol:'<img src=x onerror=alert(1)>',liquidityUsd:22000,volume5mUsd:200,observedAt:now(),status:'blocked',reason:'Likvidita je nižší než 50 000 USD.'}],decisions:[{sequence:1,stage:'scanner',status:'blocked',reason:'<script>alert(1)</script> Likvidita je nízká.',occurredAt:now(),evidence:{raw:'999999999999999999'}}],equityHistory:[{at:now(),valueUsdc:100},{at:now(),valueUsdc:100}]};
 const browser=await chromium.launch({headless:true,executablePath:process.env.OCEAN_CHROMIUM_PATH,args:['--no-sandbox']});
-const page=await browser.newPage({viewport:{width:1440,height:900}});
-const errors=[],mutations=[];
-let allowed=true, denied=false;
-page.on('pageerror',error=>errors.push(String(error)));
+state.candidates.push(...Array.from({length:19},(_,index)=>({...state.candidates[0],mint:mint.slice(0,-2)+String(index+10),symbol:`TOKEN${index+1}`})));
+const page=await browser.newPage({viewport:{width:1440,height:900}});page.setDefaultTimeout(10000);page.on('pageerror',error=>errors.push(String(error)));
 await page.route('**/*',async route=>{
- const url=new URL(route.request().url());
- if(url.hostname!=='ocean.test') return route.abort();
- const path=url.pathname;
- if(path.startsWith('/api/')) {
-  if(path==='/api/me') return route.fulfill({contentType:'application/json',body:JSON.stringify({user:{features:{solanaTerminal:allowed}}})});
-  if(denied) return route.fulfill({status:404,contentType:'application/json',body:JSON.stringify({error:'Nedostupné'})});
-  if(route.request().method()==='POST'){
-   mutations.push({path,body:route.request().postData()});
-   if(path.endsWith('/close')) {state.positions=[];state.cashUsdc=99.82;state.equityUsdc=99.82;}
-   state.nextCycleAt=new Date(Date.now()+60000).toISOString();
+ const url=new URL(route.request().url());if(url.hostname!=='ocean.test')return route.abort();const path=url.pathname;
+ if(path.startsWith('/api/')){
+  let body={},status=200;
+  if(path==='/api/me')body={user:{id:'preview',username:'Blazebro',displayId:'OCEAN-000001',emailVerified:true,accessApproved:true,role:'member',features:{solanaTerminal:allowed}}};
+  else if(path.startsWith('/api/solana')){
+   if(deny){status=404;body={error:'Pilot není dostupný.'};}
+   else{
+    if(path==='/api/solana/live')polls++;
+    if(route.request().method()==='POST'){
+     mutations.push({path,body:route.request().postData()});
+     if(path.endsWith('/automation')){state.automation.enabled=route.request().postDataJSON().enabled;state.automation.status=state.automation.enabled?'running':'paused';state.runtime={running:state.automation.enabled,stage:state.automation.enabled?'scanner':null,detail:'Načítám skutečný feed.',startedAt:now(),updatedAt:now()};state.automation.nextRunAt=state.automation.enabled?new Date(Date.now()+60000).toISOString():null;}
+     else if(path.endsWith('/close')){state.positions=[];state.cashUsdc=100;state.equityUsdc=100;}
+    }
+    state.asOf=now();body=structuredClone(state);if(path.endsWith('/live')){body.trades=[];body.decisions=body.decisions.map(event=>({...event,evidence:{}}));}
+   }
   }
-  return route.fulfill({contentType:'application/json',body:JSON.stringify(state)});
+  else if(path==='/api/kryptotron/connection')body={connection:{status:'unconfigured'}};
+  else if(path==='/api/tide')body={balance:0};
+  else{status=404;body={error:'No fixture'};}
+  return route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
  }
- try {const data=await readFile(root+path);return route.fulfill({contentType:({html:'text/html',css:'text/css',js:'text/javascript'})[path.split('.').pop()]||'application/octet-stream',body:data});}
- catch {return route.fulfill({status:404,body:''});}
+ try{const file=path==='/'?'/index.html':path;return route.fulfill({contentType:({html:'text/html',css:'text/css',js:'text/javascript',svg:'image/svg+xml'})[file.split('.').pop()]||'application/octet-stream',body:await readFile(root+file)});}catch{return route.fulfill({status:404,body:''});}
 });
-try {
- await page.goto('http://ocean.test/solana.html');
- await page.locator('#terminal').waitFor({state:'visible'});
- assert.equal(mutations.length,0,'opening page never scans or trades');
- assert.match(await page.locator('#equity').innerText(),/99,82/);
- assert.equal(await page.locator('#positions img,#positions script').count(),0,'untrusted token labels are text');
- for(const [width,height] of [[1440,900],[1280,720],[768,1024],[390,844],[390,680],[375,640],[320,568]]) {
-  await page.setViewportSize({width,height});
-  const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth);
-  assert.equal(overflow,false,`${width}x${height}: no horizontal overflow`);
-  assert.equal(await page.locator('[data-stage]').count(),6);
-  if(width===390||width===1440) await page.screenshot({path:`/tmp/ocean-solana-${width}.png`,fullPage:true});
+try{
+ await page.goto('http://ocean.test/#solana');await page.locator('[data-solana="cash"]').filter({hasText:'100,00'}).waitFor();
+ assert.equal(mutations.length,0,'opening the panel does not start automation');
+ assert.equal(await page.locator('.solana-candidates img,.solana-candidates script').count(),0);
+ for(const [width,height]of [[1920,1080],[1440,900],[1280,720],[901,768],[900,768],[390,844],[390,680],[375,640],[320,568]]){
+  await page.setViewportSize({width,height});await page.waitForTimeout(60);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`${width}x${height}: no horizontal overflow`);
+  const cards=await page.locator('.solana-step').evaluateAll(els=>els.map(el=>{const r=el.getBoundingClientRect();return{x:r.x,y:r.y,bottom:r.bottom};}));
+  assert.equal(cards.length,6);
+  if(width>900){assert.ok(cards.every(card=>Math.abs(card.x-cards[0].x)<1),'desktop agents form a vertical rail');assert.equal(await page.locator('.home-tabs').isVisible(),false);assert.equal(await page.locator('.solana-live-tail').isVisible(),true);}
+  else{assert.ok(cards[1].x>cards[0].x&&cards[3].y>cards[0].y,'mobile pipeline is compact');assert.equal(await page.locator('.home-tabs').isVisible(),true);}
+  if(width>=375&&height>=640){const fit=await page.locator('.workspace').evaluate(el=>({height:el.clientHeight,scroll:el.scrollHeight,panel:[...document.querySelector('#solana-panel').children].map(child=>[child.className,Math.round(child.getBoundingClientRect().height)])}));assert.ok(fit.scroll<=fit.height+2,`panel fits ${width}x${height}: ${JSON.stringify(fit)}`);}
+  if(width===1440||width===390)await page.screenshot({path:`/tmp/ocean-solana-integrated-${width}.png`,fullPage:true});
  }
- await page.locator('[data-open="ledger-dialog"]').click();
- await page.locator('#decisions details').click();
- assert.match(await page.locator('#decisions pre').innerText(),/999999999999999999/,'raw amounts preserve integer precision');
- assert.equal(await page.locator('#decisions img,#decisions script').count(),0,'evidence is escaped');
- await page.keyboard.press('Escape');
- await page.locator('[data-open="rules-dialog"]').click();
- assert.match(await page.locator('#rules-list').innerText(),/95 %/);
- await page.keyboard.press('Escape');
- state.positions[0].markUsdc=null; state.positions[0].markError='Kotace není dostupná';state.equityUsdc=null;
- await page.reload();await page.locator('#pnl').filter({hasText:'Neověřeno'}).waitFor();
- assert.equal(await page.locator('#equity').innerText(),'—');
- assert.match(await page.locator('#positions').innerText(),/Prodejní kotace chybí/);
- await page.locator('[data-close-position]').click();
- await page.locator('#feedback').filter({hasText:'Vyhodnocení uloženo'}).waitFor();
- assert.equal(mutations.at(-1).path,`/api/solana/positions/solp_01234567890123456789012345678901/close`);
- assert.equal(mutations.at(-1).body,null);
- assert.equal(await page.locator('#scan').isDisabled(),true,'persisted cooldown visible');
- state.nextCycleAt=null;
- await page.reload();await page.locator('#scan').waitFor();await page.locator('#scan').click();
- await page.locator('#feedback').filter({hasText:'Vyhodnocení uloženo'}).waitFor();
- assert.equal(mutations.at(-1).path,'/api/solana/cycle');
- allowed=false;await page.reload();
- await page.locator('#access-message').waitFor({state:'visible'});
- assert.equal(await page.locator('#terminal').isVisible(),false);
- assert.match(await page.locator('#access-message').innerText(),/pouze/);
- allowed=true;denied=true;await page.reload();
- await page.locator('#access-message').waitFor({state:'visible'});
- assert.equal(await page.locator('#terminal').isVisible(),false,'server gate respected even with stale feature flag');
- assert.deepEqual(errors,[]);
- console.log('Solana browser checks passed (viewports, XSS, unpriced equity, mutations, cooldown, access).');
-} finally {await browser.close();}
+ await page.setViewportSize({width:390,height:844});
+ await page.locator('[data-solana="toggle"]').click();await page.locator('[data-solana="toggle"]').filter({hasText:'Pozastavit'}).waitFor();
+ assert.deepEqual(JSON.parse(mutations.at(-1).body),{enabled:true});
+ assert.equal(await page.locator('.solana-step[data-stage=scanner]').getAttribute('data-status'),'running');
+ assert.equal(await page.locator('[data-solana="toggle"]').isDisabled(),false,'pause stays available during actual automatic work');
+ state.runtime.stage='rug-check';state.runtime.detail='Ověřuji report konkrétního tokenu.';state.candidates[0].status='checking';
+ await page.locator('.solana-step[data-stage="rug-check"][data-status=running]').waitFor();
+ assert.ok(polls>0,'live updates poll server state');
+ await page.locator('[data-solana="toggle"]').click();await page.locator('[data-solana="engine-status"]').filter({hasText:'Pozastaveno'}).waitFor();
+ assert.deepEqual(JSON.parse(mutations.at(-1).body),{enabled:false});
+ await page.locator('[data-solana-open=activity]').click();assert.equal(await page.locator('[data-solana=activity] script').count(),0);await page.keyboard.press('Escape');
+ await page.locator('[data-solana-open=ledger]').click();await page.locator('.solana-evidence').click();assert.match(await page.locator('.solana-evidence pre').innerText(),/999999999999999999/);await page.keyboard.press('Escape');
+ state.positions=[{id:'solp_01234567890123456789012345678901',mint,symbol:'TEST',costUsdc:5,entryFeeUsdc:.01,markUsdc:null,markError:'Kotace chybí',markedAt:now()}];state.equityUsdc=null;
+ await page.locator('[data-solana=pnl]').filter({hasText:'Neověřeno'}).waitFor();
+ await page.locator('[data-solana-close-position]').click();await page.locator('[data-solana=positions] .solana-empty').waitFor();assert.match(mutations.at(-1).path,/\/positions\/.*\/close$/);
+ await page.locator('#trading-tab').click();const before=polls;await page.waitForTimeout(2300);assert.equal(polls,before,'hidden panel stops polling');
+ await page.goto('http://ocean.test/solana.html');await page.waitForURL('**/#solana');await page.locator('[data-solana=cash]').filter({hasText:'100,00'}).waitFor();
+ allowed=false;await page.goto('http://ocean.test/?no-pilot#solana');await page.locator('#dashboard').waitFor({state:'visible'});assert.equal(await page.locator('#solana-tab').isVisible(),false);assert.equal(await page.locator('#solana-workspace').isVisible(),false);
+ assert.deepEqual(errors,[]);console.log('PASS integrated Solana: mobile tabs, desktop agent rail/log, real progress polling, start/pause, XSS, precise evidence, stale marks, hidden polling and legacy redirect.');
+}finally{await browser.close();}

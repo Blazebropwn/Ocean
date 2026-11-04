@@ -52,6 +52,27 @@ export interface SolanaMarketProvider {
 
 export type SolanaStage = {
   id: "scanner" | "rug-check" | "sizer" | "executor" | "logger" | "equity";
-  status: "idle" | "ok" | "blocked" | "error";
+  status: "idle" | "running" | "ok" | "blocked" | "error";
   detail: string;
+};
+
+export type SolanaRuntime = {
+  running: boolean;
+  cycleId: string | null;
+  stage: SolanaStage["id"] | null;
+  mint: string | null;
+  symbol: string | null;
+  detail: string;
+  startedAt: string | null;
+  updatedAt: string | null;
+};
+
+export type SolanaCandidateSummary = {
+  mint: string;
+  symbol: string;
+  liquidityUsd: number;
+  volume5mUsd: number;
+  observedAt: string;
+  status: "eligible" | "blocked" | "checking" | "passed" | "bought";
+  reason: string;
 };

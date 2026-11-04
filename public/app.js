@@ -28,7 +28,7 @@ window.addEventListener("ocean-account-suspended", () => { if (signedInUser && !
 async function refreshAccountAccess() {
   try {
     const { user } = await request("/api/me");
-    if (user && signedInUser && (Boolean(user.suspended) !== Boolean(signedInUser.suspended) || user.accessApproved !== signedInUser.accessApproved)) showUser(user);
+    if (user && signedInUser && (Boolean(user.suspended) !== Boolean(signedInUser.suspended) || user.accessApproved !== signedInUser.accessApproved || Boolean(user.features?.solanaTerminal) !== Boolean(signedInUser.features?.solanaTerminal))) showUser(user);
   } catch { /* Keep the current lock until the server confirms a change. */ }
 }
 
@@ -62,6 +62,7 @@ async function request(path, options = {}) {
 function showUser(user) {
   signedInUser = user;
   window.OceanEconomy.setUser(user);
+  window.OceanSolanaPanel?.setUser(user);
   const accessApproved = user.accessApproved ?? user.emailVerified;
   document.body.classList.add("dashboard-active");
   document.body.classList.toggle("access-pending", !accessApproved && !user.suspended);
@@ -89,7 +90,11 @@ function showUser(user) {
   $("#email-status").className = user.emailVerified ? "hidden verified" : "hidden pending";
   document.querySelectorAll("[data-approved-account]").forEach(button => { button.disabled = !accessApproved || Boolean(user.suspended); });
   $("#invite-admin-link").classList.toggle("hidden", user.role !== "owner");
-  $("#solana-terminal-link").classList.toggle("hidden", !user.features?.solanaTerminal);
+  const solanaAvailable = hasSolanaAccess();
+  $("#solana-terminal-link").classList.toggle("hidden", !solanaAvailable);
+  $("#solana-tab").hidden = !solanaAvailable;
+  $("#solana-side-link").hidden = !solanaAvailable;
+  document.body.classList.toggle("solana-pilot", solanaAvailable);
   $("#verify-banner").classList.toggle("hidden", accessApproved || Boolean(user.suspended));
   $("#verify-banner-text").textContent = user.approvalMode === "owner" ? "Účet čeká na schválení vlastníkem." : "Ověřte svůj e-mail.";
   $("#verify-mailbox-link").classList.toggle("hidden", user.approvalMode === "owner");
@@ -232,11 +237,11 @@ $("#agent-dialog").addEventListener("click", (event) => {
 });
 
 function viewFromHash() {
-  return { home: "overview", dashboard: "overview", arcade: "arcade", gamble: "slot", slot: "slot", vault: "vault", redeem: "gift", gift: "gift" }[location.hash.slice(1)] || "overview";
+  return { home: "overview", dashboard: "overview", solana: "solana", arcade: "arcade", gamble: "slot", slot: "slot", vault: "vault", redeem: "gift", gift: "gift" }[location.hash.slice(1)] || "overview";
 }
 
 function showAppView(view, activeLink = null) {
-  const selected = ["overview", "arcade", "vault", "gift", "slot"].includes(view) ? view : "overview";
+  const selected = view === "solana" ? "overview" : ["overview", "arcade", "vault", "gift", "slot"].includes(view) ? view : "overview";
   document.body.classList.toggle("home-mode", selected === "overview");
   document.body.classList.toggle("vault-mode", selected === "vault");
   document.body.classList.toggle("arcade-mode", selected === "arcade");
@@ -257,6 +262,9 @@ function showAppView(view, activeLink = null) {
   $("#workspace-subtitle").textContent = selected === "vault"
     ? "Tvoje pravidelné nákupy a jejich historie."
     : selected === "arcade" ? "Malá pauza pod hladinou." : "Peníze, strategie a poslední dění. Na jednom místě.";
+  if (view === "solana" && hasSolanaAccess()) selectHomeWorkspace("solana");
+  else if (selectedHomeWorkspace === "solana" && (selected === "overview" || !hasSolanaAccess())) selectHomeWorkspace("home");
+  syncSolanaPanelVisibility();
   if (!signedInUser?.suspended) {
     if (selected === "arcade") openArcade();
     window.OceanEconomy.open(selected);
@@ -272,7 +280,17 @@ document.querySelectorAll("[data-open-view]").forEach(link => link.addEventListe
   showAppView(link.dataset.openView);
 }));
 
+$("#solana-terminal-link").addEventListener("click", event => {
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  if (!hasSolanaAccess()) return;
+  history.replaceState(null, "", "#solana");
+  setProfileOpen(false);
+  showAppView("solana");
+});
+
 document.querySelectorAll(".side-link[data-view]").forEach((link) => link.addEventListener("click", (event) => {
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
   event.preventDefault();
   history.replaceState(null, "", link.getAttribute("href"));
   showAppView(link.dataset.view, link);
@@ -1005,30 +1023,50 @@ for (const button of document.querySelectorAll("[data-close-dialog]")) button.ad
 for (const dialog of document.querySelectorAll(".workspace-dialog")) dialog.addEventListener("click", (event) => { if (event.target === dialog) { const bounds = dialog.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) dialog.close(); } });
 let selectedHomeWorkspace = "home";
 const compactHome = window.matchMedia("(max-width: 900px)");
-function selectHomeWorkspace(name, focus = false) {
+function hasSolanaAccess() {
+  return Boolean(signedInUser?.features?.solanaTerminal && !signedInUser.suspended && (signedInUser.accessApproved ?? signedInUser.emailVerified));
+}
+function syncSolanaPanelVisibility() {
+  const inHome = document.body.classList.contains("home-mode");
+  const solanaVisible = hasSolanaAccess() && selectedHomeWorkspace === "solana" && inHome && !$("#dashboard").classList.contains("hidden");
+  const desktopSolana = solanaVisible && !compactHome.matches;
+  for (const [link, active] of [[$("#solana-side-link"), desktopSolana], [$('.side-link[data-view="overview"]'), inHome && !desktopSolana]]) {
+    link.classList.toggle("active", active);
+    if (active) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  }
+  window.OceanSolanaPanel?.setVisible(solanaVisible);
+}
+function selectHomeWorkspace(name, focus = false, navigate = false) {
+  const availableTabs = [...document.querySelectorAll("[data-home-tab]")].filter(tab => !tab.hidden);
+  if (!availableTabs.some(tab => tab.dataset.homeTab === name) || (name === "solana" && !hasSolanaAccess())) name = "home";
   selectedHomeWorkspace = name;
+  document.body.classList.toggle("solana-workspace-open", name === "solana");
   for (const tab of document.querySelectorAll("[data-home-tab]")) {
     const selected = tab.dataset.homeTab === name;
     tab.setAttribute("aria-selected", String(selected));
     tab.tabIndex = selected ? 0 : -1;
     const pane = $("#" + tab.getAttribute("aria-controls"));
-    pane.hidden = compactHome.matches && !selected;
+    pane.hidden = tab.hidden || (compactHome.matches || name === "solana" || tab.dataset.homeTab === "solana") && !selected;
     pane.setAttribute("role", compactHome.matches ? "tabpanel" : "region");
     pane.setAttribute("aria-label", tab.textContent.trim());
     if (selected && focus && compactHome.matches) tab.focus();
   }
+  if (navigate && name === "solana") history.replaceState(null, "", "#solana");
+  else if (navigate && location.hash === "#solana") history.replaceState(null, "", "#home");
+  syncSolanaPanelVisibility();
 }
 compactHome.addEventListener("change", () => selectHomeWorkspace(selectedHomeWorkspace));
 selectHomeWorkspace(selectedHomeWorkspace);
 for (const tab of document.querySelectorAll("[data-home-tab]")) {
-  tab.addEventListener("click", () => selectHomeWorkspace(tab.dataset.homeTab));
+  tab.addEventListener("click", () => selectHomeWorkspace(tab.dataset.homeTab, false, true));
   tab.addEventListener("keydown", event => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
-    const names = [...document.querySelectorAll('[data-home-tab]')].map(item => item.dataset.homeTab);
+    const names = [...document.querySelectorAll('[data-home-tab]')].filter(item => !item.hidden).map(item => item.dataset.homeTab);
     const next = (names.indexOf(tab.dataset.homeTab) + (event.key === 'ArrowRight' ? 1 : -1) + names.length) % names.length;
     const name = event.key === "Home" ? names[0] : event.key === "End" ? names.at(-1) : names[next];
-    selectHomeWorkspace(name, true);
+    selectHomeWorkspace(name, true, true);
   });
 }
 
@@ -1510,6 +1548,8 @@ for (const [id, path] of [["#register-form", "/api/auth/register"], ["#login-for
 
 $("#logout").addEventListener("click", async () => {
   await request("/api/auth/logout", { method: "POST", body: "{}" });
+  window.OceanSolanaPanel?.setVisible(false);
+  window.OceanSolanaPanel?.setUser(null);
   location.reload();
 });
 

@@ -12,5 +12,6 @@ import { sonarRecordVersions } from "./009_sonar_record_versions.js";
 import { accountResetArchives } from "./010_account_reset_archives.js";
 import { tradeCosts } from "./011_trade_costs.js";
 import { solanaPaper } from "./012_solana_paper.js";
+import { solanaAutomation } from "./013_solana_automation.js";
 
-export const databaseMigrations = [existingOceanSchema, agent001Foundation, adminAuditLog, workerNotifications, tideEconomy, genesisWaves, accountSuspension, sonarLeaderboard, sonarRecordVersions, accountResetArchives, tradeCosts, solanaPaper];
+export const databaseMigrations = [existingOceanSchema, agent001Foundation, adminAuditLog, workerNotifications, tideEconomy, genesisWaves, accountSuspension, sonarLeaderboard, sonarRecordVersions, accountResetArchives, tradeCosts, solanaPaper, solanaAutomation];

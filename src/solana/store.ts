@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { OceanDatabase } from "../db.js";
-import type { Evidence, SolanaQuote, SolanaStage } from "./types.js";
+import type { Evidence, SolanaCandidateSummary, SolanaQuote, SolanaStage } from "./types.js";
 
 export const INITIAL_MICROS = 100_000_000;
 export const NETWORK_FEE_MICROS = 10_000;
@@ -9,6 +9,7 @@ export const CYCLE_LEASE_MS = 5 * 60_000;
 
 export type PaperAccount = { user_id: string; cash_micros: number; initial_micros: number; last_cycle_at: number | null; active_cycle_id: string | null; lease_until: number | null };
 export type PaperPosition = { id: string; user_id: string; mint: string; symbol: string; token_amount: string; cost_micros: number; entry_fee_micros: number; opened_at: number; closed_at: number | null; proceeds_micros: number | null; mark_micros: number | null; marked_at: number | null; mark_error: string | null };
+export type PaperAutomation = { user_id: string; enabled: number; generation: number; next_run_at: number | null; last_error: string | null; failure_count: number; updated_at: number };
 export class PaperBusyError extends Error {
   constructor(public readonly reason: "running" | "cooldown", public readonly retryAt: number) { super(reason); }
 }
@@ -29,6 +30,54 @@ export class SolanaPaperStore {
   account(userId: string) { return this.db.prepare("SELECT * FROM solana_paper_accounts WHERE user_id = ?").get(userId) as PaperAccount; }
   positions(userId: string) { return this.db.prepare("SELECT * FROM solana_paper_positions WHERE user_id = ? AND closed_at IS NULL ORDER BY opened_at,id").all(userId) as PaperPosition[]; }
   everTraded(userId: string, mint: string) { return Boolean(this.db.prepare("SELECT 1 FROM solana_paper_positions WHERE user_id = ? AND mint = ?").get(userId, mint)); }
+
+  automation(userId: string, now: number) {
+    this.ensureAccount(userId, now);
+    this.db.prepare("INSERT OR IGNORE INTO solana_paper_automation (user_id,updated_at) VALUES (?,?)").run(userId, now);
+    return this.db.prepare("SELECT * FROM solana_paper_automation WHERE user_id=?").get(userId) as PaperAutomation;
+  }
+
+  setAutomation(userId: string, enabled: boolean, now: number) {
+    return this.db.transaction(() => {
+      const previous = this.automation(userId, now);
+      if (Boolean(previous.enabled) === enabled) return previous;
+      const account = this.account(userId);
+      const due = enabled ? Math.max(now, account.last_cycle_at === null ? now : account.last_cycle_at + CYCLE_COOLDOWN_MS, account.active_cycle_id ? account.lease_until ?? now : now) : null;
+      this.db.prepare("UPDATE solana_paper_automation SET enabled=?,generation=generation+1,next_run_at=?,last_error=NULL,failure_count=0,updated_at=? WHERE user_id=?")
+        .run(enabled ? 1 : 0, due, now, userId);
+      return this.automation(userId, now);
+    }).immediate();
+  }
+
+  scheduleAutomation(userId: string, generation: number, nextRunAt: number, error: string | null, failureCount: number, now: number) {
+    this.db.prepare("UPDATE solana_paper_automation SET next_run_at=?,last_error=?,failure_count=?,updated_at=? WHERE user_id=? AND enabled=1 AND generation=?")
+      .run(nextRunAt, error?.slice(0, 1_000) ?? null, failureCount, now, userId, generation);
+  }
+
+  recordCandidates(userId: string, cycleId: string, candidates: SolanaCandidateSummary[]) {
+    this.db.prepare("UPDATE solana_paper_cycles SET candidate_count=?,rejected_count=?,candidates_json=? WHERE id=? AND user_id=?")
+      .run(candidates.length, candidates.filter((candidate) => candidate.status === "blocked").length, JSON.stringify(candidates.slice(0, 60)), cycleId, userId);
+  }
+
+  recordRiskCheck(userId: string, cycleId: string) {
+    this.db.prepare("UPDATE solana_paper_cycles SET risk_checked_count=risk_checked_count+1 WHERE id=? AND user_id=?").run(cycleId, userId);
+  }
+
+  candidates(userId: string) {
+    const cycle = this.db.prepare("SELECT candidates_json FROM solana_paper_cycles WHERE user_id=? ORDER BY started_at DESC,id DESC LIMIT 1").get(userId) as { candidates_json: string } | undefined;
+    return cycle ? JSON.parse(cycle.candidates_json) as SolanaCandidateSummary[] : [];
+  }
+
+  counters(userId: string) {
+    const cycles = this.db.prepare("SELECT count(*) AS cycles,COALESCE(SUM(candidate_count),0) AS poolsSeen,COALESCE(SUM(risk_checked_count),0) AS riskChecked,COALESCE(SUM(rejected_count),0) AS rejected FROM solana_paper_cycles WHERE user_id=?").get(userId) as { cycles: number; poolsSeen: number; riskChecked: number; rejected: number };
+    const trades = this.db.prepare("SELECT count(*) AS trades FROM solana_paper_trades WHERE user_id=?").get(userId) as { trades: number };
+    return { ...cycles, ...trades };
+  }
+
+  equityHistory(userId: string) {
+    const points = this.db.prepare("SELECT completed_at,equity_micros FROM solana_paper_cycles WHERE user_id=? AND completed_at IS NOT NULL ORDER BY started_at DESC,id DESC LIMIT 60").all(userId) as { completed_at: number; equity_micros: number | null }[];
+    return points.reverse().map((point) => ({ at: new Date(point.completed_at).toISOString(), valueUsdc: point.equity_micros === null ? null : point.equity_micros / 1_000_000 }));
+  }
 
   dailyBraked(userId: string, now: number) {
     const since = now - 24 * 60 * 60_000;
@@ -60,7 +109,12 @@ export class SolanaPaperStore {
 
   finish(userId: string, cycleId: string, now: number, failed = false) {
     this.db.transaction(() => {
-      this.db.prepare("UPDATE solana_paper_cycles SET status=?,completed_at=? WHERE id=? AND user_id=? AND status='running'").run(failed ? "failed" : "completed", now, cycleId, userId);
+      const account = this.account(userId);
+      const positions = this.positions(userId);
+      const priced = account && positions.every((position) => !position.mark_error && position.mark_micros !== null && position.marked_at !== null && now - position.marked_at <= 60_000);
+      const total = priced ? account.cash_micros + positions.reduce((sum, position) => sum + Math.max(0, position.mark_micros! - NETWORK_FEE_MICROS), 0) : null;
+      const equity = total !== null && Number.isSafeInteger(total) ? total : null;
+      this.db.prepare("UPDATE solana_paper_cycles SET status=?,completed_at=?,equity_micros=? WHERE id=? AND user_id=? AND status='running'").run(failed ? "failed" : "completed", now, equity, cycleId, userId);
       this.db.prepare("UPDATE solana_paper_accounts SET active_cycle_id=NULL,lease_until=NULL WHERE user_id=? AND active_cycle_id=?").run(userId, cycleId);
     })();
   }
@@ -75,9 +129,10 @@ export class SolanaPaperStore {
     else this.db.prepare("UPDATE solana_paper_positions SET mark_micros=?,marked_at=?,mark_error=NULL WHERE id=? AND user_id=? AND closed_at IS NULL").run(grossMicros, now, positionId, userId);
   }
 
-  buy(input: { userId: string; cycleId: string; mint: string; symbol: string; amount: string; costMicros: number; markMicros: number; buyQuote: SolanaQuote; sellQuote: SolanaQuote; now: number; authorize: () => boolean }) {
+  buy(input: { userId: string; cycleId: string; mint: string; symbol: string; amount: string; costMicros: number; markMicros: number; buyQuote: SolanaQuote; sellQuote: SolanaQuote; now: number; authorize: () => boolean; allowEntry?: () => boolean }) {
     return this.db.transaction(() => {
       if (!input.authorize() || !this.ownsLease(input.userId, input.cycleId, input.now)) throw new Error("Přístup nebo zámek cyklu už není platný.");
+      if (input.allowEntry && !input.allowEntry()) return false;
       const account = this.account(input.userId);
       const positions = this.positions(input.userId);
       if (this.dailyBraked(input.userId, input.now) || positions.some((position) => position.mark_error || position.mark_micros === null || position.marked_at === null || input.now - position.marked_at > 60_000)) return false;
