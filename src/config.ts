@@ -1,6 +1,8 @@
 import { resolve } from "node:path";
 
 export type Config = {
+  solanaPilotUserId?: string;
+  solanaJupiterApiKey?: string;
   genesisCodeHmacKey?: string;
   genesisAdminUserId?: string;
   port: number;
@@ -42,6 +44,8 @@ export type Config = {
 
 export function loadConfig(env = process.env): Config {
   return {
+    solanaPilotUserId: env.OCEAN_SOLANA_PILOT_USER_ID?.trim() || undefined,
+    solanaJupiterApiKey: env.OCEAN_SOLANA_JUPITER_API_KEY?.trim() || undefined,
     genesisCodeHmacKey: env.GENESIS_CODE_HMAC_KEY,
     genesisAdminUserId: env.GENESIS_ADMIN_USER_ID,
     port: Number(env.PORT ?? 3000),

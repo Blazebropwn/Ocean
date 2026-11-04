@@ -21,9 +21,14 @@ import { buildVersionedPages, versionAssetReferences } from "./asset-versioning.
 import type { PortfolioProvider } from "./portfolio/provider.js";
 import { currentUser } from "./routes/shared.js";
 import { registerArcadeRoutes } from "./routes/arcade.js";
+import { registerSolanaRoutes } from "./routes/solana.js";
+import type { SolanaMarketProvider } from "./solana/types.js";
+import type { SolanaAutomationOptions } from "./solana/automation.js";
 
 export type AppDependencies = {
   portfolioProvider?: PortfolioProvider;
+  solanaMarketProvider?: SolanaMarketProvider;
+  solanaAutomation?: SolanaAutomationOptions;
 };
 
 function isAllowedOrigin(origin: string, config: Config) {
@@ -84,7 +89,8 @@ export function buildApp(config: Config, database?: OceanDatabase, dependencies:
   registerAgentRoutes(app, db, config, dependencies.portfolioProvider);
   registerEconomyRoutes(app, db, config);
   registerArcadeRoutes(app, db, config);
+  const solanaAutomation = registerSolanaRoutes(app, db, config, dependencies.solanaMarketProvider, dependencies.solanaAutomation);
 
-  app.addHook("onClose", async () => db.close());
+  app.addHook("onClose", async () => { await solanaAutomation.close(); db.close(); });
   return app;
 }
