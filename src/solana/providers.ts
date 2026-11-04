@@ -1,0 +1,301 @@
+import type { Evidence, SolanaCandidate, SolanaMarketProvider, SolanaQuote, SolanaRiskReport } from "./types.js";
+import { SOLANA_USDC_MINT } from "./types.js";
+
+const WRAPPED_SOL = "So11111111111111111111111111111111111111112";
+const MAX_BODY_BYTES = 2_000_000;
+const MAX_RAW = (1n << 64n) - 1n;
+const BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+// Public new-pool pagination is bounded to pages 1..10. Sample recent and older
+// indexed pools so the engine's minimum-age gate can inspect mature candidates.
+// https://api.geckoterminal.com/docs/index.html
+const NEW_POOL_PAGES = [1, 5, 10] as const;
+type ObjectValue = Record<string, unknown>;
+
+/** Public Solana addresses are 32 bytes, not merely strings of base58 characters. */
+export function isSolanaAddress(value: unknown): value is string {
+  if (typeof value !== "string" || value.length < 32 || value.length > 44) return false;
+  let decoded = 0n;
+  for (const char of value) {
+    const digit = BASE58.indexOf(char);
+    if (digit < 0) return false;
+    decoded = decoded * 58n + BigInt(digit);
+  }
+  let bytes = 0;
+  while (decoded > 0n) { decoded >>= 8n; bytes += 1; }
+  const zeros = value.match(/^1*/)?.[0].length ?? 0;
+  return bytes + zeros === 32;
+}
+
+function object(value: unknown): ObjectValue | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? value as ObjectValue : null;
+}
+
+function finite(value: unknown): number | null {
+  if (typeof value !== "number" && !(typeof value === "string" && /^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(value))) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function nonnegative(value: unknown): number | null {
+  const number = finite(value);
+  return number !== null && number >= 0 ? number : null;
+}
+
+function percent(value: unknown): number | null {
+  const number = nonnegative(value);
+  return number !== null && number <= 100 ? number : null;
+}
+
+function text(value: unknown, length = 80): string | null {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.replace(/[\u0000-\u001f\u007f-\u009f]/g, "").trim().slice(0, length) : null;
+}
+
+function rawAmount(value: unknown): value is string {
+  if (typeof value !== "string" || !/^[1-9]\d{0,19}$/.test(value)) return false;
+  return BigInt(value) <= MAX_RAW;
+}
+
+function timestamp(value: unknown): string | null {
+  if (typeof value !== "string" || !/^\d{4}-\d\d-\d\dT/.test(value)) return null;
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? new Date(time).toISOString() : null;
+}
+
+function authorityRevoked(token: ObjectValue | null, report: ObjectValue, key: string): boolean | null {
+  if (!token || !Object.hasOwn(token, key)) return null;
+  const authority = token[key];
+  if (authority !== null && !isSolanaAddress(authority)) return null;
+  if (Object.hasOwn(report, key) && report[key] !== authority) return null;
+  return authority === null;
+}
+
+export class SolanaProviderError extends Error {
+  constructor(provider: string, reason: string) {
+    super(`${provider}: ${reason}`);
+    this.name = "SolanaProviderError";
+  }
+}
+
+type ProviderOptions = {
+  jupiterApiKey?: string;
+  fetcher?: typeof fetch;
+  now?: () => Date;
+  sleep?: (milliseconds: number) => Promise<void>;
+  jupiterIntervalMs?: number;
+  timeoutMs?: number;
+};
+
+/** Only fixed, public GET endpoints. This adapter never accepts a wallet or sends a transaction. */
+export class PublicSolanaMarketProvider implements SolanaMarketProvider {
+  private readonly fetcher: typeof fetch;
+  private readonly now: () => Date;
+  private readonly sleep: (milliseconds: number) => Promise<void>;
+  private readonly intervalMs: number;
+  private jupiterQueue: Promise<void> = Promise.resolve();
+  private nextJupiterAt = 0;
+
+  constructor(private readonly options: ProviderOptions = {}) {
+    this.fetcher = options.fetcher ?? fetch;
+    this.now = options.now ?? (() => new Date());
+    this.sleep = options.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
+    this.intervalMs = options.jupiterIntervalMs ?? 2_100;
+  }
+
+  private async read(provider: string, url: string, extraHeaders: Record<string, string> = {}): Promise<{ body: ObjectValue; receivedAt: string; sourceDate: string | null }> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs ?? 8_000);
+    timeout.unref();
+    try {
+      const response = await this.fetcher(url, {
+        method: "GET", redirect: "error", signal: controller.signal,
+        headers: { accept: "application/json", "user-agent": "Ocean-Solana-Paper/1.0", ...extraHeaders },
+      });
+      if (!response.ok) throw new SolanaProviderError(provider, `HTTP ${response.status}`);
+      const contentLength = response.headers.get("content-length");
+      if (contentLength !== null && Number(contentLength) > MAX_BODY_BYTES) throw new SolanaProviderError(provider, "odpověď překročila limit");
+      if (!response.body) throw new SolanaProviderError(provider, "prázdná odpověď");
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          size += value.byteLength;
+          if (size > MAX_BODY_BYTES) {
+            await reader.cancel();
+            throw new SolanaProviderError(provider, "odpověď překročila limit");
+          }
+          chunks.push(value);
+        }
+      } finally { reader.releaseLock(); }
+      const parsed = object(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+      if (!parsed) throw new SolanaProviderError(provider, "neplatný formát odpovědi");
+      const date = response.headers.get("date");
+      const dateMs = date ? Date.parse(date) : NaN;
+      return { body: parsed, receivedAt: this.now().toISOString(), sourceDate: Number.isFinite(dateMs) ? new Date(dateMs).toISOString() : null };
+    } catch (error) {
+      if (error instanceof SolanaProviderError) throw error;
+      // Do not expose provider bodies, URLs containing credentials, or network error internals.
+      throw new SolanaProviderError(provider, controller.signal.aborted ? "vypršel časový limit" : "data nejsou dostupná nebo jsou neplatná");
+    } finally { clearTimeout(timeout); }
+  }
+
+  async scan(): Promise<SolanaCandidate[]> {
+    const candidates = new Map<string, SolanaCandidate>();
+    for (const page of NEW_POOL_PAGES) {
+      // A failed page invalidates the scan; do not silently label partial coverage complete.
+      for (const candidate of await this.scanPage(page)) {
+        if ((candidates.get(candidate.mint)?.liquidityUsd ?? -1) < candidate.liquidityUsd) candidates.set(candidate.mint, candidate);
+      }
+    }
+    return [...candidates.values()].sort((a, b) => b.liquidityUsd - a.liquidityUsd).slice(0, 60);
+  }
+
+  private async scanPage(page: number): Promise<SolanaCandidate[]> {
+    const { body, receivedAt, sourceDate } = await this.read("GeckoTerminal", `https://api.geckoterminal.com/api/v2/networks/solana/new_pools?include=base_token,quote_token&page=${page}`);
+    if (!Array.isArray(body.data) || !Array.isArray(body.included) || body.data.length > 100 || body.included.length > 250) {
+      throw new SolanaProviderError("GeckoTerminal", "neplatný seznam poolů");
+    }
+    const tokens = new Map(body.included.flatMap((value) => {
+      const item = object(value);
+      return item && item.type === "token" && typeof item.id === "string" ? [[item.id, object(item.attributes)] as const] : [];
+    }));
+    const candidates = new Map<string, SolanaCandidate>();
+    for (const value of body.data) {
+      const pool = object(value);
+      const attributes = object(pool?.attributes);
+      const relationships = object(pool?.relationships);
+      const baseRelation = object(object(relationships?.base_token)?.data);
+      const quoteRelation = object(object(relationships?.quote_token)?.data);
+      const token = typeof baseRelation?.id === "string" ? tokens.get(baseRelation.id) : null;
+      const mint = token?.address;
+      const quoteMint = typeof quoteRelation?.id === "string" ? quoteRelation.id.replace(/^solana_/, "") : null;
+      const decimals = token?.decimals;
+      const createdAt = timestamp(attributes?.pool_created_at);
+      const liquidity = nonnegative(attributes?.reserve_in_usd);
+      const volume = nonnegative(object(attributes?.volume_usd)?.m5);
+      if (pool?.type !== "pool" || !attributes || !isSolanaAddress(mint) || !isSolanaAddress(attributes.address)
+        || !isSolanaAddress(quoteMint) || baseRelation?.id !== `solana_${mint}` || pool.id !== `solana_${attributes.address}`
+        || mint === WRAPPED_SOL || mint === SOLANA_USDC_MINT
+        || !Number.isInteger(decimals) || Number(decimals) < 0 || Number(decimals) > 18
+        || createdAt === null || Date.parse(createdAt) > Date.parse(receivedAt) + 60_000
+        || liquidity === null || volume === null) continue;
+      const candidate: SolanaCandidate = {
+        mint, poolAddress: attributes.address, symbol: text(token?.symbol, 24) ?? mint.slice(0, 8),
+        name: text(token?.name, 100) ?? mint, decimals: Number(decimals), poolCreatedAt: createdAt,
+        observedAt: receivedAt, liquidityUsd: liquidity, volume5mUsd: volume,
+        evidence: { provider: "geckoterminal", discovery: "newly_indexed_pools_poll", page, sampledPages: [...NEW_POOL_PAGES], receivedAt, sourceDate,
+          poolCreatedAt: createdAt, quoteMint, reserveUsd: attributes.reserve_in_usd,
+          volume5mUsd: object(attributes.volume_usd)?.m5, transactions5m: object(object(attributes.transactions)?.m5),
+          dex: text(object(object(relationships?.dex)?.data)?.id, 60) },
+      };
+      if ((candidates.get(mint)?.liquidityUsd ?? -1) < liquidity) candidates.set(mint, candidate);
+    }
+    // A nonempty but entirely unrecognisable schema is an error, not an empty successful scan.
+    if (body.data.length > 0 && candidates.size === 0) throw new SolanaProviderError("GeckoTerminal", "žádný pool nemá úplná ověřitelná data");
+    return [...candidates.values()].sort((a, b) => b.liquidityUsd - a.liquidityUsd).slice(0, 20);
+  }
+
+  async risk(mint: string): Promise<SolanaRiskReport> {
+    if (!isSolanaAddress(mint)) throw new SolanaProviderError("RugCheck", "neplatný mint");
+    const { body, receivedAt, sourceDate } = await this.read("RugCheck", `https://api.rugcheck.xyz/v1/tokens/${mint}/report`);
+    if (body.mint !== mint) throw new SolanaProviderError("RugCheck", "report neodpovídá mintu");
+    const token = object(body.token);
+    const holders = Array.isArray(body.topHolders) && body.topHolders.length > 0 && body.topHolders.length <= 100
+      ? body.topHolders.map((holder) => percent(object(holder)?.pct)) : [];
+    const topHolderPct = holders.length > 0 && holders.every((value) => value !== null) ? Math.max(...holders as number[]) : null;
+    const markets = Array.isArray(body.markets) && body.markets.length <= 100 ? body.markets.map(object) : [];
+    const completeMarkets = markets.length > 0 && markets.every((market) => market !== null
+      && isSolanaAddress(market.mintA) && isSolanaAddress(market.mintB));
+    const relevantMarkets = markets.filter((market) => market && (market.mintA === mint || market.mintB === mint));
+    const locks = relevantMarkets.map((market) => percent(object(market?.lp)?.lpLockedPct));
+    const liquidityLockedPct = completeMarkets && locks.length > 0 && locks.every((value) => value !== null) ? Math.min(...locks as number[]) : null;
+    const risks: SolanaRiskReport["risks"] = [];
+    if (!Array.isArray(body.risks) || body.risks.length > 100) risks.push({ name: "Neúplný seznam rizik", level: "unknown" });
+    else for (const value of body.risks) {
+      const risk = object(value);
+      const name = text(risk?.name, 120);
+      const level = text(risk?.level, 20)?.toLowerCase();
+      risks.push({ name: name ?? "Neznámé riziko", level: level === "warn" || level === "danger" || level === "info" ? level : "unknown" });
+    }
+    if (body.rugged === true) risks.push({ name: "RugCheck označuje token jako rugged", level: "danger" });
+    if (typeof body.rugged !== "boolean") risks.push({ name: "Chybí stav rugged", level: "unknown" });
+    return {
+      mint, observedAt: receivedAt, mintAuthorityRevoked: authorityRevoked(token, body, "mintAuthority"),
+      freezeAuthorityRevoked: authorityRevoked(token, body, "freezeAuthority"),
+      tokenProgram: isSolanaAddress(body.tokenProgram) ? body.tokenProgram : null,
+      topHolderPct, liquidityLockedPct, risks,
+      evidence: { provider: "rugcheck", receivedAt, sourceDate, tokenDetectedAt: timestamp(body.detectedAt),
+        mintAuthority: token && Object.hasOwn(token, "mintAuthority") ? token.mintAuthority : "missing",
+        freezeAuthority: token && Object.hasOwn(token, "freezeAuthority") ? token.freezeAuthority : "missing",
+        tokenDecimals: nonnegative(token?.decimals), tokenProgram: text(body.tokenProgram),
+        rugged: typeof body.rugged === "boolean" ? body.rugged : null,
+        totalMarketLiquidity: nonnegative(body.totalMarketLiquidity), topHolderPct, liquidityLockedPct,
+        concentrationMethod: "max_reported_holder_including_pool_vaults", lockMethod: "minimum_reported_lock_across_token_markets",
+        risks, marketCount: relevantMarkets.length, reportIsSafetyGuarantee: false },
+    };
+  }
+
+  async quote(inputMint: string, outputMint: string, amount: string): Promise<SolanaQuote> {
+    if (!isSolanaAddress(inputMint) || !isSolanaAddress(outputMint) || inputMint === outputMint || !rawAmount(amount)) {
+      throw new SolanaProviderError("Jupiter", "neplatný požadavek na cenovou nabídku");
+    }
+    const previous = this.jupiterQueue;
+    let release!: () => void;
+    this.jupiterQueue = new Promise<void>((resolve) => { release = resolve; });
+    await previous;
+    try {
+      const wait = this.nextJupiterAt - this.now().getTime();
+      if (wait > 0) await this.sleep(wait);
+      this.nextJupiterAt = this.now().getTime() + this.intervalMs;
+      const startedAt = this.now().toISOString();
+      const params = new URLSearchParams({ inputMint, outputMint, amount });
+      const headers: Record<string, string> = this.options.jupiterApiKey ? { "x-api-key": this.options.jupiterApiKey } : {};
+      const { body, receivedAt, sourceDate } = await this.read("Jupiter", `https://api.jup.ag/swap/v2/order?${params}`, headers);
+      if (sourceDate !== null && (Date.parse(receivedAt) - Date.parse(sourceDate) > 30_000 || Date.parse(sourceDate) - Date.parse(receivedAt) > 10_000)) {
+        throw new SolanaProviderError("Jupiter", "zastaralá nebo časově nekonzistentní odpověď");
+      }
+      const impact = finite(body.priceImpactPct);
+      const fee = nonnegative(body.feeBps);
+      const route = text(body.router, 40);
+      const routes = Array.isArray(body.routePlan) && body.routePlan.length > 0 && body.routePlan.length <= 30
+        ? body.routePlan.map((step) => text(object(object(step)?.swapInfo)?.label, 60)) : [];
+      if (body.inputMint !== inputMint || body.outputMint !== outputMint || body.inAmount !== amount
+        || body.swapMode !== "ExactIn" || body.errorCode !== undefined || body.errorMessage !== undefined
+        || body.error !== undefined || body.transaction !== null || (body.taker !== null && body.taker !== undefined)
+        || !rawAmount(body.outAmount) || !rawAmount(body.otherAmountThreshold)
+        || BigInt(body.otherAmountThreshold) > BigInt(body.outAmount)
+        || impact === null || impact < -1 || impact > 1 || fee === null || !Number.isInteger(fee) || fee > 10_000
+        || (body.feeMint !== inputMint && body.feeMint !== outputMint)
+        || !route || routes.length === 0 || routes.some((label) => label === null)) {
+        throw new SolanaProviderError("Jupiter", "neúplná nebo neproveditelná cenová nabídka");
+      }
+      // Missing chain fee fields cannot silently become zero. They remain explicit evidence.
+      const chainFees: Evidence = {};
+      for (const field of ["signatureFeeLamports", "prioritizationFeeLamports", "rentFeeLamports"] as const) {
+        const value = nonnegative(body[field]);
+        if (value === null || !Number.isSafeInteger(value)) throw new SolanaProviderError("Jupiter", "neznámé síťové poplatky");
+        chainFees[field] = value;
+      }
+      const expiry = body.expireAt === undefined ? null : timestamp(body.expireAt);
+      if ((body.expireAt !== undefined && expiry === null) || (expiry !== null && Date.parse(expiry) <= Date.parse(receivedAt))) {
+        throw new SolanaProviderError("Jupiter", "cenová nabídka již není platná");
+      }
+      // /order has no provider quote timestamp. Use request start as a conservative age bound;
+      // the HTTP Date is retained separately and is never advertised as chain observation time.
+      return {
+        inputMint, outputMint, inAmount: amount, outAmount: body.outAmount, minOutAmount: body.otherAmountThreshold,
+        quotedAt: startedAt, expiresAt: expiry, priceImpactBps: Math.abs(impact) * 10_000,
+        feeBps: fee, feeMint: body.feeMint, route: `${route}: ${routes.join(", ")}`,
+        evidence: { provider: "jupiter", quoteOnly: true, takerProvided: false, startedAt, receivedAt, sourceDate,
+          requestId: text(body.requestId, 100), priceImpactPct: body.priceImpactPct, feeBps: fee,
+          feeMint: body.feeMint, feesIncludedInQuote: true,
+          platformFeeBps: nonnegative(object(body.platformFee)?.feeBps), ...chainFees,
+          lastValidBlockHeight: nonnegative(body.lastValidBlockHeight), expiry,
+          noTransactionRequested: true, executionGuaranteed: false },
+      };
+    } finally { release(); }
+  }
+}

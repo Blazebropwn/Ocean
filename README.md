@@ -56,6 +56,12 @@ Zapomenuté heslo člena řeší vlastník v seznamu členů vytvořením jednor
 
 ## Kryptotron
 
+Experimentální [Solana Terminal](docs/solana-terminal.md) má vlastní virtuální
+účet a data. Pilot je pouze PAPER a server ho zpřístupní jedinému ověřenému
+`users.id` v `OCEAN_SOLANA_PILOT_USER_ID`; bez nastavení je vypnutý. Najdeš
+ho v profilovém menu pod **Kryptotron · Solana Terminal**. Nevytváří peněženku
+ani nepoužívá Binance klíče.
+
 Kryptotron je součást Oceanu v `services/kryptotron`. Jediným zdrojem kódu
 je tento repozitář; nasazení se provádí kořenovým `Dockerfile`. Ocean
 spouští Python worker pro každý připojený účet a sleduje jeho heartbeat.

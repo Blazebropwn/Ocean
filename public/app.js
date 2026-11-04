@@ -89,6 +89,7 @@ function showUser(user) {
   $("#email-status").className = user.emailVerified ? "hidden verified" : "hidden pending";
   document.querySelectorAll("[data-approved-account]").forEach(button => { button.disabled = !accessApproved || Boolean(user.suspended); });
   $("#invite-admin-link").classList.toggle("hidden", user.role !== "owner");
+  $("#solana-terminal-link").classList.toggle("hidden", !user.features?.solanaTerminal);
   $("#verify-banner").classList.toggle("hidden", accessApproved || Boolean(user.suspended));
   $("#verify-banner-text").textContent = user.approvalMode === "owner" ? "Účet čeká na schválení vlastníkem." : "Ověřte svůj e-mail.";
   $("#verify-mailbox-link").classList.toggle("hidden", user.approvalMode === "owner");

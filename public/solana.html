@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0c1014">
+  <title>Solana Terminal · Ocean</title>
+  <link rel="stylesheet" href="/solana.css">
+  <script src="/solana.js" type="module"></script>
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="/">OCEAN<span>.</span></a><a class="back" href="/#home">← Zpět do Oceanu</a></header>
+  <main>
+    <section id="access-message" class="access" role="status"><h1>Solana Terminal</h1><p>Ověřuji přístup…</p></section>
+    <section id="terminal" hidden aria-label="Solana PAPER terminál">
+      <div class="heading"><div><p class="eyebrow">KRYPTOTRON / SOLANA</p><h1>Solana Terminal<span class="paper">PAPER</span></h1></div><span class="pilot">Pilot · Blazebro</span></div>
+      <div class="metrics" aria-label="Virtuální účet v USDC">
+        <article><span>Hodnota účtu <small>USDC</small></span><strong id="equity">—</strong><small id="equity-note">Virtuální kapitál</small></article>
+        <article><span>Volné <small>USDC</small></span><strong id="cash">—</strong><small id="exposure">—</small></article>
+        <article><span>Celkový výsledek</span><strong id="pnl">—</strong><small id="trade-count">0 simulovaných obchodů</small></article>
+      </div>
+      <div class="toolbar"><div class="scan-status"><span class="status-dot"></span><span id="scan-time">První sken čeká na spuštění</span></div><button id="scan" class="primary" type="button" disabled>Spustit sken</button></div>
+      <p id="feedback" class="feedback" role="status"></p>
+      <div id="stages" class="stages" aria-label="Šest kroků vyhodnocení">
+        <article data-stage="scanner"><div><span class="step">01</span><h2>Scanner</h2><span class="stage-status">Čeká</span></div><p>Nové pooly / aktivita</p></article>
+        <article data-stage="rug-check"><div><span class="step">02</span><h2>Rug Check</h2><span class="stage-status">Čeká</span></div><p>Authority / držitelé / likvidita</p></article>
+        <article data-stage="sizer"><div><span class="step">03</span><h2>Sizer</h2><span class="stage-status">Čeká</span></div><p>Velikost a limity expozice</p></article>
+        <article data-stage="executor"><div><span class="step">04</span><h2>Executor</h2><span class="stage-status">Čeká</span></div><p>Simulace podle kotací</p></article>
+        <article data-stage="logger"><div><span class="step">05</span><h2>Logger</h2><span class="stage-status">Čeká</span></div><p>Vstupy a důvody rozhodnutí</p></article>
+        <article data-stage="equity"><div><span class="step">06</span><h2>Equity</h2><span class="stage-status">Čeká</span></div><p>Hodnota při simulovaném prodeji</p></article>
+      </div>
+      <section class="positions-panel" aria-labelledby="positions-title"><header><h2 id="positions-title">Paper pozice <span id="position-count">0 / 3</span></h2><button class="text-button" type="button" data-open="ledger-dialog">Evidence →</button></header><div id="positions"><p class="empty">Zatím žádná pozice. První sken prověří skutečné pooly.</p></div></section>
+      <footer class="terminal-footer"><span>Reálná tržní data · virtuální peníze</span><button class="text-button" type="button" data-open="rules-dialog">Pravidla a zdroje ↗</button></footer>
+    </section>
+  </main>
+  <dialog id="rules-dialog" aria-labelledby="rules-title"><header><h2 id="rules-title">Jak tento pilot funguje</h2><button type="button" class="close" aria-label="Zavřít" data-close>×</button></header><div class="dialog-content">
+    <p>Každý sken načte omezený vzorek nově indexovaných poolů na Solaně a pro podrobné kontroly vybere nejvýše pět kandidátů. Jde o ruční sken přes GeckoTerminal; další sken můžeš spustit nejdříve po minutě.</p>
+    <dl id="rules-list"></dl>
+    <h3>Co znamená PAPER</h3><p>Začínáš se 100 virtuálními USDC. Nákup i prodej se pouze zapíší do oddělené evidence. Terminál nepotřebuje peněženku a neodesílá transakce. Binance účet a TIDE mají vlastní zůstatky.</p>
+    <p>Jupiter poskytuje nákupní a zpětnou prodejní kotaci. Simulace používá konzervativní výstup a uvedený model skluzu a síťových nákladů. Skutečné plnění, MEV, poplatky a prodejnost při budoucím obchodu se mohou lišit. Platná zpětná kotace nezaručuje, že token nepůjde později zmrazit nebo stáhnout likviditu.</p>
+    <p>Při nedostupné prodejní kotaci zůstává pozice otevřená a hodnota účtu je neověřená. Ocenění a pravidla výstupu se vyhodnocují pouze při ručním skenu. Pilot neběží automaticky na pozadí a časový výstup ani stop-loss nejsou čekající objednávky. Samo otevření stránky nic nekupuje. Tlačítko „Uzavřít“ zkouší jen simulovaný prodej podle nové kotace.</p>
+    <h3>Zdroje</h3><ul class="sources"><li><a href="https://www.geckoterminal.com/" target="_blank" rel="noopener noreferrer">GeckoTerminal</a> — nově indexované pooly a likvidita</li><li><a href="https://rugcheck.xyz/" target="_blank" rel="noopener noreferrer">RugCheck</a> — rizikové signály, nikoli záruka bezpečnosti</li><li><a href="https://developers.jup.ag/docs/swap/order-and-execute" target="_blank" rel="noopener noreferrer">Jupiter</a> — pouze čtení kotací bez podpisu</li></ul>
+  </div></dialog>
+  <dialog id="ledger-dialog" aria-labelledby="ledger-title"><header><h2 id="ledger-title">Evidence pilotu</h2><button type="button" class="close" aria-label="Zavřít" data-close>×</button></header><div class="dialog-content"><p class="muted">Poslední rozhodnutí a simulované obchody. Rozbalením uvidíš uložené vstupy.</p><h3>Simulované obchody</h3><div id="trades" class="ledger"></div><h3>Rozhodnutí</h3><div id="decisions" class="ledger"></div></div></dialog>
+</body>
+</html>

@@ -4,6 +4,7 @@ import { publicUser, type OceanDatabase, type UserRecord } from "../db.js";
 import { changePasswordSchema, loginSchema, recoveryConfirmSchema, recoveryRequestSchema, registerSchema } from "../schemas.js";
 import { DUMMY_PASSWORD_HASH, hashPassword, hashToken, newSessionToken, newUserId, newVerificationToken, SESSION_TTL_SECONDS, verifyPassword } from "../security.js";
 import { approvalMode, COOKIE_NAME, currentUser, requestMeta } from "./shared.js";
+import { hasSolanaPilotAccess } from "../solana/engine.js";
 
 function setSessionCookie(reply: any, token: string, config: Config) {
   reply.setCookie(COOKIE_NAME, token, {
@@ -37,6 +38,7 @@ function issueVerification(db: OceanDatabase, user: UserRecord, config: Config) 
 }
 
 export function registerAuthRoutes(app: FastifyInstance, db: OceanDatabase, config: Config) {
+  const userWithFeatures = (user: UserRecord) => ({ ...publicUser(user, approvalMode(config)), features: { solanaTerminal: hasSolanaPilotAccess(user, config) } });
   app.post("/api/auth/register", { config: { rateLimit: { max: 5, timeWindow: "15 minutes" } } }, async (request, reply) => {
     const parsed = registerSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? "Neplatné údaje." });
@@ -85,7 +87,7 @@ export function registerAuthRoutes(app: FastifyInstance, db: OceanDatabase, conf
     setSessionCookie(reply, token, config);
     const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as UserRecord;
     if (!config.manualApprovalEnabled && email) issueVerification(db, user, config);
-    return reply.code(201).send({ user: publicUser(user, approvalMode(config)) });
+    return reply.code(201).send({ user: userWithFeatures(user) });
   });
 
   app.post("/api/auth/login", { config: { rateLimit: { max: 8, timeWindow: "15 minutes" } } }, async (request, reply) => {
@@ -99,7 +101,7 @@ export function registerAuthRoutes(app: FastifyInstance, db: OceanDatabase, conf
     const meta = requestMeta(request);
     db.prepare("INSERT INTO security_events (user_id, event_type, ip_address, user_agent) VALUES (?, 'SIGNED_IN', ?, ?)").run(user.id, meta.ip, meta.agent);
     setSessionCookie(reply, token, config);
-    return { user: publicUser(user, approvalMode(config)) };
+    return { user: userWithFeatures(user) };
   });
 
   app.post("/api/auth/logout", async (request, reply) => {
@@ -235,6 +237,6 @@ export function registerAuthRoutes(app: FastifyInstance, db: OceanDatabase, conf
       return reply.code(401).send({ error: "Relace vypršela." });
     }
     db.prepare("UPDATE sessions SET last_seen_at = datetime('now') WHERE id_hash = ?").run(hashToken(token!));
-    return { user: publicUser(user, approvalMode(config)) };
+    return { user: userWithFeatures(user) };
   });
 }
