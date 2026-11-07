@@ -122,3 +122,20 @@ test('admin reasons retain safe codes and symbols, never raw diagnostics', () =>
   assert.match(issues[0]!,/Nové nákupy jsou zablokované/);
   assert.doesNotMatch(issues[0]!,/secret diagnostics|<invalid>/);
 });
+
+
+test('inactive inventory discrepancies stay visible in state without Telegram reminders', async () => {
+  const { workerStateIssues } = await import('../src/ops-monitor.js');
+  const state = { last_heartbeat_at: new Date().toISOString(), safe_mode: true,
+    trading_paused: true, dca: { enabled: false }, positions: {},
+    reconciliation: { issues: [{ code: 'INVENTORY_MISMATCH' }] } };
+  assert.deepEqual(workerStateIssues(state, 'Client'), []);
+  for (const override of [ { trading_paused: false }, { dca: { enabled: true } },
+    { positions: { BTCUSDC: { in_position: true } } }, { pending_order: { id: 'pending' } },
+    { pending_protection: { id: 'pending' } }, { dca: { enabled: false, pending: { id: 'pending' } } },
+    { reconciliation: { issues: [{ code: 'PROTECTION_ERROR' }] } },
+    { reconciliation: { issues: [{ code: 'INVENTORY_MISMATCH' }, { code: 'STATE_SAVE_FAILED' }] } },
+    { last_heartbeat_at: '2020-01-01' }, { pending_trade_logs: [{}] } ]) {
+    assert.ok(workerStateIssues({ ...state, ...override }, 'Client').length > 0);
+  }
+});

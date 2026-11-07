@@ -1072,7 +1072,7 @@ for (const tab of document.querySelectorAll("[data-home-tab]")) {
 
 $("#trading-control").addEventListener("click", async () => {
   const button = $("#trading-control");
-  if (!vaultSnapshot || vaultSnapshot.entriesPaused) return;
+  if (!vaultSnapshot || (vaultSnapshot.tradingPaused && vaultSnapshot.entriesPaused)) return;
   button.disabled = true;
   try {
     await request("/api/kryptotron/control", { method: "POST", body: JSON.stringify({ scope: "trading", entriesPaused: !vaultSnapshot.tradingPaused }) });
@@ -1080,7 +1080,7 @@ $("#trading-control").addEventListener("click", async () => {
   } catch (error) {
     $("#bot-error-wrap").classList.remove("hidden");
     $("#bot-error").textContent = error.message;
-  } finally { button.disabled = !vaultSnapshot || vaultSnapshot.entriesPaused; }
+  } finally { button.disabled = !vaultSnapshot || (vaultSnapshot.tradingPaused && vaultSnapshot.entriesPaused); }
 });
 
 async function loadKryptotron() {
@@ -1271,8 +1271,8 @@ function renderTradingOverview(snapshot) {
   const control = $("#trading-control");
   control.setAttribute("aria-checked", String(!snapshot.tradingPaused));
   $("#trading-toggle-status").textContent = snapshot.tradingPaused ? "Vypnuto" : "Zapnuto";
-  control.disabled = snapshot.entriesPaused;
-  control.title = snapshot.entriesPaused ? "Nejprve vyřešte společnou pauzu nebo blokaci nákupů v nastavení účtu → Automatizace nákupů." : "Ovládá pouze nové vstupy Tradingu. Správa otevřených pozic pokračuje.";
+  control.disabled = snapshot.tradingPaused && snapshot.entriesPaused;
+  control.title = control.disabled ? "Nejprve vyřešte společnou pauzu nebo blokaci nákupů v nastavení účtu → Automatizace nákupů." : "Ovládá pouze nové vstupy Tradingu. Správa otevřených pozic pokračuje.";
 }
 
 function renderDcaPortfolio(snapshot) {

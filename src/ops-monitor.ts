@@ -26,12 +26,23 @@ export function opsIssues(config: Config, db: OceanDatabase, now = new Date()) {
   return [...readinessIssues(config, db), ...stuckInstanceIssues(db, now)];
 }
 
+export function inactiveInventoryMismatch(state: Record<string, unknown>): boolean {
+  const dca = state.dca as Record<string, unknown> | undefined;
+  const positions = state.positions as Record<string, Record<string, unknown>> | undefined;
+  const check = state.reconciliation as { issues?: Array<{ code?: string }> } | undefined;
+  return state.trading_paused === true && dca?.enabled === false
+    && !state.pending_order && !state.pending_protection && !dca.pending
+    && !Object.values(positions ?? {}).some(p => p.in_position === true)
+    && Array.isArray(check?.issues) && check.issues.length > 0
+    && check.issues.every(i => i?.code === "INVENTORY_MISMATCH");
+}
+
 export function workerStateIssues(state: Record<string, unknown> | null, label: string, now = Date.now()): string[] {
   if (!state) return [`${label}: vzdálený stav není dostupný.`];
   const heartbeat = typeof state.last_heartbeat_at === "string" ? Date.parse(state.last_heartbeat_at) : NaN;
   const issues: string[] = [];
   if (!Number.isFinite(heartbeat) || now-heartbeat > 180_000 || heartbeat > now+60_000) issues.push(`${label}: heartbeat není aktuální.`);
-  if (state.safe_mode === true) {
+  if (state.safe_mode === true && !inactiveInventoryMismatch(state)) {
     const check = state.reconciliation as { issues?: Array<{ code?: string }> } | undefined;
     const onlyProtection = Array.isArray(check?.issues) && check.issues.length > 0 && check.issues.every(i => i?.code === "PROTECTION_ERROR");
     const details = readKryptotronTransparency(state, now).reconciliation.issues.slice(0, 3)

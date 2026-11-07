@@ -79,6 +79,26 @@ class BotStateTestCase(unittest.TestCase):
 
 
 class ReconcilePersistenceTests(BotStateTestCase):
+    def test_disabled_inventory_mismatch_does_not_notify_but_keeps_safe_mode(self):
+        state = self.state()
+        state.update(trading_paused=True, dca={"enabled": False})
+        result = {"status": "UNRESOLVED", "issues": [{"code": "INVENTORY_MISMATCH"}],
+                  "available_quote": 0, "checked_at": "2026-11-07T03:00:00+00:00"}
+        with patch.object(bot, "inspect_account", return_value=result), \
+                patch.object(bot, "save_state", return_value=True), \
+                patch.object(bot, "tg_alert") as alert:
+            self.assertFalse(bot.reconcile_account(object(), state, {}))
+            self.assertTrue(state["safe_mode"])
+            alert.assert_not_called()
+            for override in [{"trading_paused": False}, {"dca": {"enabled": True}},
+                             {"positions": {"BTCUSDC": {"in_position": True}}},
+                             {"pending_order": {"id": "pending"}},
+                             {"pending_protection": {"id": "pending"}},
+                             {"dca": {"enabled": False, "pending": {"id": "pending"}}},
+                             {"reconciliation": {"issues": [{"code": "PROTECTION_ERROR"}]}},
+                             {"reconciliation": {"issues": []}}]:
+                self.assertFalse(bot.inactive_inventory_mismatch({**state, **override}))
+
     def test_failed_save_is_distinguished_from_exchange_reconciliation_and_recovers(self):
         state = self.state()
         healthy = {"status": "OK", "issues": [], "available_quote": 26.98,

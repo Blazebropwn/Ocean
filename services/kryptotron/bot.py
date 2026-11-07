@@ -142,6 +142,17 @@ def tg(msg):
     return db.notify(msg)
 
 
+def inactive_inventory_mismatch(state):
+    """Keep the account blocked, but don't nag about inventory after shutdown."""
+    dca = state.get("dca", {})
+    issues = state.get("reconciliation", {}).get("issues", [])
+    return (state.get("trading_paused") is True and dca.get("enabled") is False
+            and not state.get("pending_order") and not state.get("pending_protection")
+            and not dca.get("pending")
+            and not any(p.get("in_position") for p in state.get("positions", {}).values())
+            and bool(issues) and all(i.get("code") == "INVENTORY_MISMATCH" for i in issues))
+
+
 def tg_alert(state, key, msg, cooldown_minutes=60):
     """Stejný technický alarm odešle nejvýše jednou za cooldown."""
     alerts = state.setdefault("telegram", {}).setdefault("alerts", {})
@@ -246,7 +257,7 @@ def reconcile_account(client, state, pair_filters):
         if not save_state(state):
             safety_failure(state, "STATE_SAVE_FAILED", "Výsledek rekonciliace se nepodařilo uložit")
             return False
-        if state["safe_mode"]:
+        if state["safe_mode"] and not inactive_inventory_mismatch(state):
             only_protection = bool(result["issues"]) and all(i["code"] == "PROTECTION_ERROR" for i in result["issues"])
             tg_alert(state, "reconciliation", "🚨 <b>Kryptotron: kontrola účtu vyžaduje pozornost</b>\n" + (
                 "Ochranné objednávky chybí nebo byly zrušené. V Oceanu u pozic potvrď Obnovit ochranu. Nové nákupy zůstávají zablokované; samotné /resume nestačí."

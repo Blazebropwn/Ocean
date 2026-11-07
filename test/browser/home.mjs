@@ -169,7 +169,16 @@ legacy=true;await page.evaluate(()=>initializeKryptotron());assert.equal(await p
 legacy=false;await page.evaluate(()=>initializeKryptotron());
 await page.locator('#binance-dialog [data-close-dialog]').click();
 fixture.entriesPaused=true;fixture.transparency.safeMode=true;fixture.transparency.reconciliation.status='UNCERTAIN';
-await page.evaluate(()=>loadKryptotron());assert.equal(await page.locator('#trading-control').isDisabled(),true);
+fixture.tradingPaused=false;
+await page.evaluate(()=>loadKryptotron());
+assert.equal(await page.locator('#trading-control').isDisabled(),false,'Trading can be turned off during an account safety block');
+await page.locator('#trading-tab').click();
+await page.locator('#trading-control').click();
+await page.waitForFunction(()=>document.querySelector('#trading-toggle-status').textContent==='Vypnuto');
+assert.deepEqual(mutations.at(-1),{path:'/api/kryptotron/control',entriesPaused:true,scope:'trading'});
+assert.equal(fixture.entriesPaused,true);
+assert.equal(fixture.transparency.safeMode,true);
+assert.equal(await page.locator('#trading-control').isDisabled(),true,'Trading cannot be enabled during the block');
 fixture.dca.enabled=true;await page.evaluate(()=>loadKryptotron());
 await page.locator('#dca-tab').click();
 assert.equal(await page.locator('#dca-toggle-status').textContent(),'Čeká na obnovení');
